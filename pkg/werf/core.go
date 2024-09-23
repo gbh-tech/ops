@@ -6,39 +6,14 @@ import (
 )
 
 type CommandOptions struct {
+	Command, Env, Repo string
+}
+
+type CommandNoRepoOptions struct {
 	Command, Env string
 }
 
-type CommandWithRepoOptions struct {
-	CommandOptions
-	Repo string
-}
-
-func execWerfCommand(args []string) {
-	log.Infof("Werf command: %v", args)
-
-	cmd := exec.Command(args[0], args[1:]...)
-
-	_, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("Failed to execute Werf command: %v", err)
-	}
-}
-
-func BaseCommand(options *CommandOptions) {
-	cmd := []string{
-		"werf",
-		options.Command,
-		"--env",
-		options.Env,
-		"--dev",
-	}
-
-	log.Infof("Werf command: %v", cmd)
-	//execWerfCommand(cmd)
-}
-
-func BaseCommandWithRepo(options *CommandWithRepoOptions) {
+func Command(options *CommandOptions) {
 	cmd := []string{
 		"werf",
 		options.Command,
@@ -50,5 +25,30 @@ func BaseCommandWithRepo(options *CommandWithRepoOptions) {
 	}
 
 	log.Infof("Werf command: %v", cmd)
-	//execWerfCommand(cmd)
+	execWerfCommand(cmd)
+}
+
+func CommandWithoutRepo(options *CommandNoRepoOptions) {
+	cmd := []string{
+		"werf",
+		options.Command,
+		"--env",
+		options.Env,
+		"--dev",
+	}
+
+	log.Infof("Werf command: %v", cmd)
+	execWerfCommand(cmd)
+}
+
+func execWerfCommand(args []string) {
+	cmd := exec.Command(args[0], args[1:]...)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf(
+			"Failed to execute Werf command: %v",
+			string(out),
+		)
+	}
 }
