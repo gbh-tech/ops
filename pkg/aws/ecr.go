@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"github.com/charmbracelet/log"
@@ -33,7 +32,12 @@ func ECRLogin() {
 func dockerRegistryLogin(awsRegion string, registryURL string) {
 	ecrLoginPassword := ecrGetLoginPassword(awsRegion)
 
-	log.Info("Executing command:", "command", "docker login [omitted sensitive params]")
+	log.Info(
+		"Executing command:",
+		"command",
+		"docker login [omitted sensitive params]",
+	)
+
 	registryLogin := exec.Command(
 		"docker",
 		"login",
@@ -54,7 +58,12 @@ func dockerRegistryLogin(awsRegion string, registryURL string) {
 
 func ecrGetLoginPassword(awsRegion string) string {
 	cmd := []string{"aws", "ecr", "get-login-password", "--region", awsRegion}
-	log.Info("Executing command:", "command", strings.Join(cmd, " "))
+	log.Info(
+		"Executing command:",
+		"command",
+		strings.Join(cmd, " "),
+	)
+
 	loginPassword := exec.Command(cmd[0], cmd[1:]...)
 
 	password, err := loginPassword.Output()
@@ -62,7 +71,11 @@ func ecrGetLoginPassword(awsRegion string) string {
 	if err != nil {
 		var execError *exec.Error
 		if errors.As(err, &execError) {
-			log.Fatalf("Command execution failed: %v %v", execError.Name, execError.Err)
+			log.Fatalf(
+				"Command execution failed: %v %v",
+				execError.Name,
+				execError.Err,
+			)
 		}
 		log.Fatalf("Failed to get AWS ECR login password: %v", err)
 	}
@@ -72,7 +85,13 @@ func ecrGetLoginPassword(awsRegion string) string {
 }
 
 func ecrLoginCredentialsRequired() RequiresLogin {
-	cmd := exec.CommandContext(context.TODO(), "aws", "ecr", "get-authorization-token", "--no-cli-pager")
+	cmd := exec.Command(
+		"aws",
+		"ecr",
+		"get-authorization-token",
+		"--no-cli-pager",
+	)
+
 	output, err := cmd.Output()
 	if err != nil {
 		log.Fatalf("Failed to execute command: %v", err)
@@ -87,10 +106,18 @@ func ecrLoginCredentialsRequired() RequiresLogin {
 	expiration := authData.AuthorizationData[0].ExpiresAt
 
 	if len(authData.AuthorizationData) > 0 {
-		log.Warn("ECR login credentials are still valid.", "expiresAt", expiration.Format(time.RFC3339))
+		log.Warn(
+			"ECR login credentials are still valid.",
+			"expiresAt",
+			expiration.Format(time.RFC3339),
+		)
 		return RequiresLogin(false)
 	} else {
-		log.Info("Authorization data expired or not found.", "expiresAt", expiration)
+		log.Info(
+			"Authorization data expired or not found.",
+			"expiredAt",
+			expiration.Format(time.RFC3339),
+		)
 		return RequiresLogin(true)
 	}
 }

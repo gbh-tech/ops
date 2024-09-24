@@ -11,7 +11,7 @@ var werfCmd = &cobra.Command{
 	Use:   "werf",
 	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
-		opts := flags(cmd)
+		opts := werfCommandFlags(cmd)
 
 		if slices.Contains(werf.CommandsWithRepoList, opts.Command) {
 			werf.Command(&werf.CommandOptions{
@@ -32,7 +32,7 @@ var werfCmd = &cobra.Command{
 	},
 }
 
-func flags(cmd *cobra.Command) werf.CommandOptions {
+func werfCommandFlags(cmd *cobra.Command) werf.CommandOptions {
 	command, _ := cmd.Flags().GetString("command")
 	env, _ := cmd.Flags().GetString("env")
 	repo, _ := cmd.Flags().GetString("repo")
