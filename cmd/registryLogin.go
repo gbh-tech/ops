@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"ops/pkg/aws"
 	"ops/pkg/config"
 )
 
@@ -27,6 +28,18 @@ var registryLoginCmd = &cobra.Command{
 			"url",
 			config.ContainerRegistry.URL,
 		)
+
+		if config.ContainerRegistry.Type == "ecr" {
+			aws.ECRLogin()
+		}
+
+		if config.ContainerRegistry.Type == "acr" {
+			log.Fatalf("Azure Container Registry is not supported by Ops.")
+		}
+
+		if config.ContainerRegistry.Type == "gcr" {
+			log.Fatalf("Google Cloud Container Registry is not supported by Ops.")
+		}
 	},
 }
 
