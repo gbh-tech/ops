@@ -11,8 +11,8 @@ var SupportedRegistryTypes = []ContainerRegistryType{
 }
 
 type ContainerRegistryConfig struct {
-	Type ContainerRegistryType `yaml:"type" validate:"required"`
-	URL  string                `yaml:"url" validate:"required"`
+	Type ContainerRegistryType `mapstructure:"type"`
+	URL  string                `mapstructure:"url"`
 }
 
 func ValidateContainerRegistryConfig(config *ContainerRegistryConfig) {
@@ -21,5 +21,10 @@ func ValidateContainerRegistryConfig(config *ContainerRegistryConfig) {
 			return
 		}
 	}
-	log.Fatalf("Invalid Container Registry type: %s", config.Type)
+
+	log.Fatal(
+		"Container registry specified is not supported or valid:",
+		"registry",
+		config.Type,
+	)
 }

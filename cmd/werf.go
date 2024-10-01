@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"ops/pkg/utils"
+	"ops/pkg/config"
 	"ops/pkg/werf"
 	"slices"
 )
@@ -11,7 +12,16 @@ var werfCmd = &cobra.Command{
 	Use:   "werf",
 	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
+		config := config.NewConfig()
 		opts := werfCommandFlags(cmd)
+
+		if config.Deployment.Provider != "werf" {
+			log.Fatal(
+				"Please select werf as the deployment provider first",
+				"deploymentProvider",
+				config.Deployment.Provider,
+			)
+		}
 
 		if slices.Contains(werf.CommandsWithRepoList, opts.Command) {
 			werf.Command(&werf.CommandOptions{
@@ -64,7 +74,7 @@ func init() {
 		"Container image registry",
 	)
 
-	utils.MarkFlagsRequired(werfCmd, "command", "env")
+	//utils.MarkFlagsRequired(werfCmd, "command", "env")
 
 	rootCmd.AddCommand(werfCmd)
 }

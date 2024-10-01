@@ -3,15 +3,15 @@ package config
 import (
 	"errors"
 	"github.com/charmbracelet/log"
-	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
 type OpsConfig struct {
-	ContainerRegistry ContainerRegistryConfig `yaml:"containerRegistry"`
+	Deployment        DeploymentConfig        `mapstructure:"deployment"`
+	ContainerRegistry ContainerRegistryConfig `mapstructure:"container_registry"`
 }
 
-var validate = validator.New()
+var config OpsConfig
 
 func NewConfig() *OpsConfig {
 	viper.SetConfigType("yaml")
@@ -26,13 +26,8 @@ func NewConfig() *OpsConfig {
 		}
 	}
 
-	var config OpsConfig
 	if err := viper.Unmarshal(&config); err != nil {
 		log.Fatalf("Unable to parse config file, %v", err)
-	}
-
-	if err := validate.Struct(config); err != nil {
-		log.Fatalf("Config validation failed: %s", err)
 	}
 
 	ValidateOpsConfig(&config)

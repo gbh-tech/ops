@@ -1,3 +1,7 @@
-containerRegistry:
-    type: "ecr"
-    url: "there"
+---
+deployment:
+  provider: ansible
+
+container_registry:
+  type: ecr
+  url: there
