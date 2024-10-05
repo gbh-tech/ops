@@ -1,6 +1,10 @@
 ---
 env: stage
 
+cloud_provider: "aws"
+
+cluster_name: "myCluster"
+
 deployment:
   # Can be one of: [ ansible, werf ]
   provider: werf

@@ -10,6 +10,8 @@ type OpsConfig struct {
 	Deployment        DeploymentConfig        `mapstructure:"deployment"`
 	ContainerRegistry ContainerRegistryConfig `mapstructure:"container_registry"`
 	Env               string                  `mapstructure:"env"`
+	ClusterName       string                  `mapstructure:"cluster_name"`
+	CloudProvider     CloudProvider           `mapstructure:"cloud_provider"`
 }
 
 var config OpsConfig

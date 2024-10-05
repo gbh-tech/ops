@@ -1,0 +1,3 @@
+package azure
+
+func AKSLogin() {}
