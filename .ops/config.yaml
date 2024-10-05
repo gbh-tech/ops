@@ -1,7 +1,11 @@
 ---
+env: stage
+
 deployment:
-  provider: ansible
+  # Can be one of: [ ansible, werf ]
+  provider: werf
 
 container_registry:
+  # Can be one of: [ acr, ecr, gcr ]
   type: ecr
   url: there

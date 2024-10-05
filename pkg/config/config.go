@@ -9,6 +9,7 @@ import (
 type OpsConfig struct {
 	Deployment        DeploymentConfig        `mapstructure:"deployment"`
 	ContainerRegistry ContainerRegistryConfig `mapstructure:"container_registry"`
+	Env               string                  `mapstructure:"env"`
 }
 
 var config OpsConfig
@@ -18,6 +19,7 @@ func NewConfig() *OpsConfig {
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".ops")
 	viper.SetEnvPrefix("ops")
+	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
