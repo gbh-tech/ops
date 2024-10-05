@@ -9,7 +9,7 @@ import (
 
 var envCmd = &cobra.Command{
 	Use:   "env",
-	Short: "Prints the detected operating system to the console",
+	Short: "Manages the target environment",
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := envCommandFlags(cmd)
 
