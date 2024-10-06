@@ -3,9 +3,7 @@ package aws
 import (
 	"errors"
 	"github.com/charmbracelet/log"
-	"ops/pkg/config"
 	"ops/pkg/utils"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -16,12 +14,12 @@ func EKSLogin(clusterName string) {
 	utils.CheckBinary("kubectl")
 
 	utils.GetEnvironment("AWS_PROFILE")
-	awsRegion := os.Getenv("AWS_REGION")
+	awsRegion := utils.GetEnvironment("AWS_REGION")
 
 	if eksCredentialsRequired(clusterName) {
 		eksUpdateKubeConfig(
 			awsRegion,
-			config.NewConfig().ClusterName,
+			clusterName,
 		)
 	}
 }
