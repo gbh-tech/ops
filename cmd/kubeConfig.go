@@ -26,7 +26,11 @@ var kubeConfigCmd = &cobra.Command{
 		if opts.CloudProvider == "aws" {
 			aws.EKSLogin(opts.ClusterName)
 		} else {
-			log.Fatalf("%s config is not yet supported.", opts.CloudProvider)
+			log.Fatal(
+				"Current cloud provider is not yet supported by ops kube-config command.",
+				"cloudProvider",
+				opts.CloudProvider,
+			)
 		}
 
 		log.Info(
