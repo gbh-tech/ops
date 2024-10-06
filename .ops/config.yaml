@@ -3,7 +3,7 @@ env: stage
 
 cloud_provider: "aws"
 
-cluster_name: "myCluster"
+cluster_name: "gbh-stage"
 
 deployment:
   # Can be one of: [ ansible, werf ]

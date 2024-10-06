@@ -12,13 +12,13 @@ import (
 
 type RequiresAuth bool
 
-func EKSLogin() {
+func EKSLogin(clusterName string) {
 	utils.CheckBinary("kubectl")
 
 	utils.GetEnvironment("AWS_PROFILE")
 	awsRegion := os.Getenv("AWS_REGION")
 
-	if eksCredentialsRequired(awsRegion) {
+	if eksCredentialsRequired(clusterName) {
 		eksUpdateKubeConfig(
 			awsRegion,
 			config.NewConfig().ClusterName,
@@ -80,9 +80,14 @@ func eksCredentialsRequired(clusterName string) RequiresAuth {
 	contexts := strings.Split(string(clusters), "\n")
 	for _, context := range contexts {
 		if strings.Contains(context, clusterName) {
-			return true
+			log.Warn(
+				"An entry in the kube-config was found. Skipping authentication!",
+				"cluster",
+				clusterName,
+			)
+			return false
 		}
 	}
 
-	return false
+	return true
 }
