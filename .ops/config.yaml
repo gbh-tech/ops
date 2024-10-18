@@ -15,3 +15,12 @@ container_registry:
   # Can be one of: [ acr, ecr, gcr ]
   type: ecr
   url: there
+
+# Only used if deployment.provider is werf
+werf:
+  # Applications/services managed by Werf (must match werf.yaml images)
+  services: ["api", "web"]
+  # Additional paths where files will be added to Werf commands with `--values`
+  # and `--secret-values` independently of the environment (applies to all templates).
+  values: [".helm/values"]
+  secrets: [".helm/secrets"]

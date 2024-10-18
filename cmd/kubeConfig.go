@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"ops/pkg/aws"
+	"ops/pkg/azure"
 	"ops/pkg/config"
 )
 
@@ -25,6 +26,8 @@ var kubeConfigCmd = &cobra.Command{
 
 		if opts.CloudProvider == "aws" {
 			aws.EKSLogin(opts.ClusterName)
+		} else if opts.CloudProvider == "azure" {
+			azure.CurrentAccount()
 		} else {
 			log.Fatal(
 				"Current cloud provider is not yet supported by ops kube-config command.",
