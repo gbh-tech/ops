@@ -12,3 +12,10 @@ var CommandsWithRepoList = []string{
 	"export",
 	"plan",
 }
+
+var ValuesPaths = []string{
+	".helm/values",
+	".helm/service-values",
+	".helm/client-values",
+	".helm/extra-values",
+}
