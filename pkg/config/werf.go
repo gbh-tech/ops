@@ -1,7 +1,7 @@
 package config
 
 type WerfConfig struct {
-	Services      []string `mapstructure:"services"`
-	GlobalValues  []string `mapstructure:"values"`
-	GlobalSecrets []string `mapstructure:"secrets"`
+	Services     []string `mapstructure:"services"`
+	SecretsPaths []string `mapstructure:"secrets"`
+	ValuesPaths  []string `mapstructure:"values"`
 }

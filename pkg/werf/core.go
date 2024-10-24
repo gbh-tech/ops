@@ -24,8 +24,11 @@ func Command(options *CommandOptions) {
 		"--dev",
 	}
 
+	additionalValuesFiles := GetValuesPaths()
+	cmd = append(cmd, additionalValuesFiles...)
+
 	log.Infof("Werf command: %v", cmd)
-	execWerfCommand(cmd)
+	//execWerfCommand(cmd)
 }
 
 func CommandWithoutRepo(options *CommandNoRepoOptions) {
@@ -37,8 +40,11 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 		"--dev",
 	}
 
+	additionalValuesFiles := GetValuesPaths()
+	cmd = append(cmd, additionalValuesFiles...)
+
 	log.Infof("Werf command: %v", cmd)
-	execWerfCommand(cmd)
+	//execWerfCommand(cmd)
 }
 
 func execWerfCommand(args []string) {

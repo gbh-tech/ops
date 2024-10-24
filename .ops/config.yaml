@@ -22,5 +22,5 @@ werf:
   services: ["api", "web"]
   # Additional paths where files will be added to Werf commands with `--values`
   # and `--secret-values` independently of the environment (applies to all templates).
-  values: [".helm/values"]
+  values: [".helm/values", ".helm/extra-values"]
   secrets: [".helm/secrets"]

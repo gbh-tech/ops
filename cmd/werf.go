@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"ops/pkg/config"
+	"ops/pkg/utils"
 	"ops/pkg/werf"
 	"slices"
 )
@@ -74,7 +75,7 @@ func init() {
 		"Container image registry",
 	)
 
-	//utils.MarkFlagsRequired(werfCmd, "command", "env")
+	utils.MarkFlagsRequired(werfCmd, "command", "env")
 
 	rootCmd.AddCommand(werfCmd)
 }
