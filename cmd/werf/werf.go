@@ -1,12 +1,14 @@
-package cmd
+package werf
 
 import (
-	"github.com/charmbracelet/log"
-	"github.com/spf13/cobra"
+	"ops/cmd"
 	"ops/pkg/config"
 	"ops/pkg/utils"
 	"ops/pkg/werf"
 	"slices"
+
+	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 )
 
 var werfCmd = &cobra.Command{
@@ -77,5 +79,5 @@ func init() {
 
 	utils.MarkFlagsRequired(werfCmd, "command", "env")
 
-	rootCmd.AddCommand(werfCmd)
+	cmd.rootCmd.AddCommand(werfCmd)
 }

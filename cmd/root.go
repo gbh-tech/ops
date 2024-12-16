@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"ops/cmd/containerRegistry"
+	"ops/cmd/env"
+	"ops/cmd/git"
+	"ops/cmd/kube"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -25,4 +29,10 @@ func init() {
 		"",
 		"Environment as target",
 	)
+
+	rootCmd.AddCommand(env.Command)
+	rootCmd.AddCommand(kube.ConfigCommand)
+	rootCmd.AddCommand(git.GetTicketIDCommand)
+	rootCmd.AddCommand(git.TagCleanerCommand)
+	rootCmd.AddCommand(containerRegistry.LoginCommand)
 }

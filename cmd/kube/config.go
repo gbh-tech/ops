@@ -1,11 +1,12 @@
-package cmd
+package kube
 
 import (
-	"github.com/charmbracelet/log"
-	"github.com/spf13/cobra"
 	"ops/pkg/aws"
 	"ops/pkg/azure"
 	"ops/pkg/config"
+
+	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 )
 
 type kubeConfigCommandOptions struct {
@@ -13,11 +14,12 @@ type kubeConfigCommandOptions struct {
 	CloudProvider string
 }
 
-var kubeConfigCmd = &cobra.Command{
+var ConfigCommand = &cobra.Command{
 	Use:   "kube-config",
 	Short: "Updates local kube config file by authenticating cloud-managed k8s clusters",
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.NewConfig()
+
 		opts := kubeConfigCommandFlags(
 			cmd,
 			cfg.ClusterName,
@@ -67,18 +69,16 @@ func kubeConfigCommandFlags(
 }
 
 func init() {
-	kubeConfigCmd.Flags().StringP(
+	ConfigCommand.Flags().StringP(
 		"cluster-name",
 		"c",
 		"",
 		"Cluster name used to authenticate",
 	)
-	kubeConfigCmd.Flags().StringP(
+	ConfigCommand.Flags().StringP(
 		"cloud-provider",
 		"p",
 		"",
 		"Cloud provider where the cluster is provisioned",
 	)
-
-	rootCmd.AddCommand(kubeConfigCmd)
 }

@@ -1,11 +1,12 @@
-package cmd
+package git
 
 import (
 	"context"
+	gh "ops/pkg/github"
+
 	"github.com/charmbracelet/log"
 	"github.com/google/go-github/v66/github"
 	"github.com/spf13/cobra"
-	gh "ops/pkg/github"
 )
 
 type TagCleanerCommandOptions struct {
@@ -14,7 +15,7 @@ type TagCleanerCommandOptions struct {
 	Quantity int
 }
 
-var tagCleanerCmd = &cobra.Command{
+var TagCleanerCommand = &cobra.Command{
 	Use:   "tag-cleaner",
 	Short: "Helps cleanup old tags from specified repository origins",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -59,18 +60,16 @@ func tagCleanerCommandFlags(cmd *cobra.Command) TagCleanerCommandOptions {
 }
 
 func init() {
-	tagCleanerCmd.Flags().StringP(
+	TagCleanerCommand.Flags().StringP(
 		"repo",
 		"r",
 		"",
 		"Repository to clean tags from",
 	)
-	tagCleanerCmd.Flags().IntP(
+	TagCleanerCommand.Flags().IntP(
 		"quantity",
 		"n",
 		100,
 		"Number of tags to clean",
 	)
-
-	rootCmd.AddCommand(tagCleanerCmd)
 }

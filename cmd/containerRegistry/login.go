@@ -1,17 +1,18 @@
-package cmd
+package containerRegistry
 
 import (
-	"github.com/charmbracelet/log"
-	"github.com/spf13/cobra"
 	"ops/pkg/aws"
 	"ops/pkg/config"
+
+	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 )
 
 type RegistryLoginOptions struct {
 	Registry string
 }
 
-var registryLoginCmd = &cobra.Command{
+var LoginCommand = &cobra.Command{
 	Use:   "registry-login",
 	Short: "Logs in to the specified container image registry (ECR, ACR, etc)",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -41,8 +42,4 @@ var registryLoginCmd = &cobra.Command{
 			log.Fatalf("Google Cloud Container Registry is not supported by Ops.")
 		}
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(registryLoginCmd)
 }

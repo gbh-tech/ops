@@ -1,8 +1,9 @@
 package config
 
 import (
-	"github.com/charmbracelet/log"
 	"slices"
+
+	"github.com/charmbracelet/log"
 )
 
 type CloudProvider string

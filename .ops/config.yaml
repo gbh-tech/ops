@@ -2,7 +2,7 @@
 env: stage
 
 # Can be one of: [ aws, azure, gcp ]
-cloud_provider: "azure"
+cloud_provider: "aws"
 
 # Should match the name of the cluster in the selected Cloud Provider
 cluster_name: "gbh-stage"

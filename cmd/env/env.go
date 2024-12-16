@@ -1,17 +1,21 @@
-package cmd
+package env
 
 import (
+	"ops/pkg/config"
+
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"ops/pkg/config"
-	"ops/pkg/env"
 )
 
-var envCmd = &cobra.Command{
+type CommandOptions struct {
+	Env string
+}
+
+var Command = &cobra.Command{
 	Use:   "env",
 	Short: "Manages the target environment",
 	Run: func(cmd *cobra.Command, args []string) {
-		opts := envCommandFlags(cmd)
+		opts := flags(cmd)
 
 		log.Infof(
 			"%s: %s",
@@ -20,18 +24,14 @@ var envCmd = &cobra.Command{
 	},
 }
 
-func envCommandFlags(cmd *cobra.Command) env.CommandOptions {
+func flags(cmd *cobra.Command) CommandOptions {
 	envi, _ := cmd.Flags().GetString("env")
 
 	if envi == "" {
 		envi = config.NewConfig().Env
 	}
 
-	return env.CommandOptions{
+	return CommandOptions{
 		Env: envi,
 	}
-}
-
-func init() {
-	rootCmd.AddCommand(envCmd)
 }
