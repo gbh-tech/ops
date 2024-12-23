@@ -4,6 +4,7 @@ import (
 	"ops/pkg/aws"
 	"ops/pkg/azure"
 	"ops/pkg/config"
+	"ops/pkg/k8s"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -41,7 +42,7 @@ var ConfigCommand = &cobra.Command{
 		log.Info(
 			"Current active cluster",
 			"clusterName",
-			opts.ClusterName,
+			k8s.GetCurrentContext(),
 		)
 	},
 }

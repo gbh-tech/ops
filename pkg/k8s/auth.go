@@ -18,6 +18,8 @@ func CredentialsRequired(clusterName string) bool {
 				"clusterName",
 				clusterName,
 			)
+			log.Info("Set current context to selected cluster...")
+			SetConfig(clusterName)
 
 			return false
 		}
