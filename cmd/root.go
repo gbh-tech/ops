@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"ops/cmd/containerRegistry"
+	"ops/cmd/deploy"
 	"ops/cmd/env"
 	"ops/cmd/git"
 	"ops/cmd/kube"
@@ -37,4 +38,5 @@ func init() {
 	rootCmd.AddCommand(git.GetTicketIDCommand)
 	rootCmd.AddCommand(git.TagCleanerCommand)
 	rootCmd.AddCommand(containerRegistry.LoginCommand)
+	rootCmd.AddCommand(deploy.WerfCommand)
 }

@@ -1,7 +1,6 @@
-package werf
+package deploy
 
 import (
-	"ops/cmd"
 	"ops/pkg/config"
 	"ops/pkg/utils"
 	"ops/pkg/werf"
@@ -11,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var werfCmd = &cobra.Command{
+var WerfCommand = &cobra.Command{
 	Use:   "werf",
 	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -58,26 +57,24 @@ func werfCommandFlags(cmd *cobra.Command) werf.CommandOptions {
 }
 
 func init() {
-	werfCmd.Flags().StringP(
+	WerfCommand.Flags().StringP(
 		"command",
 		"c",
 		"",
 		"Werf command to execute",
 	)
-	werfCmd.Flags().StringP(
+	WerfCommand.Flags().StringP(
 		"env",
 		"e",
 		"",
 		"Werf environment as target",
 	)
-	werfCmd.Flags().StringP(
+	WerfCommand.Flags().StringP(
 		"repo",
 		"r",
 		"",
 		"Container image registry",
 	)
 
-	utils.MarkFlagsRequired(werfCmd, "command", "env")
-
-	cmd.rootCmd.AddCommand(werfCmd)
+	utils.MarkFlagsRequired(WerfCommand, "command", "env")
 }
