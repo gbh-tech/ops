@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 )

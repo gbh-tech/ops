@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"ops/pkg/config"
-	"ops/pkg/utils"
 	"ops/pkg/werf"
 	"slices"
 
@@ -16,6 +15,10 @@ var WerfCommand = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.NewConfig()
 		opts := werfCommandFlags(cmd)
+
+		if opts.Env == "" {
+			opts.Env = config.Env
+		}
 
 		if config.Deployment.Provider != "werf" {
 			log.Fatal(
@@ -75,6 +78,4 @@ func init() {
 		"",
 		"Container image registry",
 	)
-
-	utils.MarkFlagsRequired(WerfCommand, "command", "env")
 }
