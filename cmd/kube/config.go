@@ -13,6 +13,7 @@ import (
 type kubeConfigCommandOptions struct {
 	ClusterName   string
 	CloudProvider string
+	ResourceGroup string
 }
 
 var ConfigCommand = &cobra.Command{
@@ -30,7 +31,7 @@ var ConfigCommand = &cobra.Command{
 		if opts.CloudProvider == "aws" {
 			aws.EKSLogin(opts.ClusterName)
 		} else if opts.CloudProvider == "azure" {
-			azure.CurrentAccount()
+			azure.AKSLogin(opts.ClusterName, opts.ResourceGroup)
 		} else {
 			log.Fatal(
 				"Current cloud provider is not yet supported by ops kube-config command.",
@@ -81,5 +82,11 @@ func init() {
 		"p",
 		"",
 		"Cloud provider where the cluster is provisioned",
+	)
+	ConfigCommand.Flags().StringP(
+		"resource-group",
+		"r",
+		"",
+		"Azure Resource group where the cluster is located",
 	)
 }
