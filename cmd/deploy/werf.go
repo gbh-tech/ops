@@ -29,6 +29,9 @@ var WerfCommand = &cobra.Command{
 		}
 
 		if slices.Contains(werf.CommandsWithRepoList, opts.Command) {
+			if opts.Repo == "" {
+				log.Fatalf("Werf command '%s' requires --repo flag.", opts.Command)
+			}
 			werf.Command(&werf.CommandOptions{
 				Command: opts.Command,
 				Env:     opts.Env,

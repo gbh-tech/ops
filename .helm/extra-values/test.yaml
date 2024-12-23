@@ -1,2 +1,5 @@
 ---
-extraValues: "hue"
+extraValues:
+  message: "ooooh!"
+  status: "nominal!"
+  context: "extra"

@@ -1,6 +1,7 @@
 package werf
 
 import (
+	"os"
 	"os/exec"
 
 	"github.com/charmbracelet/log"
@@ -51,11 +52,11 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 func execWerfCommand(args []string) {
 	cmd := exec.Command(args[0], args[1:]...)
 
-	out, err := cmd.CombinedOutput()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+
 	if err != nil {
-		log.Fatalf(
-			"Failed to execute Werf command: %v",
-			string(out),
-		)
+		log.Fatalf("Failed to execute Werf command: %v", err)
 	}
 }

@@ -1,0 +1,8 @@
+project: ops
+configVersion: 1
+build:
+  platform:
+  - linux/amd64
+---
+image: dummy
+dockerfile: app/Dockerfile

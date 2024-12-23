@@ -1,2 +1,5 @@
 ---
-normalValues: "uh-huh"
+normalValues:
+  message: "uh-huh"
+  status: "goodtogo"
+  context: "normal"
