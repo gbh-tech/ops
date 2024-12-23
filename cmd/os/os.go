@@ -1,23 +1,19 @@
-package cmd
+package os
 
 import (
-	"github.com/charmbracelet/log"
-	. "ops/pkg/utils"
+	"ops/pkg/utils"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
 
-var osCmd = &cobra.Command{
+var Command = &cobra.Command{
 	Use:   "os",
 	Short: "Prints the detected operating system to the console",
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Infof(
 			"%s: %s",
-			"Current operating system:", CurrentOperatingSystem(),
+			"Current operating system:", utils.CurrentOperatingSystem(),
 		)
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(osCmd)
 }

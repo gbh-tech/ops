@@ -5,6 +5,7 @@ import (
 	"ops/cmd/env"
 	"ops/cmd/git"
 	"ops/cmd/kube"
+	osCmd "ops/cmd/os"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -30,6 +31,7 @@ func init() {
 		"Environment as target",
 	)
 
+	rootCmd.AddCommand(osCmd.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(kube.ConfigCommand)
 	rootCmd.AddCommand(git.GetTicketIDCommand)
