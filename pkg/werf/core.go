@@ -1,8 +1,9 @@
 package werf
 
 import (
-	"github.com/charmbracelet/log"
 	"os/exec"
+
+	"github.com/charmbracelet/log"
 )
 
 type CommandOptions struct {
@@ -28,7 +29,7 @@ func Command(options *CommandOptions) {
 	cmd = append(cmd, additionalValuesFiles...)
 
 	log.Infof("Werf command: %v", cmd)
-	//execWerfCommand(cmd)
+	execWerfCommand(cmd)
 }
 
 func CommandWithoutRepo(options *CommandNoRepoOptions) {
@@ -44,7 +45,7 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 	cmd = append(cmd, additionalValuesFiles...)
 
 	log.Infof("Werf command: %v", cmd)
-	//execWerfCommand(cmd)
+	execWerfCommand(cmd)
 }
 
 func execWerfCommand(args []string) {
