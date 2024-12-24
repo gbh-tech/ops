@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/spf13/cobra"
 	"log"
+
+	"github.com/spf13/cobra"
 )
 
 func MarkFlagsRequired(command *cobra.Command, flags ...string) {

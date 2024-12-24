@@ -1,10 +1,11 @@
 package utils
 
 import (
-	"github.com/charmbracelet/log"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/charmbracelet/log"
 )
 
 func CurrentBranch() string {

@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/charmbracelet/log"
 	"os"
+
+	"github.com/charmbracelet/log"
 )
 
 func GetEnvironment(key string) string {
