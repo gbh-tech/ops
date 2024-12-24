@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"ops/cmd/containerRegistry"
 	"ops/cmd/deploy"
 	"ops/cmd/env"
 	"ops/cmd/git"
 	"ops/cmd/kube"
 	osCmd "ops/cmd/os"
+	"ops/cmd/registry"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -37,6 +37,6 @@ func init() {
 	rootCmd.AddCommand(kube.ConfigCommand)
 	rootCmd.AddCommand(git.GetTicketIDCommand)
 	rootCmd.AddCommand(git.TagCleanerCommand)
-	rootCmd.AddCommand(containerRegistry.LoginCommand)
+	rootCmd.AddCommand(registry.LoginCommand)
 	rootCmd.AddCommand(deploy.WerfCommand)
 }

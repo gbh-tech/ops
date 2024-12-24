@@ -1,4 +1,4 @@
-package containerRegistry
+package registry
 
 import (
 	"ops/pkg/aws"
