@@ -3,11 +3,12 @@ package aws
 import (
 	"encoding/json"
 	"errors"
-	"github.com/charmbracelet/log"
 	"ops/pkg/utils"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 type RequiresLogin bool
@@ -17,15 +18,14 @@ type ECRAuthorizationData struct {
 	} `json:"authorizationData"`
 }
 
-func ECRLogin() {
+func ECRLogin(registryUrl string) {
 	utils.CheckBinary("aws")
 
 	utils.GetEnvironment("AWS_PROFILE")
 	awsRegion := utils.GetEnvironment("AWS_REGION")
-	registry := utils.GetEnvironment("ECR_CONTAINER_REGISTRY")
 
 	if ecrLoginCredentialsRequired() {
-		dockerRegistryLogin(awsRegion, registry)
+		dockerRegistryLogin(awsRegion, registryUrl)
 	}
 }
 

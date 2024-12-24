@@ -14,7 +14,7 @@ deployment:
 container_registry:
   # Can be one of: [ acr, ecr, gcr ]
   type: ecr
-  url: there
+  url: 091791791455.dkr.ecr.us-east-1.amazonaws.com/production/internal-jobs
 
 # Only used if deployment.provider is werf
 werf:

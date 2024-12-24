@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"github.com/charmbracelet/log"
 	"os/exec"
+
+	"github.com/charmbracelet/log"
 )
 
 func CheckBinary(binary string) {
@@ -15,7 +16,6 @@ func CheckBinary(binary string) {
 	}
 
 	cmd = exec.Command(binary, "--version")
-
 	err := cmd.Run()
 
 	if err != nil {
@@ -30,6 +30,4 @@ func CheckBinary(binary string) {
 			binary,
 		)
 	}
-
-	log.Infof("%s is installed and executable!", binary)
 }

@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type RegistryLoginOptions struct {
-	Registry string
+type LoginCommandOptions struct {
+	URL string
 }
 
 var LoginCommand = &cobra.Command{
@@ -17,6 +17,7 @@ var LoginCommand = &cobra.Command{
 	Short: "Logs in to the specified container image registry (ECR, ACR, etc)",
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.NewConfig()
+		opts := loginCommandFlags(cmd)
 
 		log.Info(
 			"Detected container registry type:",
@@ -31,7 +32,7 @@ var LoginCommand = &cobra.Command{
 		)
 
 		if config.ContainerRegistry.Type == "ecr" {
-			aws.ECRLogin()
+			aws.ECRLogin(opts.URL)
 		}
 
 		if config.ContainerRegistry.Type == "acr" {
@@ -42,4 +43,21 @@ var LoginCommand = &cobra.Command{
 			log.Fatalf("Google Cloud Container Registry is not supported by Ops.")
 		}
 	},
+}
+
+func loginCommandFlags(cmd *cobra.Command) LoginCommandOptions {
+	url, _ := cmd.Flags().GetString("url")
+
+	return LoginCommandOptions{
+		URL: url,
+	}
+}
+
+func init() {
+	LoginCommand.Flags().StringP(
+		"url",
+		"u",
+		"",
+		"Container registry URL",
+	)
 }
