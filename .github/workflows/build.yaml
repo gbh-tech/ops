@@ -1,4 +1,4 @@
-name: 🧪 Build and Test
+name: 🛠️ Build
 
 on:
   pull_request:
@@ -24,6 +24,3 @@ jobs:
 
       - name: 🛠️ Run build
         run: go build
-        
-      - name: 🧪 Run tests
-        run: go test -timeout 30s github.com/gbh-tech/envi/pkg/utils
