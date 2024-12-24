@@ -5,3 +5,6 @@ build
 
 # ops binary
 ops
+
+# goreleaser
+dist

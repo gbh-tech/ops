@@ -1,3 +1,4 @@
-golang 1.23.1
-awscli latest
-werf 2.10.5
+golang     1.23.1
+awscli     latest
+werf       2.10.5
+goreleaser latest

@@ -7,6 +7,6 @@ import (
 )
 
 func ACRLogin() {
-  utils.CheckBinary("az")
-  log.Warn("[WIP] az container-registry has not yet been implemented.")
+	utils.CheckBinary("az")
+	log.Warn("[WIP] az container-registry has not yet been implemented.")
 }
