@@ -8,3 +8,5 @@ ops
 
 # goreleaser
 dist
+
+node_modules

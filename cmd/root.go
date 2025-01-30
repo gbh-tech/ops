@@ -12,9 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var Version string = "development"
+
 var rootCmd = &cobra.Command{
-	Use:   "ops",
-	Short: "An all-purpose deployment automation tool tailored for DevOps & SRE",
+	Use:     "ops",
+	Short:   "An all-purpose deployment automation tool tailored for DevOps & SRE",
+	Version: Version,
 }
 
 func Execute() {
