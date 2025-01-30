@@ -34,8 +34,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: 'us-east-1'
 
-      - name: 📦 Install package dependencies using lockfile
-        run: npm ci
+      - name: 📦 Install package dependencies
+        run: |
+          npm install --global @release-it/bumper@latest
+          npm install --global @release-it/conventional-changelog@latest
+          npm install --global release-it@latest
 
       - name: 🚀 Run new version
         run: npx release-it --ci
