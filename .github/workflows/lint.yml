@@ -54,7 +54,8 @@ jobs:
           npx commitlint
           --from ${{ github.event.pull_request.head.sha }}~${{ github.event.pull_request.commits }}
           --to ${{ github.event.pull_request.head.sha }}
+          --config commitlint.config.json
           --verbose
 
       - name: 🔎 Validate PR title with commitlint
-        run: echo "${{ github.event.pull_request.title }}" | npx commitlint
+        run: echo "${{ github.event.pull_request.title }}" | npx commitlint --config commitlint.config.json
