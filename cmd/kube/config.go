@@ -53,8 +53,10 @@ func kubeConfigCommandFlags(
 	clusterName string,
 	cloudProvider string,
 ) kubeConfigCommandOptions {
-	name, _ := cmd.Flags().GetString("cluster-name")
-	provider, _ := cmd.Flags().GetString("cloud-provider")
+	var name, provider string
+
+	name, _ = cmd.Flags().GetString("cluster-name")
+	provider, _ = cmd.Flags().GetString("cloud-provider")
 
 	if name == "" {
 		name = clusterName
