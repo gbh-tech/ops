@@ -43,8 +43,10 @@ jobs:
         with:
           node-version-file: '.tool-versions'
 
-      - name: 🚧 Install dev dependencies
-        run: npm install --only=dev
+      - name: 🚧 Install commitlint dependencies
+        run: |
+          npm install conventional-changelog-conventionalcommits
+          npm install commitlint@latest
 
       # Check all commits pushed to this PR
       - name: 👁️‍🗨️ Validate PR commits with commitlint

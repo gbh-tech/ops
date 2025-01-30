@@ -4,36 +4,8 @@
   "description": "ops cli tool for gbh DevOps utils",
   "private": true,
   "devDependencies": {
-    "@commitlint/config-conventional": "^19.6.0",
     "@release-it/conventional-changelog": "^10.0.0",
-    "commitlint": "^19.4.0",
     "release-it": "^18.1.2"
-  },
-  "commitlint": {
-    "extends": [
-      "@commitlint/config-conventional"
-    ],
-    "defaultIgnores": true,
-    "rules": {
-      "body-max-line-length": [
-        1,
-        "always"
-      ],
-      "header-max-length": [
-        2,
-        "always",
-        150
-      ],
-      "subject-case": [
-        2,
-        "always",
-        [
-          "sentence-case",
-          "start-case",
-          "sentence-case"
-        ]
-      ]
-    }
   },
   "release-it": {
     "github": {
