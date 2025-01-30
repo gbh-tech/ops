@@ -45,8 +45,8 @@ jobs:
 
       - name: 🚧 Install commitlint dependencies
         run: |
-          npm install conventional-changelog-conventionalcommits
-          npm install commitlint@latest
+          npm install --global @commitlint/config-conventional@latest
+          npm install --global commitlint@latest
 
       # Check all commits pushed to this PR
       - name: 👁️‍🗨️ Validate PR commits with commitlint
