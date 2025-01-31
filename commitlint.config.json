@@ -1,0 +1,26 @@
+{
+  "extends": [
+      "@commitlint/config-conventional"
+  ],
+  "defaultIgnores": true,
+  "rules": {
+      "body-max-line-length": [
+      1,
+      "always"
+      ],
+      "header-max-length": [
+      2,
+      "always",
+      150
+      ],
+      "subject-case": [
+      2,
+      "always",
+      [
+          "sentence-case",
+          "start-case",
+          "sentence-case"
+      ]
+      ]
+  }
+}

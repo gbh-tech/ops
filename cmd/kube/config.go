@@ -65,8 +65,8 @@ func kubeConfigCommandFlags(
 	}
 
 	return kubeConfigCommandOptions{
-		ClusterName:   clusterName,
-		CloudProvider: cloudProvider,
+		ClusterName:   name,
+		CloudProvider: provider,
 	}
 }
 
