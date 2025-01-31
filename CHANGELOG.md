@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.2](https://github.com/gbh-tech/ops/compare/v1.0.1...v1.0.2) (2025-01-31)
+
+### Miscellaneous
+
+* (DSO-2235) Install release-it dependencies using --global flag ([ec4371f](https://github.com/gbh-tech/ops/commit/ec4371fb7ab449583ac841d5e06260bbd091604c))
+
 ## 1.0.1 (2025-01-31)
 
 ### Bug Fixes
