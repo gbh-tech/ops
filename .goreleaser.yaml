@@ -8,7 +8,7 @@ before:
 builds:
   - binary: ops
     ldflags:
-      - -s -w -X github.com/gbh-tech/envi/cmd.Version={{.Version}}
+      - -s -w -X ops/cmd.Version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:
