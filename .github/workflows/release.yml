@@ -35,12 +35,12 @@ jobs:
 
       - name: 📦 Install package dependencies
         run: |
-          npm install --save-dev @release-it/bumper@latest
-          npm install --save-dev @release-it/conventional-changelog@latest
+          npm install --global @release-it/bumper@latest
+          npm install --global @release-it/conventional-changelog@latest
           npm install --global release-it@latest
 
       - name: 🚀 Run new version
-        run: npx release-it --ci
+        run: release-it --ci
         env:
           GITHUB_TOKEN: ${{ secrets.DEVOPS_USER_TOKEN }}
 
