@@ -11,11 +11,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: 💻 Checkout current pull-request revision code
+      - name: 💻 Checkout current code ref
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.DEVOPS_USER_TOKEN }}
 
       - name: 💼 Configure Git user
         run: |
