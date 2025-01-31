@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.3](https://github.com/gbh-tech/ops/compare/v1.0.2...v1.0.3) (2025-01-31)
+
+### Miscellaneous
+
+* (DSO-2235) Fix versioning at build time ([fca4990](https://github.com/gbh-tech/ops/commit/fca4990ffdf8717a1bcb2dae5846160ca2c9630b))
+
 ## [1.0.2](https://github.com/gbh-tech/ops/compare/v1.0.1...v1.0.2) (2025-01-31)
 
 ### Miscellaneous
