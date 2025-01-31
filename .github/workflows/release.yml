@@ -35,8 +35,8 @@ jobs:
 
       - name: 📦 Install package dependencies
         run: |
-          npm install --global @release-it/bumper@latest
-          npm install --global @release-it/conventional-changelog@latest
+          npm install --save-dev @release-it/bumper@latest
+          npm install --save-dev @release-it/conventional-changelog@latest
           npm install --global release-it@latest
 
       - name: 🚀 Run new version

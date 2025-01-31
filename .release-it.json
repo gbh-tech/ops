@@ -20,6 +20,9 @@
       "--no-verify"
     ]
   },
+  "npm": {
+    "publish": false
+  },
   "plugins": {
     "@release-it/bumper": {
       "in": {
