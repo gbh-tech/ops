@@ -1,5 +1,6 @@
 # git ignore
 
+# JetBrains
 .idea
 build
 
@@ -9,4 +10,5 @@ ops
 # goreleaser
 dist
 
+# Node.js
 node_modules
