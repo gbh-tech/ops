@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"encoding/json"
 	"errors"
 	"ops/pkg/utils"
 	"os/exec"
@@ -14,7 +13,9 @@ import (
 type RequiresLogin bool
 type ECRAuthorizationData struct {
 	AuthorizationData []struct {
-		ExpiresAt time.Time `json:"expiresAt"`
+		ProxyEndpoint      string    `json:"proxyEndpoint"`
+		AuthorizationToken string    `json:"authorizationToken"`
+		ExpiresAt          time.Time `json:"expiresAt"`
 	} `json:"authorizationData"`
 }
 
@@ -24,9 +25,7 @@ func ECRLogin(registryUrl string) {
 	utils.GetEnvironment("AWS_PROFILE")
 	awsRegion := utils.GetEnvironment("AWS_REGION")
 
-	if ecrLoginCredentialsRequired() {
-		dockerRegistryLogin(awsRegion, registryUrl)
-	}
+	dockerRegistryLogin(awsRegion, registryUrl)
 }
 
 func dockerRegistryLogin(awsRegion string, registryURL string) {
@@ -48,8 +47,9 @@ func dockerRegistryLogin(awsRegion string, registryURL string) {
 		registryURL,
 	)
 
-	err := registryLogin.Run()
+	output, err := registryLogin.Output()
 	if err != nil {
+		log.Info("Login command output: %v", output)
 		log.Fatalf("Failed to login to Docker with ECR credentials: %v", err)
 	}
 
@@ -82,42 +82,4 @@ func ecrGetLoginPassword(awsRegion string) string {
 
 	log.Infof("AWS ECR login password colleted!")
 	return string(password)
-}
-
-func ecrLoginCredentialsRequired() RequiresLogin {
-	cmd := exec.Command(
-		"aws",
-		"ecr",
-		"get-authorization-token",
-		"--no-cli-pager",
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("Failed to execute command: %v", err)
-	}
-
-	var authData ECRAuthorizationData
-	err = json.Unmarshal(output, &authData)
-	if err != nil {
-		log.Fatalf("Failed to parse JSON: %v", err)
-	}
-
-	expiration := authData.AuthorizationData[0].ExpiresAt
-
-	if len(authData.AuthorizationData) > 0 {
-		log.Warn(
-			"ECR login credentials are still valid.",
-			"expiresAt",
-			expiration.Format(time.RFC3339),
-		)
-		return RequiresLogin(false)
-	} else {
-		log.Info(
-			"Authorization data expired or not found.",
-			"expiredAt",
-			expiration.Format(time.RFC3339),
-		)
-		return RequiresLogin(true)
-	}
 }

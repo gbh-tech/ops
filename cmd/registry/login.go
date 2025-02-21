@@ -14,7 +14,7 @@ type LoginCommandOptions struct {
 
 var LoginCommand = &cobra.Command{
 	Use:   "registry-login",
-	Short: "Logs in to the specified container image registry (ECR, ACR, etc)",
+	Short: "Logs in to the specified container image registry",
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.NewConfig()
 		opts := loginCommandFlags(cmd)
@@ -32,7 +32,11 @@ var LoginCommand = &cobra.Command{
 		)
 
 		if config.ContainerRegistry.Type == "ecr" {
-			aws.ECRLogin(opts.URL)
+			if opts.URL != "" {
+				aws.ECRLogin(opts.URL)
+			} else {
+				aws.ECRLogin(config.ContainerRegistry.URL)
+			}
 		}
 
 		if config.ContainerRegistry.Type == "acr" {
