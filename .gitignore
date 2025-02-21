@@ -12,3 +12,6 @@ dist
 
 # Node.js
 node_modules
+
+# Werf
+.werf_secret_key

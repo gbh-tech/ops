@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"os"
 	"runtime"
 	"slices"
 	"strings"
@@ -30,4 +31,12 @@ func ArrayContainsString(slice []string, item string) bool {
 	}
 
 	return false
+}
+
+func RequiredFileExists(file string) {
+	_, err := os.Stat(file)
+
+	if os.IsNotExist(err) {
+		log.Fatal("A required file for this command does not exist.", "file", file)
+	}
 }

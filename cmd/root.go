@@ -5,8 +5,8 @@ import (
 	"ops/cmd/env"
 	"ops/cmd/git"
 	"ops/cmd/kube"
-	osCmd "ops/cmd/os"
 	"ops/cmd/registry"
+	"ops/cmd/secrets"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -35,11 +35,11 @@ func init() {
 		"Environment as target",
 	)
 
-	rootCmd.AddCommand(osCmd.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(kube.ConfigCommand)
 	rootCmd.AddCommand(git.GetTicketIDCommand)
 	rootCmd.AddCommand(git.TagCleanerCommand)
 	rootCmd.AddCommand(registry.LoginCommand)
 	rootCmd.AddCommand(deploy.WerfCommand)
+	rootCmd.AddCommand(secrets.Command)
 }

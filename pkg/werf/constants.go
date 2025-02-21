@@ -13,6 +13,10 @@ var CommandsWithRepoList = []string{
 	"plan",
 }
 
+var DefaultSecretKey = ".werf_secret_key"
+var DefaultValuesFile = ".helm/values.yaml"
+var DefaultSecretValuesFile = ".helm/secret-values.yaml"
+
 var SecretValuesPaths = []string{
 	".helm/values",
 	".helm/service-values",

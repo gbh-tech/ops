@@ -1,6 +1,7 @@
 package werf
 
 import (
+	"ops/pkg/utils"
 	"os"
 	"os/exec"
 
@@ -13,6 +14,11 @@ type CommandOptions struct {
 
 type CommandNoRepoOptions struct {
 	Command, Env string
+}
+
+type CommandSecretsOptions struct {
+	Command  string
+	FilePath string
 }
 
 func Command(options *CommandOptions) {
@@ -65,6 +71,31 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 
 	log.Infof("Werf command: %v", cmd)
 	execWerfCommand(cmd)
+}
+
+func CommandWithSecrets(options *CommandSecretsOptions) {
+	utils.RequiredFileExists(DefaultSecretKey)
+	cmd := []string{
+		"werf",
+		"helm",
+		"secret",
+		"values",
+		options.Command,
+		options.FilePath,
+		"-o",
+		options.FilePath,
+	}
+
+	log.Infof("Werf command: %v", cmd)
+	execWerfCommand(cmd)
+
+	if options.Command == "decrypt" {
+		log.Info("Secret file(s) successfully decrypted!", "file", options.FilePath)
+	}
+
+	if options.Command == "encrypt" {
+		log.Info("Secret file(s) successfully encrypted!", "file", options.FilePath)
+	}
 }
 
 func execWerfCommand(args []string) {
