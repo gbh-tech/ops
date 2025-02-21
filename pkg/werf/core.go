@@ -26,8 +26,17 @@ func Command(options *CommandOptions) {
 		"--dev",
 	}
 
-	additionalValuesFiles := GetValuesPaths()
+	additionalValuesFiles := GetValuesFiles()
 	cmd = append(cmd, additionalValuesFiles...)
+
+	additionalValuesPath := GetValuesPaths()
+	cmd = append(cmd, additionalValuesPath...)
+
+	additionalSecretValuesFiles := GetSecretValuesFiles()
+	cmd = append(cmd, additionalSecretValuesFiles...)
+
+	additionalSecretValuesPath := GetSecretValuesPaths()
+	cmd = append(cmd, additionalSecretValuesPath...)
 
 	log.Infof("Werf command: %v", cmd)
 	execWerfCommand(cmd)
@@ -42,8 +51,17 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 		"--dev",
 	}
 
-	additionalValuesFiles := GetValuesPaths()
+	additionalValuesFiles := GetValuesFiles()
 	cmd = append(cmd, additionalValuesFiles...)
+
+	additionalValuesPath := GetValuesPaths()
+	cmd = append(cmd, additionalValuesPath...)
+
+	additionalSecretValuesFiles := GetSecretValuesFiles()
+	cmd = append(cmd, additionalSecretValuesFiles...)
+
+	additionalSecretValuesPath := GetSecretValuesPaths()
+	cmd = append(cmd, additionalSecretValuesPath...)
 
 	log.Infof("Werf command: %v", cmd)
 	execWerfCommand(cmd)
