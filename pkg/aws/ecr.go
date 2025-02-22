@@ -5,19 +5,9 @@ import (
 	"ops/pkg/utils"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 )
-
-type RequiresLogin bool
-type ECRAuthorizationData struct {
-	AuthorizationData []struct {
-		ProxyEndpoint      string    `json:"proxyEndpoint"`
-		AuthorizationToken string    `json:"authorizationToken"`
-		ExpiresAt          time.Time `json:"expiresAt"`
-	} `json:"authorizationData"`
-}
 
 func ECRLogin(registryUrl string) {
 	utils.CheckBinary("aws")

@@ -20,7 +20,11 @@ func CurrentBranch() string {
 }
 
 func GetTicketId(ref string) string {
-	re := regexp.MustCompile(`[A-Z]{2,}-[0-9]+`)
+	if strings.TrimSpace(ref) == "main" {
+		return ref
+	}
+
+	re := regexp.MustCompile(`[A-Za-z]{2,}-[0-9]+`)
 	match := re.FindString(ref)
 
 	if match == "" {
@@ -29,5 +33,6 @@ func GetTicketId(ref string) string {
 	}
 
 	ticket := re.FindString(ref)
+
 	return strings.ToUpper(ticket)
 }

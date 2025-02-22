@@ -28,3 +28,6 @@ werf:
   # and `--secret-values` independently of the environment (applies to all templates).
   values: [".helm/values", ".helm/extra-values"]
   secrets: [".helm/secrets"]
+
+git:
+  default_branch: main
