@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Version string = "development"
+var Version string = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "ops",

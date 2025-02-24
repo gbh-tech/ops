@@ -28,7 +28,7 @@ func flags(cmd *cobra.Command) CommandOptions {
 	envi, _ := cmd.Flags().GetString("env")
 
 	if envi == "" {
-		envi = config.NewConfig().Env
+		envi = config.LoadConfig().Env
 	}
 
 	return CommandOptions{

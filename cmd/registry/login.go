@@ -16,7 +16,7 @@ var LoginCommand = &cobra.Command{
 	Use:   "registry-login",
 	Short: "Logs in to the specified container image registry",
 	Run: func(cmd *cobra.Command, args []string) {
-		config := config.NewConfig()
+		config := config.LoadConfig()
 		opts := loginCommandFlags(cmd)
 
 		log.Info(

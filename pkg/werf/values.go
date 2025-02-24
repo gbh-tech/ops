@@ -10,7 +10,7 @@ import (
 
 func GetValuesFiles() []string {
 	var valuesFiles []string
-	values := config.NewConfig().Werf
+	values := config.LoadConfig().Werf
 
 	for _, file := range values.ValuesFiles {
 
@@ -31,7 +31,7 @@ func GetValuesFiles() []string {
 
 func GetSecretValuesFiles() []string {
 	var valuesFiles []string
-	values := config.NewConfig().Werf
+	values := config.LoadConfig().Werf
 
 	for _, file := range values.ValuesFiles {
 
@@ -52,7 +52,7 @@ func GetSecretValuesFiles() []string {
 
 func GetValuesPaths() []string {
 	var valuesPaths []string
-	values := config.NewWerfConfig()
+	values := config.LoadConfig().Werf
 
 	for _, path := range values.ValuesPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
@@ -83,7 +83,7 @@ func GetValuesPaths() []string {
 
 func GetSecretValuesPaths() []string {
 	var valuesPaths []string
-	values := config.NewWerfConfig()
+	values := config.LoadConfig().Werf
 
 	for _, path := range values.ValuesPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {

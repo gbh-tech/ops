@@ -1,8 +1,9 @@
 ---
 env: stage
 
-# Can be one of: [ aws, azure, gcp ]
-cloud_provider: "aws"
+cloud:
+  # Can be one of: [ aws, azure, gcp ]
+  provider: "aws"
 
 # Should match the name of the cluster in the selected Cloud Provider
 cluster_name: "gbh-stage"
@@ -11,7 +12,7 @@ deployment:
   # Can be one of: [ ansible, werf ]
   provider: werf
 
-container_registry:
+registry:
   # Can be one of: [ acr, ecr, gcr ]
   type: ecr
   url: 091791791455.dkr.ecr.us-east-1.amazonaws.com/production/internal-jobs

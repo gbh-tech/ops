@@ -20,23 +20,18 @@ var ConfigCommand = &cobra.Command{
 	Use:   "kube-config",
 	Short: "Updates local kube config file by authenticating cloud-managed k8s clusters",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg := config.NewConfig()
+		config := config.LoadConfig()
+		opts := kubeConfigCommandFlags(cmd, config.ClusterName)
 
-		opts := kubeConfigCommandFlags(
-			cmd,
-			cfg.ClusterName,
-			string(cfg.CloudProvider),
-		)
-
-		if opts.CloudProvider == "aws" {
+		if config.Cloud.Provider == "aws" {
 			aws.EKSLogin(opts.ClusterName)
-		} else if opts.CloudProvider == "azure" {
+		} else if config.Cloud.Provider == "azure" {
 			azure.AKSLogin(opts.ClusterName, opts.ResourceGroup)
 		} else {
 			log.Fatal(
-				"Current cloud provider is not yet supported by ops kube-config command.",
+				"Current cloud provider is not yet supported by Op.",
 				"cloudProvider",
-				opts.CloudProvider,
+				config.Cloud.Provider,
 			)
 		}
 
@@ -51,22 +46,15 @@ var ConfigCommand = &cobra.Command{
 func kubeConfigCommandFlags(
 	cmd *cobra.Command,
 	clusterName string,
-	cloudProvider string,
 ) kubeConfigCommandOptions {
 	name, _ := cmd.Flags().GetString("cluster-name")
-	provider, _ := cmd.Flags().GetString("cloud-provider")
 
 	if name == "" {
 		name = clusterName
 	}
 
-	if provider == "" {
-		provider = cloudProvider
-	}
-
 	return kubeConfigCommandOptions{
-		ClusterName:   name,
-		CloudProvider: provider,
+		ClusterName: name,
 	}
 }
 
@@ -77,12 +65,7 @@ func init() {
 		"",
 		"Cluster name used to authenticate",
 	)
-	ConfigCommand.Flags().StringP(
-		"cloud-provider",
-		"p",
-		"",
-		"Cloud provider where the cluster is provisioned",
-	)
+
 	ConfigCommand.Flags().StringP(
 		"resource-group",
 		"r",

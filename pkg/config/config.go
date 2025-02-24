@@ -8,17 +8,17 @@ import (
 )
 
 type OpsConfig struct {
-	CloudProvider     CloudProvider           `mapstructure:"cloud_provider"`
-	ClusterName       string                  `mapstructure:"cluster_name"`
-	ContainerRegistry ContainerRegistryConfig `mapstructure:"container_registry"`
-	Deployment        DeploymentConfig        `mapstructure:"deployment"`
-	Env               string                  `mapstructure:"env"`
-	Werf              WerfConfig              `mapstructure:"werf"`
+	Cloud       CloudConfig      `mapstructure:"cloud"`
+	ClusterName string           `mapstructure:"cluster_name"`
+	Registry    RegistryConfig   `mapstructure:"registry"`
+	Deployment  DeploymentConfig `mapstructure:"deployment"`
+	Env         string           `mapstructure:"env"`
+	Werf        WerfConfig       `mapstructure:"werf"`
 }
 
 var config OpsConfig
 
-func NewConfig() *OpsConfig {
+func LoadConfig() *OpsConfig {
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".ops")
@@ -45,25 +45,4 @@ func NewConfig() *OpsConfig {
 	)
 
 	return &config
-}
-
-func NewWerfConfig() *WerfConfig {
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".ops")
-	viper.SetEnvPrefix("ops")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			log.Fatalf("Ops config file not found!")
-		}
-	}
-
-	if err := viper.Unmarshal(&config); err != nil {
-		log.Fatalf("Unable to parse config file, %v", err)
-	}
-
-	return &config.Werf
 }

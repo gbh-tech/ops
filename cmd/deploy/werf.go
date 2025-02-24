@@ -13,7 +13,7 @@ var WerfCommand = &cobra.Command{
 	Use:   "werf",
 	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
-		config := config.NewConfig()
+		config := config.LoadConfig()
 		opts := werfCommandFlags(cmd)
 
 		if opts.Env == "" {
