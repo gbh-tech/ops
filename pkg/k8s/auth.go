@@ -12,7 +12,10 @@ func CredentialsRequired(clusterName string) bool {
 	clusters := GetContexts()
 
 	for _, context := range clusters {
-		if strings.Contains(context, clusterName) {
+		// We split the string by "/" to get the cluster name in case the
+		// context uses a different format.
+		parts := strings.Split(context, "/")
+		if strings.Contains(parts[len(parts)-1], clusterName) {
 			log.Warn(
 				"An entry in the kube-config was found. Skipping authentication!",
 				"clusterName",
@@ -26,33 +29,6 @@ func CredentialsRequired(clusterName string) bool {
 	}
 
 	return true
-}
-
-func UpdateConfigForEKS(awsRegion string, clusterName string) {
-	cmd := []string{"aws", "eks", "update-kubeconfig", "--region", awsRegion, "--name", clusterName}
-
-	log.Info(
-		"Executing command:",
-		"command",
-		strings.Join(cmd, " "),
-	)
-
-	eksCredentials := exec.Command(cmd[0], cmd[1:]...)
-	_, err := eksCredentials.Output()
-
-	if err != nil {
-		var execError *exec.Error
-		if errors.As(err, &execError) {
-			log.Fatalf(
-				"Command execution failed: %v %v",
-				execError.Name,
-				execError.Err,
-			)
-		}
-		log.Fatalf("Failed to get AWS EKS credentials: %v", err)
-	}
-
-	log.Infof("AWS EKS credentials added!")
 }
 
 func UpdateConfigForAKS(clusterName string, resourceGroup string) {

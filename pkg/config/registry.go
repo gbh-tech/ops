@@ -15,7 +15,7 @@ type RegistryConfig struct {
 	URL  string       `mapstructure:"url"`
 }
 
-func ValidateContainerRegistryConfig(config *RegistryConfig) {
+func CheckRegistryConfig(config *RegistryConfig) {
 	for _, registryType := range SupportedRegistries {
 		if config.Type == registryType {
 			return

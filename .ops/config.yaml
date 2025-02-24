@@ -5,8 +5,13 @@ cloud:
   # Can be one of: [ aws, azure, gcp ]
   provider: "aws"
 
-# Should match the name of the cluster in the selected Cloud Provider
-cluster_name: "gbh-stage"
+# Configuration for Kubernetes clusters
+k8s:
+  # Should match the name of the cluster in the selected Cloud Provider
+  # It's a prefix because Ops assumes the suffix is the environment name.
+  # e.g. `gbh-stage` for the stage environment.
+  # e.g. `gbh-production` for the production environment.
+  cluster_name_prefix: "gbh-"
 
 deployment:
   # Can be one of: [ ansible, werf ]
@@ -15,7 +20,7 @@ deployment:
 registry:
   # Can be one of: [ acr, ecr, gcr ]
   type: ecr
-  url: 091791791455.dkr.ecr.us-east-1.amazonaws.com/production/internal-jobs
+  url: 091791791455.dkr.ecr.us-east-1.amazonaws.com
 
 # Only used if deployment.provider is werf
 werf:
@@ -30,5 +35,17 @@ werf:
   values: [".helm/values", ".helm/extra-values"]
   secrets: [".helm/secrets"]
 
+# Configuration for git-based commands & related automations
 git:
   default_branch: main
+
+# Configuration of the Cloud provider AWS
+aws:
+  profile: "gbh"
+  account_id: "091791791455"
+  region: "us-east-1"
+
+# Configuration of the Cloud provider Microsoft Azure
+azure:
+  location: "East US"
+  resource_group: "gbh-rg"

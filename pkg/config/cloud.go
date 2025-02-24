@@ -16,7 +16,7 @@ var SupportedCloudProviders = []string{
 	"azure",
 }
 
-func ValidateCloudConfig(config *CloudConfig) {
+func CheckCloudConfig(config *CloudConfig) {
 	if slices.Contains(SupportedCloudProviders, config.Provider) {
 		return
 	}

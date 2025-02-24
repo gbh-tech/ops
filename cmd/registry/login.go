@@ -22,29 +22,31 @@ var LoginCommand = &cobra.Command{
 		log.Info(
 			"Detected container registry type:",
 			"type",
-			config.ContainerRegistry.Type,
+			config.Registry.Type,
 		)
 
 		log.Info(
 			"Detected container registry URL:",
 			"url",
-			config.ContainerRegistry.URL,
+			config.Registry.URL,
 		)
 
-		if config.ContainerRegistry.Type == "ecr" {
-			if opts.URL != "" {
-				aws.ECRLogin(opts.URL)
-			} else {
-				aws.ECRLogin(config.ContainerRegistry.URL)
+		switch config.Registry.Type {
+		case "ecr":
+			url := opts.URL
+			if url == "" {
+				url = config.Registry.URL
 			}
-		}
 
-		if config.ContainerRegistry.Type == "acr" {
-			log.Fatalf("Azure Container Registry is not supported by Ops.")
-		}
+			if url == "" {
+				log.Fatal("Container registry URL was not provided. Check your Ops config or use the --url flag.")
+			}
 
-		if config.ContainerRegistry.Type == "gcr" {
-			log.Fatalf("Google Cloud Container Registry is not supported by Ops.")
+			aws.ECRLogin(url, config.AWS.Region)
+		case "acr":
+			log.Fatal("Azure Container Registry is not supported by Ops.")
+		case "gcr":
+			log.Fatal("Google Cloud Container Registry is not supported by Ops.")
 		}
 	},
 }

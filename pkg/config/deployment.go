@@ -13,7 +13,7 @@ type DeploymentConfig struct {
 	Provider DeploymentProvider `mapstructure:"provider"`
 }
 
-func ValidateDeploymentProviderConfig(config *DeploymentConfig) {
+func CheckDeploymentProviderConfig(config *DeploymentConfig) {
 	for _, provider := range SupportedDeploymentProviders {
 		if config.Provider == provider {
 			return

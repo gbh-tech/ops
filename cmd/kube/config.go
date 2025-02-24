@@ -21,10 +21,12 @@ var ConfigCommand = &cobra.Command{
 	Short: "Updates local kube config file by authenticating cloud-managed k8s clusters",
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.LoadConfig()
-		opts := kubeConfigCommandFlags(cmd, config.ClusterName)
+		clusterName := config.K8s.ClusterNamePrefix + config.Env
+
+		opts := kubeConfigCommandFlags(cmd, clusterName)
 
 		if config.Cloud.Provider == "aws" {
-			aws.EKSLogin(opts.ClusterName)
+			aws.EKSLogin(clusterName, config.AWS.Region)
 		} else if config.Cloud.Provider == "azure" {
 			azure.AKSLogin(opts.ClusterName, opts.ResourceGroup)
 		} else {

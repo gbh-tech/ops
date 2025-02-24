@@ -9,12 +9,9 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-func ECRLogin(registryUrl string) {
+func ECRLogin(registryUrl string, awsRegion string) {
 	utils.CheckBinary("aws")
-
 	utils.GetEnvironment("AWS_PROFILE")
-	awsRegion := utils.GetEnvironment("AWS_REGION")
-
 	dockerRegistryLogin(awsRegion, registryUrl)
 }
 
