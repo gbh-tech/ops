@@ -1,6 +1,7 @@
 package werf
 
 import (
+	"ops/pkg/config"
 	"ops/pkg/utils"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ type CommandSecretsOptions struct {
 	FilePath string
 }
 
-func Command(options *CommandOptions) {
+func Command(werfConfig config.WerfConfig, options *CommandOptions) {
 	cmd := []string{
 		"werf",
 		options.Command,
@@ -32,23 +33,23 @@ func Command(options *CommandOptions) {
 		"--dev",
 	}
 
-	additionalValuesFiles := GetValuesFiles()
+	additionalValuesFiles := GetValuesFiles(werfConfig)
 	cmd = append(cmd, additionalValuesFiles...)
 
-	additionalValuesPath := GetValuesPaths()
+	additionalValuesPath := GetValuesPaths(werfConfig)
 	cmd = append(cmd, additionalValuesPath...)
 
-	additionalSecretValuesFiles := GetSecretValuesFiles()
+	additionalSecretValuesFiles := GetSecretValuesFiles(werfConfig)
 	cmd = append(cmd, additionalSecretValuesFiles...)
 
-	additionalSecretValuesPath := GetSecretValuesPaths()
+	additionalSecretValuesPath := GetSecretValuesPaths(werfConfig)
 	cmd = append(cmd, additionalSecretValuesPath...)
 
 	log.Infof("Werf command: %v", cmd)
 	execWerfCommand(cmd)
 }
 
-func CommandWithoutRepo(options *CommandNoRepoOptions) {
+func CommandWithoutRepo(werfConfig config.WerfConfig, options *CommandNoRepoOptions) {
 	cmd := []string{
 		"werf",
 		options.Command,
@@ -57,16 +58,16 @@ func CommandWithoutRepo(options *CommandNoRepoOptions) {
 		"--dev",
 	}
 
-	additionalValuesFiles := GetValuesFiles()
+	additionalValuesFiles := GetValuesFiles(werfConfig)
 	cmd = append(cmd, additionalValuesFiles...)
 
-	additionalValuesPath := GetValuesPaths()
+	additionalValuesPath := GetValuesPaths(werfConfig)
 	cmd = append(cmd, additionalValuesPath...)
 
-	additionalSecretValuesFiles := GetSecretValuesFiles()
+	additionalSecretValuesFiles := GetSecretValuesFiles(werfConfig)
 	cmd = append(cmd, additionalSecretValuesFiles...)
 
-	additionalSecretValuesPath := GetSecretValuesPaths()
+	additionalSecretValuesPath := GetSecretValuesPaths(werfConfig)
 	cmd = append(cmd, additionalSecretValuesPath...)
 
 	log.Infof("Werf command: %v", cmd)

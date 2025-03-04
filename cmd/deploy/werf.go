@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"ops/pkg/config"
+	"ops/pkg/utils"
 	"ops/pkg/werf"
 	"slices"
 
@@ -16,10 +17,6 @@ var WerfCommand = &cobra.Command{
 		config := config.LoadConfig()
 		opts := werfCommandFlags(cmd)
 
-		if opts.Env == "" {
-			opts.Env = config.Env
-		}
-
 		if config.Deployment.Provider != "werf" {
 			log.Fatal(
 				"Please select werf as the deployment provider first.",
@@ -28,24 +25,35 @@ var WerfCommand = &cobra.Command{
 			)
 		}
 
+		if opts.Env == "" {
+			opts.Env = config.Env
+		}
+
+		if opts.Repo == "" {
+			opts.Repo = utils.GetFullRegistryRepositoryURL(
+				config.Registry.URL,
+				config.Env,
+				config.Project,
+			)
+		}
+
 		if slices.Contains(werf.CommandsWithRepoList, opts.Command) {
 			if opts.Repo == "" {
 				log.Fatalf("Werf command '%s' requires --repo flag.", opts.Command)
 			}
-			werf.Command(&werf.CommandOptions{
+
+			werf.Command(config.Werf, &werf.CommandOptions{
 				Command: opts.Command,
 				Env:     opts.Env,
 				Repo:    opts.Repo,
 			})
-			return
 		}
 
 		if slices.Contains(werf.CommandsWithoutRepoList, opts.Command) {
-			werf.CommandWithoutRepo(&werf.CommandNoRepoOptions{
+			werf.CommandWithoutRepo(config.Werf, &werf.CommandNoRepoOptions{
 				Command: opts.Command,
 				Env:     opts.Env,
 			})
-			return
 		}
 	},
 }
@@ -80,5 +88,11 @@ func init() {
 		"r",
 		"",
 		"Container image registry",
+	)
+	WerfCommand.Flags().StringP(
+		"app",
+		"a",
+		"",
+		"Application name",
 	)
 }

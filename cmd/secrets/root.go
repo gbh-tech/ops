@@ -31,6 +31,12 @@ func init() {
 		false,
 		"Encrypt/Decrypt the root credential file (.helm/secret-values.yaml)",
 	)
+	Command.PersistentFlags().BoolP(
+		"custom",
+		"c",
+		false,
+		"Encrypt/Decrypt additional custom credential files",
+	)
 
 	Command.AddCommand(encryptCommand)
 	Command.AddCommand(decryptCommand)

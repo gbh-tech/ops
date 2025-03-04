@@ -8,12 +8,9 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-func GetValuesFiles() []string {
+func GetValuesFiles(werfConfig config.WerfConfig) []string {
 	var valuesFiles []string
-	values := config.LoadConfig().Werf
-
-	for _, file := range values.ValuesFiles {
-
+	for _, file := range werfConfig.ValuesFiles {
 		if _, err := os.Stat(file); err != nil {
 			log.Fatal(
 				"Werf values file does not exist!",
@@ -29,11 +26,9 @@ func GetValuesFiles() []string {
 	return valuesFiles
 }
 
-func GetSecretValuesFiles() []string {
+func GetSecretValuesFiles(werfConfig config.WerfConfig) []string {
 	var valuesFiles []string
-	values := config.LoadConfig().Werf
-
-	for _, file := range values.ValuesFiles {
+	for _, file := range werfConfig.SecretsFiles {
 
 		if _, err := os.Stat(file); err != nil {
 			log.Fatal(
@@ -50,11 +45,9 @@ func GetSecretValuesFiles() []string {
 	return valuesFiles
 }
 
-func GetValuesPaths() []string {
+func GetValuesPaths(werfConfig config.WerfConfig) []string {
 	var valuesPaths []string
-	values := config.LoadConfig().Werf
-
-	for _, path := range values.ValuesPaths {
+	for _, path := range werfConfig.ValuesPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				log.Info(
@@ -81,11 +74,9 @@ func GetValuesPaths() []string {
 	return valuesPaths
 }
 
-func GetSecretValuesPaths() []string {
+func GetSecretValuesPaths(werfConfig config.WerfConfig) []string {
 	var valuesPaths []string
-	values := config.LoadConfig().Werf
-
-	for _, path := range values.ValuesPaths {
+	for _, path := range werfConfig.SecretsPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				log.Info(

@@ -1,4 +1,8 @@
 ---
+# Company & project information
+company: gbh
+project: ops
+
 env: stage
 
 cloud:
@@ -26,10 +30,11 @@ registry:
 werf:
   # Applications/services managed by Werf (must match werf.yaml images)
   services: ["api", "web"]
+
   # Additional files to be added to Werf commands with `--values`
-  # and `--secret-values` independently of the environment (applies to all templates).
+  # independently of the environment (applies to all templates).
   values_files: [".helm/custom-env-vars.yaml"]
-  secrets_files: [".helm/custom-secret-vars.yaml"]
+
   # Additional paths where files will be added to Werf commands with `--values`
   # and `--secret-values` independently of the environment (applies to all templates).
   values: [".helm/values", ".helm/extra-values"]

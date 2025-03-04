@@ -26,7 +26,7 @@ var LoginCommand = &cobra.Command{
 		)
 
 		log.Info(
-			"Detected container registry URL:",
+			"Detected container registry:",
 			"url",
 			config.Registry.URL,
 		)

@@ -8,14 +8,16 @@ import (
 )
 
 type OpsConfig struct {
-	Cloud      CloudConfig      `mapstructure:"cloud"`
-	K8s        K8sConfig        `mapstructure:"k8s"`
-	Registry   RegistryConfig   `mapstructure:"registry"`
-	Deployment DeploymentConfig `mapstructure:"deployment"`
-	Env        string           `mapstructure:"env"`
-	Werf       WerfConfig       `mapstructure:"werf"`
 	AWS        AWSConfig        `mapstructure:"aws"`
 	Azure      AzureConfig      `mapstructure:"azure"`
+	Cloud      CloudConfig      `mapstructure:"cloud"`
+	Company    string           `mapstructure:"company"`
+	Deployment DeploymentConfig `mapstructure:"deployment"`
+	Env        string           `mapstructure:"env"`
+	K8s        K8sConfig        `mapstructure:"k8s"`
+	Project    string           `mapstructure:"project"`
+	Registry   RegistryConfig   `mapstructure:"registry"`
+	Werf       WerfConfig       `mapstructure:"werf"`
 }
 
 var config OpsConfig
