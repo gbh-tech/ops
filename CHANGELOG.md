@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.4](https://github.com/gbh-tech/ops/compare/v1.0.3...v1.0.4) (2025-03-05)
+
+### Miscellaneous
+
+* Add decrypt/encrypt functionality for werf secrets ([5986208](https://github.com/gbh-tech/ops/commit/598620834e29bfa85047589a23ce67e0e75c59a2))
+* Add values and secret values files to Werf commands ([4d02a1e](https://github.com/gbh-tech/ops/commit/4d02a1ed62fed440c4ddce8aeff6a0429a678a36))
+* get ticket ID should work with lowercase letters ([aa6256c](https://github.com/gbh-tech/ops/commit/aa6256c99af5b4324dfdee475b85b3ec87dfb9ea))
+* Improve config && AWS commands ([ae9cbc2](https://github.com/gbh-tech/ops/commit/ae9cbc2863e0bebd70dc239dabfb7fd73d1bdbbf))
+* Remove validation for existing ECR credentials (not working) ([8e4f1f1](https://github.com/gbh-tech/ops/commit/8e4f1f191a7c4f83f9a406610eaad1e1507f8275))
+* Update .tool-versions ([2e4f233](https://github.com/gbh-tech/ops/commit/2e4f233e57ae449844361811f0e0fc243a0ecaa3))
+* Update Ops config parameters for simplicity ([01d385b](https://github.com/gbh-tech/ops/commit/01d385b4e4e9b74eb3f7378b3a2a8fb5d78eda60))
+* Update Werf get values functions ([d8144a3](https://github.com/gbh-tech/ops/commit/d8144a330687aa60f9c06a183c6a8ada1fb29859))
+
 ## [1.0.3](https://github.com/gbh-tech/ops/compare/v1.0.2...v1.0.3) (2025-01-31)
 
 ### Miscellaneous
