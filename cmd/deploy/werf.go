@@ -11,8 +11,9 @@ import (
 )
 
 var WerfCommand = &cobra.Command{
-	Use:   "werf",
-	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
+	Use:     "werf",
+	Aliases: []string{"werf"},
+	Short:   "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.LoadConfig()
 		opts := werfCommandFlags(cmd)
