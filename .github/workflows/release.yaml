@@ -22,24 +22,11 @@ jobs:
         with:
           token: '${{ secrets.DEVOPS_USER_TOKEN }}'
 
-      - name: 🔵 Set up Go on runner
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
       - name: 🟢 Configure Node.js on runner
         uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
-
-      - name: 🟡 Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ vars.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: 'us-east-1'
 
       - name: 💼 Configure Git user
         run: |
@@ -58,13 +45,3 @@ jobs:
           createGithubReleases: true
           title: 'chore: version packages'
           commit: 'chore: version packages'
-
-      - name: 🚀 Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{secrets.DEVOPS_USER_TOKEN}}
-
-      - name: 🚀 Upload binaries to S3
-        run: aws s3 sync ./dist ${BUCKET}/${NAME} --acl public-read
