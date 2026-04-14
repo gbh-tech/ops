@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- 229811e: Introduce Changesets for release management
+
 ## 1.1.0
 
 ### Minor Changes
