@@ -1,0 +1,13 @@
+{
+  "name": "@gbh-tech/ops",
+  "version": "1.0.4",
+  "private": true,
+  "scripts": {
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish && git push --follow-tags"
+  },
+  "devDependencies": {
+    "@changesets/cli": "2.30.0"
+  }
+}
