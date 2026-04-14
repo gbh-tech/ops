@@ -267,7 +267,9 @@ var ecsRenderCmd = &cobra.Command{
 			}).
 			Rows(rows...)
 
-		lipgloss.Println(t)
+		if _, err := lipgloss.Println(t); err != nil {
+			log.Fatal("Failed to render task definition", "err", err)
+		}
 	},
 }
 
