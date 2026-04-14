@@ -1,0 +1,70 @@
+name: 🚀 Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  TERM: xterm-256color
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: 💻 Checkout current project revision
+        uses: actions/checkout@v6
+        with:
+          token: '${{ secrets.DEVOPS_USER_TOKEN }}'
+
+      - name: 🔵 Set up Go on runner
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: 🟢 Configure Node.js on runner
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: 🟡 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ vars.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: 'us-east-1'
+
+      - name: 💼 Configure Git user
+        run: |
+          git config user.name "gbh-devops-bot"
+          git config user.email "devops@gbh.tech"
+
+      - name: Bump versions & create changelogs
+        uses: changesets/action@v1
+        env:
+          GITHUB_TOKEN: '${{ secrets.DEVOPS_USER_TOKEN }}'
+          HUSKY: 0
+        with:
+          publish: npx @changesets/cli publish && git push --follow-tags
+          version: npx @changesets/cli version
+          setupGitUser: false
+          createGithubReleases: true
+          title: 'chore: version packages'
+          commit: 'chore: version packages'
+
+      - name: 🚀 Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{secrets.DEVOPS_USER_TOKEN}}
+
+      - name: 🚀 Upload binaries to S3
+        run: aws s3 sync ./dist ${BUCKET}/${NAME} --acl public-read

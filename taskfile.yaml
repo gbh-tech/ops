@@ -1,0 +1,14 @@
+version: '3'
+
+tasks:
+  changeset:
+    cmds:
+      - npx @changesets/cli
+
+  changeset:version:
+    cmds:
+      - npx @changesets/cli version
+
+  changeset:publish:
+    cmds:
+      - npx @changesets/cli publish && git push --follow-tags

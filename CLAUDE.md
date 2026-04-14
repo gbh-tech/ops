@@ -33,7 +33,7 @@ goreleaser build --clean --snapshot
 
 Tool versions are pinned in `.tool-versions` (use `asdf install`): Go 1.23.6,
 awscli 2.24.5, werf 2.26.4, goreleaser 2.7.0, Node 22.13.0 (Node is only for
-release-it / commitlint tooling).
+changesets / commitlint tooling).
 
 ## Architecture
 
@@ -84,6 +84,6 @@ release-it / commitlint tooling).
   local key file).
 
 ### CI/CD
-- `.github/workflows/build.yaml`, `lint.yml`, `release.yml`. Releases use
-  GoReleaser + release-it (see `.release-it.json`); commit messages are
+- `.github/workflows/build.yaml`, `lint.yml`, `release.yaml`. Releases use
+  Changesets + GoReleaser (see `.changeset/config.json`); commit messages are
   validated by commitlint (`commitlint.config.json`).

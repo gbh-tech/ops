@@ -230,33 +230,6 @@ ops ecs cleanup --env production --app my-app --keep 5
 ops ecs logs --env production --app my-app --since 30m
 ```
 
-**Subcommand flags:**
-
-| Subcommand   | Flag           | Default | Description                                                 |
-|--------------|----------------|---------|-------------------------------------------------------------|
-| `deploy`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-|              | `-t, --tag`    | `latest`| Container image tag                                         |
-|              | `--app-config` |         | Override path to app config file                            |
-| `render`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-|              | `-t, --tag`    | `latest`| Container image tag                                         |
-| `status`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-| `wait`       | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-| `rollback`   | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-| `db-migrate` | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-|              | `--app-config` |         | Override path to app config file                            |
-| `cleanup`    | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-|              | `--keep`       | `5`     | Number of task definition revisions to keep                 |
-| `logs`       | `-a, --app`    |         | App name (required in mono-repo mode)                       |
-|              | `-e, --env`    |         | Target environment (required)                               |
-|              | `--since`      | `10m`   | Show logs since this duration ago                           |
-
 ### `git`
 
 ```bash
