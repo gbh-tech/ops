@@ -1,8 +1,8 @@
 package azure
 
 import (
-	"encoding/json"
 	"charm.land/log/v2"
+	"encoding/json"
 	"os/exec"
 )
 

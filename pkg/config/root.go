@@ -21,8 +21,8 @@ type OpsConfig struct {
 	// RepoMode controls how app config file paths are resolved across all providers.
 	// "mono" (default): apps/{app}/deploy/config.<ext>
 	// "single":         deploy/config.<ext>
-	RepoMode string           `mapstructure:"repo_mode"`
-	Werf     WerfConfig       `mapstructure:"werf"`
+	RepoMode string     `mapstructure:"repo_mode"`
+	Werf     WerfConfig `mapstructure:"werf"`
 }
 
 // IsMonoRepo returns true when repo_mode is "mono" or unset (backward-compatible default).

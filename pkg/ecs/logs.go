@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/log/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"charm.land/log/v2"
 )
 
 // TailLogs fetches and prints log events from a CloudWatch log group matching

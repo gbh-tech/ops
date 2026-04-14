@@ -55,9 +55,9 @@ func ExpandTemplate(s, service, env string) string {
 }
 
 // resolveImage derives the full image URI following the Python renderer logic:
-// - External images (containing '/') are used as-is if already tagged, else
-//   the imageTag is appended.
-// - ECR images are prefixed with the ECR URL and env path.
+//   - External images (containing '/') are used as-is if already tagged, else
+//     the imageTag is appended.
+//   - ECR images are prefixed with the ECR URL and env path.
 func resolveImage(ecrURL, env, imageField, appName, imageTag string) string {
 	repo := imageField
 	if repo == "" {

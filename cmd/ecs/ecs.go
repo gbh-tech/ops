@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
-	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"charm.land/log/v2"
+	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/spf13/cobra"
 )
 
