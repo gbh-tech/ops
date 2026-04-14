@@ -1,77 +1,87 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- 61f3060: Support ECS deployment provider
+
+### Patch Changes
+
+- 1267497: gofmt changes
+
 ## [1.0.4](https://github.com/gbh-tech/ops/compare/v1.0.3...v1.0.4) (2025-03-05)
 
 ### Miscellaneous
 
-* Add decrypt/encrypt functionality for werf secrets ([5986208](https://github.com/gbh-tech/ops/commit/598620834e29bfa85047589a23ce67e0e75c59a2))
-* Add values and secret values files to Werf commands ([4d02a1e](https://github.com/gbh-tech/ops/commit/4d02a1ed62fed440c4ddce8aeff6a0429a678a36))
-* get ticket ID should work with lowercase letters ([aa6256c](https://github.com/gbh-tech/ops/commit/aa6256c99af5b4324dfdee475b85b3ec87dfb9ea))
-* Improve config && AWS commands ([ae9cbc2](https://github.com/gbh-tech/ops/commit/ae9cbc2863e0bebd70dc239dabfb7fd73d1bdbbf))
-* Remove validation for existing ECR credentials (not working) ([8e4f1f1](https://github.com/gbh-tech/ops/commit/8e4f1f191a7c4f83f9a406610eaad1e1507f8275))
-* Update .tool-versions ([2e4f233](https://github.com/gbh-tech/ops/commit/2e4f233e57ae449844361811f0e0fc243a0ecaa3))
-* Update Ops config parameters for simplicity ([01d385b](https://github.com/gbh-tech/ops/commit/01d385b4e4e9b74eb3f7378b3a2a8fb5d78eda60))
-* Update Werf get values functions ([d8144a3](https://github.com/gbh-tech/ops/commit/d8144a330687aa60f9c06a183c6a8ada1fb29859))
+- Add decrypt/encrypt functionality for werf secrets ([5986208](https://github.com/gbh-tech/ops/commit/598620834e29bfa85047589a23ce67e0e75c59a2))
+- Add values and secret values files to Werf commands ([4d02a1e](https://github.com/gbh-tech/ops/commit/4d02a1ed62fed440c4ddce8aeff6a0429a678a36))
+- get ticket ID should work with lowercase letters ([aa6256c](https://github.com/gbh-tech/ops/commit/aa6256c99af5b4324dfdee475b85b3ec87dfb9ea))
+- Improve config && AWS commands ([ae9cbc2](https://github.com/gbh-tech/ops/commit/ae9cbc2863e0bebd70dc239dabfb7fd73d1bdbbf))
+- Remove validation for existing ECR credentials (not working) ([8e4f1f1](https://github.com/gbh-tech/ops/commit/8e4f1f191a7c4f83f9a406610eaad1e1507f8275))
+- Update .tool-versions ([2e4f233](https://github.com/gbh-tech/ops/commit/2e4f233e57ae449844361811f0e0fc243a0ecaa3))
+- Update Ops config parameters for simplicity ([01d385b](https://github.com/gbh-tech/ops/commit/01d385b4e4e9b74eb3f7378b3a2a8fb5d78eda60))
+- Update Werf get values functions ([d8144a3](https://github.com/gbh-tech/ops/commit/d8144a330687aa60f9c06a183c6a8ada1fb29859))
 
 ## [1.0.3](https://github.com/gbh-tech/ops/compare/v1.0.2...v1.0.3) (2025-01-31)
 
 ### Miscellaneous
 
-* (DSO-2235) Fix versioning at build time ([fca4990](https://github.com/gbh-tech/ops/commit/fca4990ffdf8717a1bcb2dae5846160ca2c9630b))
+- (DSO-2235) Fix versioning at build time ([fca4990](https://github.com/gbh-tech/ops/commit/fca4990ffdf8717a1bcb2dae5846160ca2c9630b))
 
 ## [1.0.2](https://github.com/gbh-tech/ops/compare/v1.0.1...v1.0.2) (2025-01-31)
 
 ### Miscellaneous
 
-* (DSO-2235) Install release-it dependencies using --global flag ([ec4371f](https://github.com/gbh-tech/ops/commit/ec4371fb7ab449583ac841d5e06260bbd091604c))
+- (DSO-2235) Install release-it dependencies using --global flag ([ec4371f](https://github.com/gbh-tech/ops/commit/ec4371fb7ab449583ac841d5e06260bbd091604c))
 
 ## 1.0.1 (2025-01-31)
 
 ### Bug Fixes
 
-* (DSO-2235) Fix unused variables ([94aecd9](https://github.com/gbh-tech/ops/commit/94aecd93a1464d947da7ae76f84fa55d135ba843))
-* Unmarshaling mapstructure instead of yaml ([eed566f](https://github.com/gbh-tech/ops/commit/eed566f6a5e74ffd9c7e3e8cc5aee097f647d229))
+- (DSO-2235) Fix unused variables ([94aecd9](https://github.com/gbh-tech/ops/commit/94aecd93a1464d947da7ae76f84fa55d135ba843))
+- Unmarshaling mapstructure instead of yaml ([eed566f](https://github.com/gbh-tech/ops/commit/eed566f6a5e74ffd9c7e3e8cc5aee097f647d229))
 
 ### Miscellaneous
 
-* (DSO-2235) Declare variable to avoid lint issues ([2d4662d](https://github.com/gbh-tech/ops/commit/2d4662d955b5adcda97e134aef08bac5115e2c45))
-* (DSO-2235) Delete package json and separate release file ([d20dba6](https://github.com/gbh-tech/ops/commit/d20dba631418de0fc91ef1b68d46cf2d9058677c))
-* (DSO-2235) Enable releases and version for ops ([9360034](https://github.com/gbh-tech/ops/commit/93600349e2e4c76985588c6842d8c9a8329b3fad))
-* (DSO-2235) Fix commitlint installation ([fff4a24](https://github.com/gbh-tech/ops/commit/fff4a24e5ae9425f6c691240f21454f8cdd30949))
-* (DSO-2235) Fix indentation on tools-version ([7b81cc1](https://github.com/gbh-tech/ops/commit/7b81cc11913edf140948421e208e5f99c89dc895))
-* (DSO-2235) Remove commitlint from package.json ([32b9288](https://github.com/gbh-tech/ops/commit/32b92885d1ed32eb3dacba4ee957683f4c901392))
-* (DSO-2235) Remove token from checkout step ([14b133e](https://github.com/gbh-tech/ops/commit/14b133e0fcb5b0c8a30f0c284c345b479e6a1cf4))
-* (DSO-2235) Remove trailing spaces at EOF ([6cc1e02](https://github.com/gbh-tech/ops/commit/6cc1e02174c02f2d0fa5303ffc478852b2ea964f))
-* (DSO-2235) Specify commitlint config file ([3d15f5b](https://github.com/gbh-tech/ops/commit/3d15f5b6f9aa8ff1f35d033672c68c2bf6cba4dd))
-* (DSO-2235) Update release-it config ([77b63f4](https://github.com/gbh-tech/ops/commit/77b63f4eb831e2da08447cbfd64390678210f72f))
-* (DSO-2235) Update version on txt file ([5272967](https://github.com/gbh-tech/ops/commit/52729672cc556e88610891908e7d21b30d36d5af))
-* Add az kubeconfig initial commands ([447706d](https://github.com/gbh-tech/ops/commit/447706dd4129f700d1623f086645ed1d756b688e))
-* Add ECR registry login command ([938ba42](https://github.com/gbh-tech/ops/commit/938ba4243afe953da9a797788ec5ae08a2d7af45))
-* Add env command ([bd032a0](https://github.com/gbh-tech/ops/commit/bd032a0e4a89c069deb821c34c6b326d618eeae6))
-* Add get values files func ([d8d88d3](https://github.com/gbh-tech/ops/commit/d8d88d3058902dcfacd0a3ada79a107603a0eca4))
-* Add goreleaser ([3fea82e](https://github.com/gbh-tech/ops/commit/3fea82ee9c710950c6a738ea0ee05bed5dc5035a))
-* Add kubeConfig command for aws ([49a758b](https://github.com/gbh-tech/ops/commit/49a758b4d2dd45709be891538a8b962e779a405b))
-* Add more functionality to tags cleaner command ([845f28a](https://github.com/gbh-tech/ops/commit/845f28af5872b4897c4bd4d714df63fabd412d0a))
-* Add ops binary to gitignore ([38fc39a](https://github.com/gbh-tech/ops/commit/38fc39ad0ff66cf56005079a7b735750533050d3))
-* Add SetAccountSubscription func ([c3c7360](https://github.com/gbh-tech/ops/commit/c3c73602e36bb489039d44d2b4f3cb3b16b2bb53))
-* Add validation of existing ECR credentials ([23bea5a](https://github.com/gbh-tech/ops/commit/23bea5a55b9444cdaf2dc4545aeb3ed5f5241766))
-* Add werf command ([b46fb24](https://github.com/gbh-tech/ops/commit/b46fb244231db0f8eb010249badc84cdbe93367d))
-* Configure registry login using config file ([f66c1e4](https://github.com/gbh-tech/ops/commit/f66c1e4e42fc83d9f86d08b3f8497c6a7643103a))
-* Enable Azure login ([0a1e1bc](https://github.com/gbh-tech/ops/commit/0a1e1bc14b679bf9d55624eecf45dd2695a86458))
-* Enable config file and registry-login command ([5c55cb6](https://github.com/gbh-tech/ops/commit/5c55cb6f84187997736673e08ffd6bb69625b576))
-* Enable werf commands ([ea803e5](https://github.com/gbh-tech/ops/commit/ea803e510e0d1b06f16b2c614716de58aca0b7a2))
-* Format pkg/utils ([f2c68d4](https://github.com/gbh-tech/ops/commit/f2c68d4f13aee25cb5ed31d7f8661db5e2303f5a))
-* Initialize ops CLI with os and get-ticket-id commands ([9f18764](https://github.com/gbh-tech/ops/commit/9f187645f69df100d64ba8c04f44972b335a6253))
-* Manage distinction between Werf commands w/ repo and w/o ([06fb591](https://github.com/gbh-tech/ops/commit/06fb591f5b6a3847160202f9194aa5a17278ffdb))
-* Minor updates to Werf command ([8cd4ac6](https://github.com/gbh-tech/ops/commit/8cd4ac6e94788620d4b051ee51f4d2c918bb21c8))
-* Reduce calls to NewConfig() ([81a03e7](https://github.com/gbh-tech/ops/commit/81a03e768e5b9adee9da84676536c6be7a8b4b98))
-* Rename containerRegistry to registry ([7648fd5](https://github.com/gbh-tech/ops/commit/7648fd5beb084d5081f6398f335ceef6a343d646))
-* reverse eksCredentialsRequired return logic ([6e30803](https://github.com/gbh-tech/ops/commit/6e308039a5ec5ee8a8d5fecb3b2aff2581e3ca84))
-* Set default Env value for deploy werf command ([4f39a69](https://github.com/gbh-tech/ops/commit/4f39a690f302dc9a1f38acbd1c7e255eefc8a6c4))
-* Set kubectl context even if auth is not needed ([e527e36](https://github.com/gbh-tech/ops/commit/e527e36343b1bea7c79bbf8dbf6fd6fd34828fa2))
-* Simplify structure for commands ([9ece1c1](https://github.com/gbh-tech/ops/commit/9ece1c17504f2ae1991753c370215eeba52582d9))
-* Update description for env cmd ([a2c2dba](https://github.com/gbh-tech/ops/commit/a2c2dba6cd39875f24b57d8a2c89627c96d79bd8))
-* Update os command structure ([aac9883](https://github.com/gbh-tech/ops/commit/aac9883ce0132aa8a78aaff5434b43897816db0e))
-* Update workflows ([b7006a7](https://github.com/gbh-tech/ops/commit/b7006a7062b5cd118ebd8890ee3be5b439ba0059))
-* Use values paths defined in Config file ([2029336](https://github.com/gbh-tech/ops/commit/20293360de7cf68acb280e0f7cc915798bb789a0))
-* werf command should stream output to console ([04f362a](https://github.com/gbh-tech/ops/commit/04f362a09cc82dd8db9117cb78ddef39849c19e1))
+- (DSO-2235) Declare variable to avoid lint issues ([2d4662d](https://github.com/gbh-tech/ops/commit/2d4662d955b5adcda97e134aef08bac5115e2c45))
+- (DSO-2235) Delete package json and separate release file ([d20dba6](https://github.com/gbh-tech/ops/commit/d20dba631418de0fc91ef1b68d46cf2d9058677c))
+- (DSO-2235) Enable releases and version for ops ([9360034](https://github.com/gbh-tech/ops/commit/93600349e2e4c76985588c6842d8c9a8329b3fad))
+- (DSO-2235) Fix commitlint installation ([fff4a24](https://github.com/gbh-tech/ops/commit/fff4a24e5ae9425f6c691240f21454f8cdd30949))
+- (DSO-2235) Fix indentation on tools-version ([7b81cc1](https://github.com/gbh-tech/ops/commit/7b81cc11913edf140948421e208e5f99c89dc895))
+- (DSO-2235) Remove commitlint from package.json ([32b9288](https://github.com/gbh-tech/ops/commit/32b92885d1ed32eb3dacba4ee957683f4c901392))
+- (DSO-2235) Remove token from checkout step ([14b133e](https://github.com/gbh-tech/ops/commit/14b133e0fcb5b0c8a30f0c284c345b479e6a1cf4))
+- (DSO-2235) Remove trailing spaces at EOF ([6cc1e02](https://github.com/gbh-tech/ops/commit/6cc1e02174c02f2d0fa5303ffc478852b2ea964f))
+- (DSO-2235) Specify commitlint config file ([3d15f5b](https://github.com/gbh-tech/ops/commit/3d15f5b6f9aa8ff1f35d033672c68c2bf6cba4dd))
+- (DSO-2235) Update release-it config ([77b63f4](https://github.com/gbh-tech/ops/commit/77b63f4eb831e2da08447cbfd64390678210f72f))
+- (DSO-2235) Update version on txt file ([5272967](https://github.com/gbh-tech/ops/commit/52729672cc556e88610891908e7d21b30d36d5af))
+- Add az kubeconfig initial commands ([447706d](https://github.com/gbh-tech/ops/commit/447706dd4129f700d1623f086645ed1d756b688e))
+- Add ECR registry login command ([938ba42](https://github.com/gbh-tech/ops/commit/938ba4243afe953da9a797788ec5ae08a2d7af45))
+- Add env command ([bd032a0](https://github.com/gbh-tech/ops/commit/bd032a0e4a89c069deb821c34c6b326d618eeae6))
+- Add get values files func ([d8d88d3](https://github.com/gbh-tech/ops/commit/d8d88d3058902dcfacd0a3ada79a107603a0eca4))
+- Add goreleaser ([3fea82e](https://github.com/gbh-tech/ops/commit/3fea82ee9c710950c6a738ea0ee05bed5dc5035a))
+- Add kubeConfig command for aws ([49a758b](https://github.com/gbh-tech/ops/commit/49a758b4d2dd45709be891538a8b962e779a405b))
+- Add more functionality to tags cleaner command ([845f28a](https://github.com/gbh-tech/ops/commit/845f28af5872b4897c4bd4d714df63fabd412d0a))
+- Add ops binary to gitignore ([38fc39a](https://github.com/gbh-tech/ops/commit/38fc39ad0ff66cf56005079a7b735750533050d3))
+- Add SetAccountSubscription func ([c3c7360](https://github.com/gbh-tech/ops/commit/c3c73602e36bb489039d44d2b4f3cb3b16b2bb53))
+- Add validation of existing ECR credentials ([23bea5a](https://github.com/gbh-tech/ops/commit/23bea5a55b9444cdaf2dc4545aeb3ed5f5241766))
+- Add werf command ([b46fb24](https://github.com/gbh-tech/ops/commit/b46fb244231db0f8eb010249badc84cdbe93367d))
+- Configure registry login using config file ([f66c1e4](https://github.com/gbh-tech/ops/commit/f66c1e4e42fc83d9f86d08b3f8497c6a7643103a))
+- Enable Azure login ([0a1e1bc](https://github.com/gbh-tech/ops/commit/0a1e1bc14b679bf9d55624eecf45dd2695a86458))
+- Enable config file and registry-login command ([5c55cb6](https://github.com/gbh-tech/ops/commit/5c55cb6f84187997736673e08ffd6bb69625b576))
+- Enable werf commands ([ea803e5](https://github.com/gbh-tech/ops/commit/ea803e510e0d1b06f16b2c614716de58aca0b7a2))
+- Format pkg/utils ([f2c68d4](https://github.com/gbh-tech/ops/commit/f2c68d4f13aee25cb5ed31d7f8661db5e2303f5a))
+- Initialize ops CLI with os and get-ticket-id commands ([9f18764](https://github.com/gbh-tech/ops/commit/9f187645f69df100d64ba8c04f44972b335a6253))
+- Manage distinction between Werf commands w/ repo and w/o ([06fb591](https://github.com/gbh-tech/ops/commit/06fb591f5b6a3847160202f9194aa5a17278ffdb))
+- Minor updates to Werf command ([8cd4ac6](https://github.com/gbh-tech/ops/commit/8cd4ac6e94788620d4b051ee51f4d2c918bb21c8))
+- Reduce calls to NewConfig() ([81a03e7](https://github.com/gbh-tech/ops/commit/81a03e768e5b9adee9da84676536c6be7a8b4b98))
+- Rename containerRegistry to registry ([7648fd5](https://github.com/gbh-tech/ops/commit/7648fd5beb084d5081f6398f335ceef6a343d646))
+- reverse eksCredentialsRequired return logic ([6e30803](https://github.com/gbh-tech/ops/commit/6e308039a5ec5ee8a8d5fecb3b2aff2581e3ca84))
+- Set default Env value for deploy werf command ([4f39a69](https://github.com/gbh-tech/ops/commit/4f39a690f302dc9a1f38acbd1c7e255eefc8a6c4))
+- Set kubectl context even if auth is not needed ([e527e36](https://github.com/gbh-tech/ops/commit/e527e36343b1bea7c79bbf8dbf6fd6fd34828fa2))
+- Simplify structure for commands ([9ece1c1](https://github.com/gbh-tech/ops/commit/9ece1c17504f2ae1991753c370215eeba52582d9))
+- Update description for env cmd ([a2c2dba](https://github.com/gbh-tech/ops/commit/a2c2dba6cd39875f24b57d8a2c89627c96d79bd8))
+- Update os command structure ([aac9883](https://github.com/gbh-tech/ops/commit/aac9883ce0132aa8a78aaff5434b43897816db0e))
+- Update workflows ([b7006a7](https://github.com/gbh-tech/ops/commit/b7006a7062b5cd118ebd8890ee3be5b439ba0059))
+- Use values paths defined in Config file ([2029336](https://github.com/gbh-tech/ops/commit/20293360de7cf68acb280e0f7cc915798bb789a0))
+- werf command should stream output to console ([04f362a](https://github.com/gbh-tech/ops/commit/04f362a09cc82dd8db9117cb78ddef39849c19e1))
