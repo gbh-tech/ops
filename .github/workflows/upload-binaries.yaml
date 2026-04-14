@@ -46,4 +46,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DEVOPS_USER_TOKEN }}
 
       - name: 🚀 Upload binaries to S3
-        run: aws s3 sync ./dist ${BUCKET}/${NAME} --acl public-read
+        run: aws s3 sync ./dist s3://gbh-utils/ops --acl public-read
