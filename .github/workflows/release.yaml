@@ -39,8 +39,8 @@ jobs:
           GITHUB_TOKEN: '${{ secrets.DEVOPS_USER_TOKEN }}'
           HUSKY: 0
         with:
-          publish: npx @changesets/cli publish && git push --follow-tags
-          version: npx @changesets/cli version
+          publish: npm run changeset:publish
+          version: npm run changeset:version
           setupGitUser: false
           createGithubReleases: true
           title: 'chore: version packages'
