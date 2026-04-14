@@ -22,6 +22,7 @@
   - [`kube`](#kube)
   - [`registry`](#registry)
   - [`deploy`](#deploy)
+  - [`ecs`](#ecs)
   - [`git`](#git)
   - [`secrets`](#secrets)
   - [Global flags](#global-flags)
@@ -196,6 +197,65 @@ ops deploy werf --env production
 # Deploy with custom values
 ops deploy werf --env staging --set image.tag=v1.2.3
 ```
+
+### `ecs`
+
+Manages deployments, migrations, and operations for ECS-based services.
+The `--app` flag is optional in single-repo mode and required in mono-repo mode
+(`repo_mode: mono` in `.ops/config.yaml`).
+
+```bash
+# Deploy an app: register task definition, run migrations, update service
+ops ecs deploy --env production --app my-app --tag v1.2.3
+
+# Dry-run: print the resolved task definition without deploying
+ops ecs render --env staging --app my-app --tag v1.2.3
+
+# Show current ECS service status
+ops ecs status --env production --app my-app
+
+# Wait for the service to reach a stable state
+ops ecs wait --env production --app my-app
+
+# Roll back the service to the previous task definition revision
+ops ecs rollback --env production --app my-app
+
+# Run a standalone database migration task
+ops ecs db-migrate --env production --app my-app
+
+# Remove old task definition revisions, keeping the latest 5 (default)
+ops ecs cleanup --env production --app my-app --keep 5
+
+# Tail recent CloudWatch logs for a service (default: last 10 minutes)
+ops ecs logs --env production --app my-app --since 30m
+```
+
+**Subcommand flags:**
+
+| Subcommand   | Flag           | Default | Description                                                 |
+|--------------|----------------|---------|-------------------------------------------------------------|
+| `deploy`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+|              | `-t, --tag`    | `latest`| Container image tag                                         |
+|              | `--app-config` |         | Override path to app config file                            |
+| `render`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+|              | `-t, --tag`    | `latest`| Container image tag                                         |
+| `status`     | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+| `wait`       | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+| `rollback`   | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+| `db-migrate` | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+|              | `--app-config` |         | Override path to app config file                            |
+| `cleanup`    | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+|              | `--keep`       | `5`     | Number of task definition revisions to keep                 |
+| `logs`       | `-a, --app`    |         | App name (required in mono-repo mode)                       |
+|              | `-e, --env`    |         | Target environment (required)                               |
+|              | `--since`      | `10m`   | Show logs since this duration ago                           |
 
 ### `git`
 
