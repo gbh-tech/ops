@@ -19,7 +19,8 @@
       [
           "sentence-case",
           "start-case",
-          "sentence-case"
+          "sentence-case",
+          "lower-case"
       ]
       ]
   }
