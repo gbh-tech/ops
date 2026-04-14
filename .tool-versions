@@ -1,5 +1,5 @@
-golang     1.23.6
-awscli     2.24.5
-werf       2.26.4
+golang     1.25.4
+aws        2.34.7
+werf       2.55.0
 goreleaser 2.7.0
 nodejs     22.13.0

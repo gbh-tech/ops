@@ -50,6 +50,27 @@ aws:
   account_id: "091791791455"
   region: "us-east-1"
 
+# Controls how app config file paths are resolved across all providers.
+# "mono" (default): apps/{app}/deploy/config.<ext>
+# "single":         deploy/config.<ext>
+repo_mode: "mono"
+
+# Only required when deployment.provider is ecs
+ecs:
+  cluster: "lighthouse-platform"
+  secret_arn_prefix: "arn:aws:secretsmanager:us-east-1:091791791455:secret"
+  execution_role: "arn:aws:iam::091791791455:role/{service}-{env}-task-exec"
+  task_role: "arn:aws:iam::091791791455:role/{service}-{env}-tasks"
+  capacity_provider: "ec2-lighthouse-platform-{env}"
+  apps_dir: "apps"  # mono-repo only; omit for single-repo
+  defaults:
+    cpu: 256
+    memory: 512
+    desired_count: 1
+    network_mode: "awsvpc"
+    launch_type: "EC2"
+    log_driver: "awslogs"
+
 # Configuration of the Cloud provider Microsoft Azure
 azure:
   location: "East US"

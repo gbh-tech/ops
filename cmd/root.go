@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"ops/cmd/deploy"
+	ecscmd "ops/cmd/ecs"
 	"ops/cmd/env"
 	"ops/cmd/git"
 	"ops/cmd/kube"
@@ -40,6 +41,7 @@ func init() {
 	rootCmd.AddCommand(git.GetTicketIDCommand)
 	rootCmd.AddCommand(git.TagCleanerCommand)
 	rootCmd.AddCommand(registry.LoginCommand)
-	rootCmd.AddCommand(deploy.WerfCommand)
+	rootCmd.AddCommand(deploy.Command)
+	rootCmd.AddCommand(ecscmd.Command)
 	rootCmd.AddCommand(secrets.Command)
 }

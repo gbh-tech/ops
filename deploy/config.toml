@@ -1,0 +1,56 @@
+[global]
+name                = "qa-metrics-api"
+port                = 3000
+cpu                 = 128
+memory              = 256
+desired_count       = 1
+health_check_path   = "/api/health"
+
+database_migrations = true
+migration_command   = ["npm", "run", "migrate"]
+
+secrets = [
+  "SECRET",
+  "USER_PASSWORD_SECRET",
+  "SENTRY_DSN",
+]
+
+[global.container_health_check]
+interval     = 30
+timeout      = 5
+retries      = 3
+start_period = 30
+
+[global.environment]
+PORT              = "3000"
+DB_NAME           = "qametrics"
+DB_USER           = "qametrics_admin"
+DB_DIALECT        = "postgres"
+DB_PORT           = "5432"
+TMP_IMAGES_FOLDER = "tmp/images"
+
+# --- Stage ---
+[stage]
+cpu           = 256
+memory        = 512
+desired_count = 1
+
+[stage.environment]
+ENVIRONMENT = "stage"
+DB_HOST     = "gbh-stage-postgres.cxkhmaqaoco1.us-east-1.rds.amazonaws.com"
+
+[stage.secrets]
+DB_PASSWORD = "DB_PASSWORD"
+
+# --- Production ---
+[production]
+cpu           = 512
+memory        = 1024
+desired_count = 1
+
+[production.environment]
+ENVIRONMENT = "production"
+DB_HOST     = "gbh-production-postgres.cxkhmaqaoco1.us-east-1.rds.amazonaws.com"
+
+[production.secrets]
+DB_PASSWORD = "DB_PASSWORD"

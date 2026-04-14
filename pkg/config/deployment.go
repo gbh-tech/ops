@@ -7,6 +7,7 @@ type DeploymentProvider string
 var SupportedDeploymentProviders = []DeploymentProvider{
 	"werf",
 	"ansible",
+	"ecs",
 }
 
 type DeploymentConfig struct {
