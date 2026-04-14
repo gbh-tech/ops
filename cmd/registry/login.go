@@ -4,7 +4,7 @@ import (
 	"ops/pkg/aws"
 	"ops/pkg/config"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 )
 

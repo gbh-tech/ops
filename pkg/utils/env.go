@@ -3,7 +3,7 @@ package utils
 import (
 	"os"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 func GetEnvironment(key string) string {

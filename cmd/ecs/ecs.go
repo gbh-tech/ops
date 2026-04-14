@@ -14,7 +14,7 @@ import (
 	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 )
 

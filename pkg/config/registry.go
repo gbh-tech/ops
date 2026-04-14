@@ -1,6 +1,6 @@
 package config
 
-import "github.com/charmbracelet/log"
+import "charm.land/log/v2"
 
 type RegistryType string
 

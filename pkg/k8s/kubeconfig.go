@@ -3,7 +3,7 @@ package k8s
 import (
 	"strings"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )

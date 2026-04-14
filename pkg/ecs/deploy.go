@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 // ServiceStatus summarizes the current state of an ECS service.

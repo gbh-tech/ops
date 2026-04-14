@@ -5,7 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 // NewAWSConfig returns an AWS SDK config loaded from the environment,

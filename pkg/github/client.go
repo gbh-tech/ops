@@ -1,7 +1,7 @@
 package github
 
 import (
-	"github.com/google/go-github/v66/github"
+	"github.com/google/go-github/v84/github"
 	"ops/pkg/utils"
 )
 

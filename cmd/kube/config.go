@@ -6,7 +6,7 @@ import (
 	"ops/pkg/config"
 	"ops/pkg/k8s"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 )
 

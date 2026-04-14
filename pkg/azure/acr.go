@@ -3,7 +3,7 @@ package azure
 import (
 	"ops/pkg/utils"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 func ACRLogin() {

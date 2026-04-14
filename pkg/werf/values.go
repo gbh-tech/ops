@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 func GetValuesFiles(werfConfig config.WerfConfig) []string {

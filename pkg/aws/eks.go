@@ -1,7 +1,7 @@
 package aws
 
 import (
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"ops/pkg/k8s"
 	"os/exec"
 	"strings"

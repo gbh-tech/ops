@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 type CommandOptions struct {

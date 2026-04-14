@@ -4,8 +4,8 @@ import (
 	"context"
 	gh "ops/pkg/github"
 
-	"github.com/charmbracelet/log"
-	"github.com/google/go-github/v66/github"
+	"charm.land/log/v2"
+	"github.com/google/go-github/v84/github"
 	"github.com/spf13/cobra"
 )
 

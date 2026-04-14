@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 type CloudConfig struct {

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"regexp"
 )
 

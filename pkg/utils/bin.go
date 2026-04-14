@@ -3,7 +3,7 @@ package utils
 import (
 	"os/exec"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 )
 
 func CheckBinary(binary string) {

@@ -3,7 +3,7 @@ package git
 import (
 	"ops/pkg/utils"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 )
 

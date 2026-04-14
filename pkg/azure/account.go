@@ -2,7 +2,7 @@ package azure
 
 import (
 	"encoding/json"
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
 	"os/exec"
 )
 
