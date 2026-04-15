@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5
+
+### Patch Changes
+
+- 8936e83: Migrations only run when desired_count > 0
+
 ## 1.1.4
 
 ### Patch Changes
