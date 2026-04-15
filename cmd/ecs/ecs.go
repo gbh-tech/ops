@@ -46,6 +46,7 @@ func init() {
 	ecsRenderCmd.Flags().StringP("app", "a", "", appUsage)
 	ecsRenderCmd.Flags().StringP("env", "e", "", "Target environment")
 	ecsRenderCmd.Flags().StringP("tag", "t", "latest", "Container image tag")
+	ecsRenderCmd.Flags().String("app-config", "", "Override path to app config file")
 	_ = ecsRenderCmd.MarkFlagRequired("env")
 
 	ecsStatusCmd.Flags().StringP("app", "a", "", appUsage)
@@ -230,10 +231,11 @@ var ecsRenderCmd = &cobra.Command{
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		tag, _ := cmd.Flags().GetString("tag")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		appCfg, merged, names := loadApp(ec, app, env, "")
+		appCfg, merged, names := loadApp(ec, app, env, appConfigOverride)
 		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
 		input := pkgecs.BuildTaskDefinition(ec.base, merged, names, env, tag, secrets)
 
