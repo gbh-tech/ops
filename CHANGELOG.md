@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+### Patch Changes
+
+- c3f8127: Remove mandatory AWS_PROFILE
+
 ## 1.1.2
 
 ### Patch Changes
