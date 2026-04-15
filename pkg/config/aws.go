@@ -8,7 +8,7 @@ import (
 type AWSConfig struct {
 	Region    string `mapstructure:"region"`
 	AccountId string `mapstructure:"account_id"`
-	Profile   string `mapstructure:"profile"`
+	Profile   string `mapstructure:"profile"` // optional; omit to use env vars, IAM role, or instance profile
 }
 
 func CheckAWSConfig(config *AWSConfig) {

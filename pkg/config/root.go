@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"os"
 
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
@@ -54,8 +55,16 @@ func LoadConfig() *OpsConfig {
 	CheckRegistryConfig(&config.Registry)
 	CheckCloudConfig(&config.Cloud)
 
-	viper.SetDefault("AWS_PROFILE", config.AWS.Profile)
-	viper.SetDefault("AWS_REGION", config.AWS.Region)
+	if config.AWS.Profile != "" {
+		if err := os.Setenv("AWS_PROFILE", config.AWS.Profile); err != nil {
+			log.Fatal("Failed to set AWS_PROFILE", "err", err)
+		}
+	}
+	if config.AWS.Region != "" {
+		if err := os.Setenv("AWS_REGION", config.AWS.Region); err != nil {
+			log.Fatal("Failed to set AWS_REGION", "err", err)
+		}
+	}
 	CheckAWSConfig(&config.AWS)
 
 	// Enable when Azure is supported.

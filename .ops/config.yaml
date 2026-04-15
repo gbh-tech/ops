@@ -46,7 +46,7 @@ git:
 
 # Configuration of the Cloud provider AWS
 aws:
-  profile: "gbh"
+  profile: "gbh"  # optional; omit when using env vars (AWS_ACCESS_KEY_ID), IAM role, or instance profile
   account_id: "091791791455"
   region: "us-east-1"
 

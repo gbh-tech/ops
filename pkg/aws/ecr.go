@@ -11,7 +11,6 @@ import (
 
 func ECRLogin(registryUrl string, awsRegion string) {
 	utils.CheckBinary("aws")
-	utils.GetEnvironment("AWS_PROFILE")
 	dockerRegistryLogin(awsRegion, registryUrl)
 }
 
