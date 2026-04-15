@@ -5,6 +5,7 @@ import (
 	ecscmd "ops/cmd/ecs"
 	"ops/cmd/env"
 	"ops/cmd/git"
+	imagecmd "ops/cmd/image"
 	"ops/cmd/kube"
 	"ops/cmd/registry"
 	"ops/cmd/secrets"
@@ -44,4 +45,6 @@ func init() {
 	rootCmd.AddCommand(deploy.Command)
 	rootCmd.AddCommand(ecscmd.Command)
 	rootCmd.AddCommand(secrets.Command)
+	rootCmd.AddCommand(imagecmd.BuildCommand)
+	rootCmd.AddCommand(imagecmd.PushCommand)
 }

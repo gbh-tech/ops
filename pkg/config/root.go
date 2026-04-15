@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
@@ -24,11 +26,45 @@ type OpsConfig struct {
 	// "single":         deploy/config.<ext>
 	RepoMode string     `mapstructure:"repo_mode"`
 	Werf     WerfConfig `mapstructure:"werf"`
+	// AppsDir is the root directory containing per-app subdirectories.
+	// Only relevant in mono-repo mode. Falls back to ecs.apps_dir, then "apps".
+	AppsDir string `mapstructure:"apps_dir"`
 }
 
 // IsMonoRepo returns true when repo_mode is "mono" or unset (backward-compatible default).
 func (c *OpsConfig) IsMonoRepo() bool {
 	return c.RepoMode == "" || c.RepoMode == "mono"
+}
+
+// AppsDirPath returns the apps directory, checking the top-level apps_dir first,
+// then ecs.apps_dir for backward compatibility, then defaulting to "apps".
+func (c *OpsConfig) AppsDirPath() string {
+	if c.AppsDir != "" {
+		return c.AppsDir
+	}
+	if c.ECS.AppsDir != "" {
+		return c.ECS.AppsDir
+	}
+	return "apps"
+}
+
+// ResolveAppFilePath resolves a file path relative to the current app. In
+// mono-repo mode, a relative override is scoped under {apps_dir}/{app}/.
+// If override is empty, defaultSubpath is used (e.g. "deploy/config.toml").
+func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) string {
+	if override != "" {
+		if c.IsMonoRepo() && app != "" && !filepath.IsAbs(override) {
+			appRoot := filepath.Join(c.AppsDirPath(), app)
+			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
+				return filepath.Join(appRoot, override)
+			}
+		}
+		return override
+	}
+	if c.IsMonoRepo() {
+		return filepath.Join(c.AppsDirPath(), app, defaultSubpath)
+	}
+	return defaultSubpath
 }
 
 var config OpsConfig

@@ -55,6 +55,10 @@ aws:
 # "single":         deploy/config.<ext>
 repo_mode: "mono"
 
+# Root directory containing per-app subdirectories (mono-repo only).
+# Shared by all providers (ecs, build, push, etc.). Defaults to "apps".
+apps_dir: "apps"
+
 # Only required when deployment.provider is ecs
 ecs:
   cluster: "lighthouse-platform"
@@ -62,7 +66,6 @@ ecs:
   execution_role: "arn:aws:iam::091791791455:role/{service}-{env}-task-exec"
   task_role: "arn:aws:iam::091791791455:role/{service}-{env}-tasks"
   capacity_provider: "ec2-lighthouse-platform-{env}"
-  apps_dir: "apps"  # mono-repo only; omit for single-repo
   defaults:
     cpu: 256
     memory: 512

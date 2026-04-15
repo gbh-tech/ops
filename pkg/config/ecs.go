@@ -31,10 +31,3 @@ type ECSConfig struct {
 	Defaults ECSDefaults `mapstructure:"defaults"`
 }
 
-// AppsDirPath returns the apps directory, defaulting to "apps".
-func (c *ECSConfig) AppsDirPath() string {
-	if c.AppsDir != "" {
-		return c.AppsDir
-	}
-	return "apps"
-}

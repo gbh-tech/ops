@@ -6,7 +6,7 @@ import (
 	"ops/pkg/aws"
 	"ops/pkg/config"
 	pkgecs "ops/pkg/ecs"
-	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +21,7 @@ import (
 // Command is the "ops ecs" parent command.
 var Command = &cobra.Command{
 	Use:   "ecs",
-	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, cleanup, logs)",
+	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, cleanup, logs, vars, secrets)",
 }
 
 func init() {
@@ -33,6 +33,8 @@ func init() {
 	Command.AddCommand(ecsDbMigrateCmd)
 	Command.AddCommand(ecsCleanupCmd)
 	Command.AddCommand(ecsLogsCmd)
+	Command.AddCommand(ecsVarsCmd)
+	Command.AddCommand(ecsSecretsCmd)
 
 	// Persistent flags are inherited by every subcommand.
 	// --app is validated at runtime (required in mono-repo mode, optional in single-repo mode).
@@ -53,6 +55,10 @@ func init() {
 	ecsCleanupCmd.Flags().Int("keep", 5, "Number of task definition revisions to keep")
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
+
+	ecsVarsCmd.Flags().String("app-config", "", "Override path to app config file")
+
+	ecsSecretsCmd.Flags().String("app-config", "", "Override path to app config file")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -115,35 +121,9 @@ func requireAppInMonoRepo(cfg *config.OpsConfig, app string) {
 	}
 }
 
-// resolveAppConfig returns the app config file path, respecting an explicit
-// override flag before falling back to the convention for the active repo mode:
-//
-//	mono-repo:   {apps_dir}/{app}/deploy/config.toml
-//	single-repo: deploy/config.toml
-//
-// In mono-repo mode, a relative override is automatically scoped under
-// {apps_dir}/{app}/ so callers can pass "deploy/worker.toml" instead of
-// "apps/internal-jobs/deploy/worker.toml". Absolute paths and paths already
-// rooted under {apps_dir}/{app}/ are passed through unchanged.
-func resolveAppConfig(cfg *config.OpsConfig, app, override string) string {
-	if override != "" {
-		if cfg.IsMonoRepo() && app != "" && !filepath.IsAbs(override) {
-			appRoot := filepath.Join(cfg.ECS.AppsDirPath(), app)
-			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
-				return filepath.Join(appRoot, override)
-			}
-		}
-		return override
-	}
-	if cfg.IsMonoRepo() {
-		return filepath.Join(cfg.ECS.AppsDirPath(), app, "deploy", "config.toml")
-	}
-	return "deploy/config.toml"
-}
-
 // loadApp loads and merges an app's config for the given environment.
 func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig, pkgecs.Names) {
-	path := resolveAppConfig(ec.cfg, app, appConfigOverride)
+	path := ec.cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
 	appCfg, err := pkgecs.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
@@ -151,6 +131,63 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 	merged := pkgecs.ResolveConfig(ec.base, appCfg, env)
 	names := pkgecs.ComputeNames(merged, env, ec.base.ECS.Cluster)
 	return appCfg, merged, names
+}
+
+// loadAppForInspect loads and merges an app config without requiring AWS
+// clients or a running cluster. Used by read-only inspection commands
+// (vars, secrets) that work purely from local config files.
+func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig) {
+	cfg := config.LoadConfig()
+	requireAppInMonoRepo(cfg, app)
+
+	base := &pkgecs.BaseConfig{
+		AWS: pkgecs.BaseAWS{
+			AccountID: cfg.AWS.AccountId,
+			Region:    cfg.AWS.Region,
+			ECRUrl:    cfg.Registry.URL,
+		},
+		ECS: pkgecs.BaseECS{
+			Cluster:         cfg.ECS.Cluster,
+			SecretArnPrefix: cfg.ECS.SecretArnPrefix,
+			ExecutionRole:   cfg.ECS.ExecutionRole,
+			TaskRole:        cfg.ECS.TaskRole,
+		},
+		Defaults: pkgecs.BaseDefaults{
+			CPU:          cfg.ECS.Defaults.CPU,
+			Memory:       cfg.ECS.Defaults.Memory,
+			DesiredCount: cfg.ECS.Defaults.DesiredCount,
+			NetworkMode:  cfg.ECS.Defaults.NetworkMode,
+			LaunchType:   cfg.ECS.Defaults.LaunchType,
+			LogDriver:    cfg.ECS.Defaults.LogDriver,
+		},
+	}
+
+	path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+	appCfg, err := pkgecs.LoadAppConfig(path)
+	if err != nil {
+		log.Fatal("Failed to load app config", "path", path, "err", err)
+	}
+	merged := pkgecs.ResolveConfig(base, appCfg, env)
+	return appCfg, merged
+}
+
+// renderKeyValueTable prints a two-column lipgloss table sorted by key.
+func renderKeyValueTable(header1, header2 string, rows [][]string) {
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99"))
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("240"))).
+		Headers(header1, header2).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 0 {
+				return keyStyle
+			}
+			return lipgloss.NewStyle()
+		}).
+		Rows(rows...)
+	if _, err := lipgloss.Println(t); err != nil {
+		log.Fatal("Failed to render table", "err", err)
+	}
 }
 
 var ecsDeployCmd = &cobra.Command{
@@ -408,5 +445,80 @@ var ecsLogsCmd = &cobra.Command{
 		if err := pkgecs.TailLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, sinceTime); err != nil {
 			log.Fatal("Failed to tail logs", "err", err)
 		}
+	},
+}
+
+var ecsVarsCmd = &cobra.Command{
+	Use:   "vars",
+	Short: "Pretty-print the resolved environment variables for an app and environment",
+	Run: func(cmd *cobra.Command, args []string) {
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+
+		_, merged := loadAppForInspect(app, env, appConfigOverride)
+
+		if len(merged.Environment) == 0 {
+			fmt.Printf("No environment variables configured for app=%q env=%q\n", merged.Name, env)
+			return
+		}
+
+		keys := make([]string, 0, len(merged.Environment))
+		for k := range merged.Environment {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		rows := make([][]string, 0, len(keys))
+		for _, k := range keys {
+			rows = append(rows, []string{k, merged.Environment[k]})
+		}
+
+		renderKeyValueTable("Variable", "Value", rows)
+	},
+}
+
+var ecsSecretsCmd = &cobra.Command{
+	Use:   "secrets",
+	Short: "Pretty-print the resolved secrets and their Secrets Manager ARN references for an app and environment",
+	Run: func(cmd *cobra.Command, args []string) {
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+
+		cfg := config.LoadConfig()
+		requireAppInMonoRepo(cfg, app)
+
+		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		appCfg, err := pkgecs.LoadAppConfig(path)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", path, "err", err)
+		}
+
+		secretsName := app
+		if global, ok := appCfg["global"]; ok && global.SecretsName != "" {
+			secretsName = global.SecretsName
+		}
+		if global, ok := appCfg["global"]; ok && global.Name != "" && secretsName == app {
+			secretsName = global.Name
+		}
+
+		secrets := pkgecs.ResolveSecrets(appCfg, env, secretsName, cfg.ECS.SecretArnPrefix)
+
+		if len(secrets) == 0 {
+			fmt.Printf("No secrets configured for app=%q env=%q\n", app, env)
+			return
+		}
+
+		sort.Slice(secrets, func(i, j int) bool {
+			return secrets[i].Name < secrets[j].Name
+		})
+
+		rows := make([][]string, 0, len(secrets))
+		for _, s := range secrets {
+			rows = append(rows, []string{s.Name, s.ValueFrom})
+		}
+
+		renderKeyValueTable("Variable", "ValueFrom (ARN)", rows)
 	},
 }
