@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.4
+
+### Patch Changes
+
+- 6367deb: Support app-config flag for ecs render subcommand
+
 ## 1.1.3
 
 ### Patch Changes
