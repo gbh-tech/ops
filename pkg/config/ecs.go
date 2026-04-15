@@ -30,4 +30,3 @@ type ECSConfig struct {
 	// Task definition defaults (previously in deploy/base.toml [defaults])
 	Defaults ECSDefaults `mapstructure:"defaults"`
 }
-
