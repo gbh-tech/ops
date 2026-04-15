@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- 62f8124: Support build and push commands
+
 ## 1.1.5
 
 ### Patch Changes
