@@ -34,47 +34,25 @@ func init() {
 	Command.AddCommand(ecsCleanupCmd)
 	Command.AddCommand(ecsLogsCmd)
 
-	// --app is required in mono-repo mode (validated at runtime); optional in single-repo mode.
+	// Persistent flags are inherited by every subcommand.
+	// --app is validated at runtime (required in mono-repo mode, optional in single-repo mode).
 	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
+	Command.PersistentFlags().StringP("app", "a", "", appUsage)
+	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
+	_ = Command.MarkPersistentFlagRequired("env")
 
-	ecsDeployCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsDeployCmd.Flags().StringP("env", "e", "", "Target environment (stage, production, etc.)")
+	// Subcommand-specific flags.
 	ecsDeployCmd.Flags().StringP("tag", "t", "latest", "Container image tag")
 	ecsDeployCmd.Flags().String("app-config", "", "Override path to app config file")
-	_ = ecsDeployCmd.MarkFlagRequired("env")
 
-	ecsRenderCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsRenderCmd.Flags().StringP("env", "e", "", "Target environment")
 	ecsRenderCmd.Flags().StringP("tag", "t", "latest", "Container image tag")
 	ecsRenderCmd.Flags().String("app-config", "", "Override path to app config file")
-	_ = ecsRenderCmd.MarkFlagRequired("env")
 
-	ecsStatusCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsStatusCmd.Flags().StringP("env", "e", "", "Target environment")
-	_ = ecsStatusCmd.MarkFlagRequired("env")
-
-	ecsWaitCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsWaitCmd.Flags().StringP("env", "e", "", "Target environment")
-	_ = ecsWaitCmd.MarkFlagRequired("env")
-
-	ecsRollbackCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsRollbackCmd.Flags().StringP("env", "e", "", "Target environment")
-	_ = ecsRollbackCmd.MarkFlagRequired("env")
-
-	ecsDbMigrateCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsDbMigrateCmd.Flags().StringP("env", "e", "", "Target environment")
 	ecsDbMigrateCmd.Flags().String("app-config", "", "Override path to app config file")
-	_ = ecsDbMigrateCmd.MarkFlagRequired("env")
 
-	ecsCleanupCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsCleanupCmd.Flags().StringP("env", "e", "", "Target environment")
 	ecsCleanupCmd.Flags().Int("keep", 5, "Number of task definition revisions to keep")
-	_ = ecsCleanupCmd.MarkFlagRequired("env")
 
-	ecsLogsCmd.Flags().StringP("app", "a", "", appUsage)
-	ecsLogsCmd.Flags().StringP("env", "e", "", "Target environment")
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
-	_ = ecsLogsCmd.MarkFlagRequired("env")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -142,8 +120,19 @@ func requireAppInMonoRepo(cfg *config.OpsConfig, app string) {
 //
 //	mono-repo:   {apps_dir}/{app}/deploy/config.toml
 //	single-repo: deploy/config.toml
+//
+// In mono-repo mode, a relative override is automatically scoped under
+// {apps_dir}/{app}/ so callers can pass "deploy/worker.toml" instead of
+// "apps/internal-jobs/deploy/worker.toml". Absolute paths and paths already
+// rooted under {apps_dir}/{app}/ are passed through unchanged.
 func resolveAppConfig(cfg *config.OpsConfig, app, override string) string {
 	if override != "" {
+		if cfg.IsMonoRepo() && app != "" && !filepath.IsAbs(override) {
+			appRoot := filepath.Join(cfg.ECS.AppsDirPath(), app)
+			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
+				return filepath.Join(appRoot, override)
+			}
+		}
 		return override
 	}
 	if cfg.IsMonoRepo() {
@@ -189,7 +178,7 @@ var ecsDeployCmd = &cobra.Command{
 		}
 		log.Info("Task definition registered", "arn", taskDefArn)
 
-		if merged.DatabaseMigrations {
+		if merged.DatabaseMigrations && *merged.DesiredCount > 0 {
 			if len(merged.MigrationCommand) == 0 {
 				log.Fatal("database_migrations is true but migration_command is not set")
 			}
@@ -353,6 +342,10 @@ var ecsDbMigrateCmd = &cobra.Command{
 
 		if !merged.DatabaseMigrations {
 			log.Info("No migrations configured for this app, skipping", "app", merged.Name)
+			return
+		}
+		if *merged.DesiredCount == 0 {
+			log.Info("desired_count is 0, skipping migrations", "app", merged.Name)
 			return
 		}
 		if len(merged.MigrationCommand) == 0 {
