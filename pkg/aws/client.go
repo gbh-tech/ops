@@ -24,7 +24,7 @@ func NewAWSConfig(ctx context.Context, region, profile string) aws.Config {
 
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		log.Fatalf("Failed to load AWS config: %v", err)
+		log.Fatal("Failed to load AWS config", "err", err)
 	}
 
 	return cfg

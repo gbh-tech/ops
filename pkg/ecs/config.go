@@ -2,53 +2,19 @@ package ecs
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/BurntSushi/toml"
-	"gopkg.in/yaml.v3"
+	"ops/pkg/app"
 )
 
-// HealthCheckConfig mirrors the container_health_check section.
-type HealthCheckConfig struct {
-	Interval    int `toml:"interval"    yaml:"interval"`
-	Timeout     int `toml:"timeout"     yaml:"timeout"`
-	Retries     int `toml:"retries"     yaml:"retries"`
-	StartPeriod int `toml:"start_period" yaml:"start_period"`
-}
+// Re-export provider-agnostic types so existing callers of pkg/ecs that use
+// AppConfig / AppSection / HealthCheckConfig / LoadFile / LoadAppConfig don't
+// need to change their imports.
+type AppSection = app.AppSection
+type AppConfig = app.AppConfig
+type HealthCheckConfig = app.HealthCheckConfig
 
-// AppSection is a single named section within an app config (global, stage,
-// production, etc.). Secrets can be a list of strings or a map of
-// env-var → json-key; both forms normalise to a map via NormalizeSecrets.
-type AppSection struct {
-	Name               string            `toml:"name"                yaml:"name"`
-	Image              string            `toml:"image"               yaml:"image"`
-	Port               int               `toml:"port"                yaml:"port"`
-	CPU                int               `toml:"cpu"                 yaml:"cpu"`
-	Memory             int               `toml:"memory"              yaml:"memory"`
-	DesiredCount       *int              `toml:"desired_count"       yaml:"desired_count"`
-	NetworkMode        string            `toml:"network_mode"        yaml:"network_mode"`
-	LaunchType         string            `toml:"launch_type"         yaml:"launch_type"`
-	LogDriver          string            `toml:"log_driver"          yaml:"log_driver"`
-	HealthCheckPath    string            `toml:"health_check_path"   yaml:"health_check_path"`
-	ContainerHC        HealthCheckConfig `toml:"container_health_check" yaml:"container_health_check"`
-	DatabaseMigrations bool              `toml:"database_migrations" yaml:"database_migrations"`
-	MigrationCommand   []string          `toml:"migration_command"   yaml:"migration_command"`
-	SecretsName        string            `toml:"secrets_name"        yaml:"secrets_name"`
-	ExecutionRole      string            `toml:"execution_role"      yaml:"execution_role"`
-	TaskRole           string            `toml:"task_role"           yaml:"task_role"`
-	Command            []string          `toml:"command"             yaml:"command"`
-	Environment        map[string]string `toml:"environment"         yaml:"environment"`
-
-	// Secrets is intentionally interface{} to handle both list and map forms.
-	// Use NormalizeSecrets() to get a canonical map[string]string.
-	Secrets interface{} `toml:"secrets" yaml:"secrets"`
-}
-
-// AppConfig is the top-level structure of an app's config.toml / config.yaml.
-// Keys are section names: "global", "stage", "production", etc.
-type AppConfig map[string]AppSection
+var LoadFile = app.LoadFile
+var LoadAppConfig = app.LoadAppConfig
 
 // BaseAWS holds AWS-level settings from base.toml.
 type BaseAWS struct {
@@ -68,12 +34,12 @@ type BaseECS struct {
 
 // BaseDefaults holds the cluster-wide defaults from base.toml.
 type BaseDefaults struct {
-	CPU          int    `toml:"cpu"          yaml:"cpu"`
-	Memory       int    `toml:"memory"       yaml:"memory"`
+	CPU          int    `toml:"cpu"           yaml:"cpu"`
+	Memory       int    `toml:"memory"        yaml:"memory"`
 	DesiredCount int    `toml:"desired_count" yaml:"desired_count"`
-	NetworkMode  string `toml:"network_mode" yaml:"network_mode"`
-	LaunchType   string `toml:"launch_type"  yaml:"launch_type"`
-	LogDriver    string `toml:"log_driver"   yaml:"log_driver"`
+	NetworkMode  string `toml:"network_mode"  yaml:"network_mode"`
+	LaunchType   string `toml:"launch_type"   yaml:"launch_type"`
+	LogDriver    string `toml:"log_driver"    yaml:"log_driver"`
 }
 
 // BaseConfig is the top-level structure of deploy/base.toml.
@@ -102,46 +68,12 @@ type ECSSecret struct {
 	ValueFrom string
 }
 
-// LoadFile reads path and unmarshals it into out. The file extension
-// determines the parser: .toml uses BurntSushi/toml, .yaml/.yml uses
-// gopkg.in/yaml.v3. Any other extension returns an error.
-func LoadFile(path string, out any) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".toml":
-		if err := toml.Unmarshal(data, out); err != nil {
-			return fmt.Errorf("parsing TOML %s: %w", path, err)
-		}
-	case ".yaml", ".yml":
-		if err := yaml.Unmarshal(data, out); err != nil {
-			return fmt.Errorf("parsing YAML %s: %w", path, err)
-		}
-	default:
-		return fmt.Errorf("unsupported config format %q (use .toml or .yaml)", ext)
-	}
-	return nil
-}
-
-// LoadAppConfig reads an app config file (TOML or YAML by extension).
-func LoadAppConfig(path string) (AppConfig, error) {
-	var app AppConfig
-	if err := LoadFile(path, &app); err != nil {
-		return nil, err
-	}
-	return app, nil
-}
-
 // ResolveConfig performs the three-layer merge:
 //
 //	base defaults → app [global] → app [env]
 //
 // Secrets are excluded here; use ResolveSecrets separately.
-func ResolveConfig(base *BaseConfig, app AppConfig, env string) MergedConfig {
+func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig {
 	defaultDesiredCount := base.Defaults.DesiredCount
 	merged := AppSection{
 		CPU:          base.Defaults.CPU,
@@ -152,10 +84,10 @@ func ResolveConfig(base *BaseConfig, app AppConfig, env string) MergedConfig {
 		LogDriver:    base.Defaults.LogDriver,
 	}
 
-	applySection(&merged, app["global"])
+	applySection(&merged, appCfg["global"])
 
 	if env != "" && env != "global" {
-		applySection(&merged, app[env])
+		applySection(&merged, appCfg[env])
 	}
 
 	secretsName := merged.SecretsName
@@ -268,9 +200,9 @@ func NormalizeSecrets(raw interface{}) map[string]string {
 //
 //   - {serviceName}/shared  → keys from app [global].secrets
 //   - {serviceName}/{env}   → keys from app [env].secrets (env-specific wins)
-func ResolveSecrets(app AppConfig, env, serviceName, arnPrefix string) []ECSSecret {
-	globalMap := NormalizeSecrets(app["global"].Secrets)
-	envMap := NormalizeSecrets(app[env].Secrets)
+func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSSecret {
+	globalMap := NormalizeSecrets(appCfg["global"].Secrets)
+	envMap := NormalizeSecrets(appCfg[env].Secrets)
 
 	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
 	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)

@@ -24,7 +24,7 @@ to widen the context to the repo root when the Dockerfile COPYs shared code.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
-		tag, _ := cmd.Flags().GetString("tag")
+		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 		dockerfile, _ := cmd.Flags().GetString("dockerfile")
 		buildContext, _ := cmd.Flags().GetString("context")
@@ -65,7 +65,7 @@ to widen the context to the repo root when the Dockerfile COPYs shared code.`,
 func init() {
 	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
 	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
-	BuildCommand.Flags().StringP("tag", "t", "latest", "Image tag")
+	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
 	BuildCommand.Flags().String("app-config", "", "Override path to app config file")
 	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
 	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")

@@ -11,9 +11,8 @@ import (
 )
 
 var WerfCommand = &cobra.Command{
-	Use:     "werf",
-	Aliases: []string{"werf"},
-	Short:   "Encapsulates the execution of complex Werf commands for simpler usage",
+	Use:   "werf",
+	Short: "Encapsulates the execution of complex Werf commands for simpler usage",
 	Run: func(cmd *cobra.Command, args []string) {
 		config := config.LoadConfig()
 		opts := werfCommandFlags(cmd)
@@ -40,7 +39,7 @@ var WerfCommand = &cobra.Command{
 
 		if slices.Contains(werf.CommandsWithRepoList, opts.Command) {
 			if opts.Repo == "" {
-				log.Fatalf("Werf command '%s' requires --repo flag.", opts.Command)
+				log.Fatal("Werf command requires --repo flag", "command", opts.Command)
 			}
 
 			werf.Command(config.Werf, &werf.CommandOptions{
@@ -89,11 +88,5 @@ func init() {
 		"r",
 		"",
 		"Container image registry",
-	)
-	WerfCommand.Flags().StringP(
-		"app",
-		"a",
-		"",
-		"Application name",
 	)
 }

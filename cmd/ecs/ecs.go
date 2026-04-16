@@ -62,18 +62,11 @@ type ecsCtx struct {
 	cwClient  *cwlogs.Client
 }
 
-// loadECSCtx validates the deployment provider, assembles the ECS base config
-// from .ops/config.yaml, and initialises AWS SDK clients.
-func loadECSCtx() *ecsCtx {
-	cfg := config.LoadConfig()
-	if cfg.Deployment.Provider != "ecs" {
-		log.Fatal(
-			"deployment.provider must be set to 'ecs'",
-			"current", cfg.Deployment.Provider,
-		)
-	}
-
-	base := &pkgecs.BaseConfig{
+// buildBaseConfig assembles a pkgecs.BaseConfig from the ops config. This is
+// the single place that maps OpsConfig fields to BaseConfig fields; both
+// loadECSCtx and loadAppForInspect call it so additions only need one edit.
+func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
+	return &pkgecs.BaseConfig{
 		AWS: pkgecs.BaseAWS{
 			AccountID: cfg.AWS.AccountId,
 			Region:    cfg.AWS.Region,
@@ -95,13 +88,23 @@ func loadECSCtx() *ecsCtx {
 			LogDriver:    cfg.ECS.Defaults.LogDriver,
 		},
 	}
+}
+
+func loadECSCtx() *ecsCtx {
+	cfg := config.LoadConfig()
+	if cfg.Deployment.Provider != "ecs" {
+		log.Fatal(
+			"deployment.provider must be set to 'ecs'",
+			"current", cfg.Deployment.Provider,
+		)
+	}
 
 	ctx := context.Background()
 	awsCfg := aws.NewAWSConfig(ctx, cfg.AWS.Region, cfg.AWS.Profile)
 
 	return &ecsCtx{
 		cfg:       cfg,
-		base:      base,
+		base:      buildBaseConfig(cfg),
 		ecsClient: awsecs.NewFromConfig(awsCfg),
 		cwClient:  cwlogs.NewFromConfig(awsCfg),
 	}
@@ -138,39 +141,17 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 
 // loadAppForInspect loads and merges an app config without requiring AWS
 // clients or a running cluster. Used by read-only inspection commands
-// (vars, secrets) that work purely from local config files.
+// (vars, secrets, render) that work purely from local config files.
 func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig) {
 	cfg := config.LoadConfig()
 	requireAppInMonoRepo(cfg, app)
-
-	base := &pkgecs.BaseConfig{
-		AWS: pkgecs.BaseAWS{
-			AccountID: cfg.AWS.AccountId,
-			Region:    cfg.AWS.Region,
-			ECRUrl:    cfg.Registry.URL,
-		},
-		ECS: pkgecs.BaseECS{
-			Cluster:         cfg.ECS.Cluster,
-			SecretArnPrefix: cfg.ECS.SecretArnPrefix,
-			ExecutionRole:   cfg.ECS.ExecutionRole,
-			TaskRole:        cfg.ECS.TaskRole,
-		},
-		Defaults: pkgecs.BaseDefaults{
-			CPU:          cfg.ECS.Defaults.CPU,
-			Memory:       cfg.ECS.Defaults.Memory,
-			DesiredCount: cfg.ECS.Defaults.DesiredCount,
-			NetworkMode:  cfg.ECS.Defaults.NetworkMode,
-			LaunchType:   cfg.ECS.Defaults.LaunchType,
-			LogDriver:    cfg.ECS.Defaults.LogDriver,
-		},
-	}
 
 	path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
 	appCfg, err := pkgecs.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged := pkgecs.ResolveConfig(base, appCfg, env)
+	merged := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
 	return appCfg, merged
 }
 
@@ -256,17 +237,27 @@ var ecsDeployCmd = &cobra.Command{
 var ecsRenderCmd = &cobra.Command{
 	Use:   "render",
 	Short: "Dry-run: print the resolved task definition summary without deploying",
+	Long:  "Print the resolved task definition without making any AWS API calls. Does not require AWS credentials.",
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
-		requireAppInMonoRepo(ec.cfg, app)
-		appCfg, merged, names := loadApp(ec, app, env, appConfigOverride)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
-		input := pkgecs.BuildTaskDefinition(ec.base, merged, names, env, tag, secrets)
+		// render is a local-only dry-run: no AWS SDK clients are needed.
+		cfg := config.LoadConfig()
+		requireAppInMonoRepo(cfg, app)
+		base := buildBaseConfig(cfg)
+
+		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		appCfg, err := pkgecs.LoadAppConfig(path)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", path, "err", err)
+		}
+		merged := pkgecs.ResolveConfig(base, appCfg, env)
+		names := pkgecs.ComputeNames(merged, env, base.ECS.Cluster)
+		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
+		input := pkgecs.BuildTaskDefinition(base, merged, names, env, tag, secrets)
 
 		ctr := input.ContainerDefinitions[0]
 

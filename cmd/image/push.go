@@ -29,7 +29,7 @@ points directly to an app config that defines the image name.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
-		tag, _ := cmd.Flags().GetString("tag")
+		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		cfg := config.LoadConfig()
@@ -62,7 +62,7 @@ points directly to an app config that defines the image name.`,
 func init() {
 	PushCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
 	PushCommand.Flags().StringP("env", "e", "", "Target environment (required)")
-	PushCommand.Flags().StringP("tag", "t", "latest", "Image tag")
+	PushCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
 	PushCommand.Flags().String("app-config", "", "Override path to app config file")
 	_ = PushCommand.MarkFlagRequired("env")
 }

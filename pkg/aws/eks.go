@@ -31,8 +31,8 @@ func updateConfigForEKS(awsRegion string, clusterName string) {
 	)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Fatalf("Failed to get AWS EKS credentials: %v\nOutput: %s", err, output)
+		log.Fatal("Failed to get AWS EKS credentials", "err", err, "output", string(output))
 	}
 
-	log.Infof("AWS EKS credentials added!")
+	log.Info("AWS EKS credentials added")
 }

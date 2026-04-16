@@ -11,17 +11,14 @@ import (
 
 func ECRLogin(registryUrl string, awsRegion string) {
 	utils.CheckBinary("aws")
+	utils.CheckBinary("docker")
 	dockerRegistryLogin(awsRegion, registryUrl)
 }
 
 func dockerRegistryLogin(awsRegion string, registryURL string) {
 	ecrLoginPassword := ecrGetLoginPassword(awsRegion)
 
-	log.Info(
-		"Executing command:",
-		"command",
-		"docker login [omitted sensitive params]",
-	)
+	log.Info("Executing command", "command", "docker login [omitted sensitive params]")
 
 	registryLogin := exec.Command(
 		"docker",
@@ -35,37 +32,28 @@ func dockerRegistryLogin(awsRegion string, registryURL string) {
 
 	output, err := registryLogin.Output()
 	if err != nil {
-		log.Info("Login command output: %v", output)
-		log.Fatalf("Failed to login to Docker with ECR credentials: %v", err)
+		log.Info("Login command output", "output", string(output))
+		log.Fatal("Failed to login to Docker with ECR credentials", "err", err)
 	}
 
-	log.Infof("Docker Login successful!")
+	log.Info("Docker login successful")
 }
 
 func ecrGetLoginPassword(awsRegion string) string {
 	cmd := []string{"aws", "ecr", "get-login-password", "--region", awsRegion}
-	log.Info(
-		"Executing command:",
-		"command",
-		strings.Join(cmd, " "),
-	)
+	log.Info("Executing command", "command", strings.Join(cmd, " "))
 
 	loginPassword := exec.Command(cmd[0], cmd[1:]...)
 
 	password, err := loginPassword.Output()
-
 	if err != nil {
 		var execError *exec.Error
 		if errors.As(err, &execError) {
-			log.Fatalf(
-				"Command execution failed: %v %v",
-				execError.Name,
-				execError.Err,
-			)
+			log.Fatal("Command execution failed", "name", execError.Name, "err", execError.Err)
 		}
-		log.Fatalf("Failed to get AWS ECR login password: %v", err)
+		log.Fatal("Failed to get AWS ECR login password", "err", err)
 	}
 
-	log.Infof("AWS ECR login password colleted!")
+	log.Info("AWS ECR login password collected")
 	return string(password)
 }

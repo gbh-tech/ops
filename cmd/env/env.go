@@ -17,11 +17,12 @@ var Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := flags(cmd)
 
-		log.Infof(
-			"%s: %s",
-			"Current environment", opts.Env,
-		)
+		log.Info("Current environment", "env", opts.Env)
 	},
+}
+
+func init() {
+	Command.Flags().StringP("env", "e", "", "Environment to display (defaults to env in config)")
 }
 
 func flags(cmd *cobra.Command) CommandOptions {
