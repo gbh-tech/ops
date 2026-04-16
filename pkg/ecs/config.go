@@ -6,6 +6,25 @@ import (
 	"ops/pkg/app"
 )
 
+// validateGlobalVolumes rejects host-local volume types in the [global] app
+// config section. Global volumes are applied to every environment and every
+// task replica; only network-attached shared file systems (EFS) support safe
+// concurrent multi-writer access across hosts.
+func validateGlobalVolumes(volumes []app.VolumeConfig) error {
+	for _, v := range volumes {
+		if v.Host != nil || v.Docker != nil {
+			return fmt.Errorf(
+				"volume %q uses a host-local type (host/docker) which is not safe "+
+					"for the [global] config section: tasks on different EC2 instances "+
+					"get independent storage with no shared access; "+
+					"move this volume to a per-environment section instead",
+				v.Name,
+			)
+		}
+	}
+	return nil
+}
+
 // Re-export provider-agnostic types so existing callers of pkg/ecs that use
 // AppConfig / AppSection / HealthCheckConfig / LoadFile / LoadAppConfig don't
 // need to change their imports.
@@ -73,7 +92,13 @@ type ECSSecret struct {
 //	base defaults → app [global] → app [env]
 //
 // Secrets are excluded here; use ResolveSecrets separately.
-func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig {
+// An error is returned when the global section contains volume types that are
+// not safe for concurrent multi-host access (host, docker).
+func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig, error) {
+	if err := validateGlobalVolumes(appCfg["global"].Volumes); err != nil {
+		return MergedConfig{}, err
+	}
+
 	defaultDesiredCount := base.Defaults.DesiredCount
 	merged := AppSection{
 		CPU:          base.Defaults.CPU,
@@ -95,7 +120,7 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig 
 		secretsName = merged.Name
 	}
 
-	return MergedConfig{AppSection: merged, SecretsName: secretsName}
+	return MergedConfig{AppSection: merged, SecretsName: secretsName}, nil
 }
 
 // applySection overlays non-zero fields from src onto dst.
@@ -160,6 +185,11 @@ func applySection(dst *AppSection, src AppSection) {
 		}
 	}
 	// Secrets are merged separately in ResolveSecrets.
+
+	// Volumes replace rather than merge: the more-specific section wins entirely.
+	if len(src.Volumes) > 0 {
+		dst.Volumes = src.Volumes
+	}
 }
 
 // NormalizeSecrets converts the secrets field (which may be a []string or

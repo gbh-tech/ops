@@ -134,7 +134,10 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged := pkgecs.ResolveConfig(ec.base, appCfg, env)
+	merged, err := pkgecs.ResolveConfig(ec.base, appCfg, env)
+	if err != nil {
+		log.Fatal("Invalid app config", "path", path, "err", err)
+	}
 	names := pkgecs.ComputeNames(merged, env, ec.base.ECS.Cluster)
 	return appCfg, merged, names
 }
@@ -151,7 +154,10 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pk
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+	merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+	if err != nil {
+		log.Fatal("Invalid app config", "path", path, "err", err)
+	}
 	return appCfg, merged
 }
 
@@ -257,7 +263,10 @@ var ecsRenderCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
-		merged := pkgecs.ResolveConfig(base, appCfg, env)
+		merged, err := pkgecs.ResolveConfig(base, appCfg, env)
+		if err != nil {
+			log.Fatal("Invalid app config", "path", path, "err", err)
+		}
 		names := pkgecs.ComputeNames(merged, env, base.ECS.Cluster)
 		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
 		input := pkgecs.BuildTaskDefinition(base, merged, names, env, tag, secrets)
@@ -276,9 +285,27 @@ var ecsRenderCmd = &cobra.Command{
 			{"Env vars", fmt.Sprintf("%d", len(ctr.Environment))},
 			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
 			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
+			{"Volumes", fmt.Sprintf("%d", len(input.Volumes))},
 		}
 		if merged.DatabaseMigrations {
 			rows = append(rows, []string{"Migration cmd", strings.Join(merged.MigrationCommand, " ")})
+		}
+		for _, v := range merged.Volumes {
+			volType := "host"
+			switch {
+			case v.EFS != nil:
+				volType = fmt.Sprintf("efs:%s", v.EFS.FileSystemId)
+			case v.Docker != nil:
+				volType = "docker"
+			}
+			readOnly := ""
+			if v.ReadOnly {
+				readOnly = " (ro)"
+			}
+			rows = append(rows, []string{
+				fmt.Sprintf("  Volume: %s", v.Name),
+				fmt.Sprintf("%s → %s%s", volType, v.ContainerPath, readOnly),
+			})
 		}
 
 		t := table.New().
