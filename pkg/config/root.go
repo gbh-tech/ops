@@ -80,6 +80,8 @@ func LoadConfig() *OpsConfig {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
 			log.Fatal("Ops config file not found")
+		} else {
+			log.Fatal("Failed to read Ops config file", "err", err)
 		}
 	}
 

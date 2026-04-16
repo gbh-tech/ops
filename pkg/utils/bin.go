@@ -21,7 +21,7 @@ func CheckBinary(binary string) {
 	if err != nil {
 		log.Fatal(
 			"Required command binary not found or cannot be executed.",
-			"binary", binary,
+			"binary", binary, "err", err,
 		)
 	}
 }

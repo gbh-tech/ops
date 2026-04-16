@@ -246,6 +246,9 @@ var ecsRenderCmd = &cobra.Command{
 
 		// render is a local-only dry-run: no AWS SDK clients are needed.
 		cfg := config.LoadConfig()
+		if cfg.Deployment.Provider != "ecs" {
+			log.Fatal("deployment.provider must be set to 'ecs'", "current", cfg.Deployment.Provider)
+		}
 		requireAppInMonoRepo(cfg, app)
 		base := buildBaseConfig(cfg)
 

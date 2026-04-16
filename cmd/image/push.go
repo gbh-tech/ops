@@ -11,16 +11,25 @@ import (
 // PushCommand is "ops push": pushes a previously built and tagged Docker image
 // to the configured registry. Run "ops registry-login" first to authenticate.
 //
-// Two tags are always pushed:
+// When --tag is provided (or resolves to a value different from --env), two
+// tags are pushed:
 //   - {registry}/{env}/{image}:{tag}  (the versioned tag, e.g. a git SHA or semver)
-//   - {registry}/{env}/{image}:{env}  (tracks the latest image deployed to that env)
+//   - {registry}/{env}/{image}:{env}  (environment pointer, e.g. "stage")
+//
+// When --tag is omitted, the tag defaults to the env name so both URIs are
+// identical; only one push is performed in that case.
 var PushCommand = &cobra.Command{
 	Use:   "push",
 	Short: "Push a Docker image to the configured registry",
-	Long: `Push a Docker image to the registry with two tags:
+	Long: `Push a Docker image to the registry.
+
+When --tag differs from --env, two tags are pushed:
 
   {registry}/{env}/{image}:{tag}   versioned tag (e.g. git SHA or semver)
   {registry}/{env}/{image}:{env}   environment pointer (e.g. "stage", "production")
+
+When --tag is omitted it defaults to the env name, so both URIs are identical
+and only one push is performed.
 
 Authenticate first with: ops registry-login
 
@@ -54,8 +63,10 @@ points directly to an app config that defines the image name.`,
 		log.Info("Pushing image", "uri", versionedURI)
 		runDockerCmd("push", versionedURI)
 
-		log.Info("Pushing image", "uri", envURI)
-		runDockerCmd("push", envURI)
+		if versionedURI != envURI {
+			log.Info("Pushing image", "uri", envURI)
+			runDockerCmd("push", envURI)
+		}
 	},
 }
 
