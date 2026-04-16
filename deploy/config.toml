@@ -112,6 +112,32 @@ name = "my-app"
 # Command used when database_migrations = true.
 # migration_command = ["bundle", "exec", "rails", "db:migrate"]
 
+# Secrets fetched from AWS Secrets Manager at image BUILD time and injected
+# into the Dockerfile via Docker BuildKit --mount=type=secret.
+# Same list/map forms as `secrets`. Fetched values are written to temp files
+# and passed as --secret id=<KEY>,src=<tmpfile> to docker build.
+# Use inside a Dockerfile with: RUN --mount=type=secret,id=KEY ...
+#
+# List form (secret id == JSON key in the SM secret):
+#   build_secrets = ["COMPOSER_AUTH_TOKEN", "NPM_TOKEN"]
+#
+# Map form (docker secret id → JSON key in the SM secret):
+#   [global.build_secrets]
+#   composer_auth = "COMPOSER_AUTH_TOKEN"
+#
+# Secrets Manager path convention (shared with runtime `secrets`):
+#   {secret_arn_prefix}:{name}/shared  — for keys declared in [global]
+#   {secret_arn_prefix}:{name}/{env}   — for keys declared in an env section
+
+# Plain key/value pairs passed to docker build as --build-arg KEY=VALUE.
+# Values are NOT secret and are visible in docker history; use build_secrets
+# for credentials. Env section values override matching global values;
+# non-matching global values are still included.
+#
+# [global.build_args]
+# NODE_ENV = "production"
+# SENTRY_DSN = "https://example@o0.ingest.sentry.io/0"
+
 # EFS volumes declared in [global] are safe for concurrent access from all
 # task replicas across availability zones. Host-local types (host, docker)
 # must be declared in per-environment sections only.
@@ -145,6 +171,17 @@ name = "my-app"
 # They merge with global secrets; per-env values take precedence.
 # [stage.secrets]
 # STRIPE_KEY = "stripe_key"
+
+# Per-env build secrets are resolved from {secret_arn_prefix}:{name}/stage.
+# They MERGE with global build_secrets: env keys override matching global keys;
+# non-matching global keys are still fetched from the shared secret path.
+# [stage.build_secrets]
+# COMPOSER_AUTH_TOKEN = "COMPOSER_AUTH_TOKEN"
+
+# Per-env build_args MERGE with global build_args: env keys override matching
+# global keys; non-matching global keys are still included.
+# [stage.build_args]
+# NODE_ENV = "staging"
 
 # Per-env volumes REPLACE global volumes entirely (they do not merge).
 # All volume types are allowed here: efs, host, and docker.

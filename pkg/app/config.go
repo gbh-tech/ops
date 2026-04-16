@@ -101,9 +101,19 @@ type AppSection struct {
 	// Use NormalizeSecrets() to get a canonical map[string]string.
 	Secrets interface{} `toml:"secrets" yaml:"secrets"`
 
+	// BuildSecrets lists secrets to fetch from Secrets Manager at image build
+	// time. Same list/map forms as Secrets. Fetched values are exposed to the
+	// Dockerfile via Docker BuildKit --mount=type=secret.
+	BuildSecrets interface{} `toml:"build_secrets" yaml:"build_secrets"`
+
+	// BuildArgs are plain key/value pairs passed as docker --build-arg at
+	// build time. Env section values override matching global values; non-
+	// matching global values are still included.
+	BuildArgs map[string]string `toml:"build_args" yaml:"build_args"`
+
 	// Volumes declares ECS volumes and their container mount points.
 	// Per-environment sections may use any volume type. The [global] section
-	// is restricted to multi-write-safe types (EFS, FSx Windows).
+	// is restricted to multi-write-safe types (EFS).
 	Volumes []VolumeConfig `toml:"volumes" yaml:"volumes"`
 }
 
