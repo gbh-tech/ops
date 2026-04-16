@@ -115,6 +115,13 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig
 		applySection(&merged, appCfg[env])
 	}
 
+	if merged.Name == "" {
+		return MergedConfig{}, fmt.Errorf(
+			"app config is missing a required \"name\" field; " +
+				"add 'name: <your-app-name>' to the [global] section",
+		)
+	}
+
 	secretsName := merged.SecretsName
 	if secretsName == "" {
 		secretsName = merged.Name

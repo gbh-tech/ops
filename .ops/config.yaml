@@ -60,47 +60,8 @@ repo_mode: "mono"
 apps_dir: "apps"
 
 # Only required when deployment.provider is ecs
-#
-# Volume mounts are configured in the per-app config files (deploy/config.toml
-# or deploy/config.yaml) under a `volumes` key in any section. Example:
-#
-#   global:
-#     name: my-app
-#     # Only multi-write-safe types (efs) are allowed in [global].
-#     volumes:
-#       - name: shared-data
-#         container_path: /mnt/data
-#         read_only: false
-#         efs:
-#           file_system_id: fs-0123456789abcdef0
-#           root_directory: /app-data
-#           transit_encryption: ENABLED   # ENABLED or DISABLED
-#           access_point_id: fsap-0123456789abcdef0  # optional
-#           iam: ENABLED                              # optional; requires transit_encryption ENABLED
-#
-#   stage:
-#     # Per-env volumes REPLACE global volumes (they do not merge).
-#     # All volume types are allowed here.
-#     volumes:
-#       - name: shared-data
-#         container_path: /mnt/data
-#         efs:
-#           file_system_id: fs-0123456789abcdef0
-#           root_directory: /app-data/stage
-#           transit_encryption: ENABLED
-#       # Bind mount (host-scoped; per-env only):
-#       - name: tmp-scratch
-#         container_path: /tmp/scratch
-#         host:
-#           source_path: /scratch      # omit for a Docker-managed ephemeral dir
-#       # Docker volume (host-scoped; per-env only):
-#       - name: cache
-#         container_path: /var/cache
-#         docker:
-#           driver: local
-#           scope: task                # "task" or "shared"
-#           autoprovision: true        # only for scope: shared
-#
+# Per-app deployment config lives in deploy/config.toml (mono-repo: apps/{app}/deploy/config.toml).
+# See deploy/config.toml in this repo for a fully-annotated example of all supported directives.
 ecs:
   cluster: "lighthouse-platform"
   secret_arn_prefix: "arn:aws:secretsmanager:us-east-1:091791791455:secret"
