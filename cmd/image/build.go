@@ -35,6 +35,8 @@ to widen the context to the repo root when the Dockerfile COPYs shared code.`,
 			log.Fatal("--app is required in mono-repo mode (repo_mode: mono)")
 		}
 
+		platform, _ := cmd.Flags().GetString("platform")
+
 		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
 		imageName := resolveImageName(cfg, app, appConfigPath)
 		imageURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)
@@ -46,9 +48,17 @@ to widen the context to the repo root when the Dockerfile COPYs shared code.`,
 			buildContext = defaultBuildContext(cfg, app)
 		}
 
+		noCache, _ := cmd.Flags().GetBool("no-cache")
+
 		utils.CheckBinary("docker")
-		log.Info("Building image", "uri", imageURI, "dockerfile", dockerfile, "context", buildContext)
-		runDockerCmd("build", "-t", imageURI, "-f", dockerfile, buildContext)
+		log.Info("Building image", "uri", imageURI, "dockerfile", dockerfile, "context", buildContext, "platform", platform, "no-cache", noCache)
+
+		buildArgs := []string{"--platform", platform, "-t", imageURI, "-f", dockerfile}
+		if noCache {
+			buildArgs = append(buildArgs, "--no-cache")
+		}
+		buildArgs = append(buildArgs, buildContext)
+		runDockerCmd("build", buildArgs...)
 	},
 }
 
@@ -59,5 +69,7 @@ func init() {
 	BuildCommand.Flags().String("app-config", "", "Override path to app config file")
 	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
 	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
+	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")
+	BuildCommand.Flags().Bool("no-cache", false, "Do not use cache when building the image")
 	_ = BuildCommand.MarkFlagRequired("env")
 }

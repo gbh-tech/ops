@@ -41,24 +41,17 @@ func init() {
 	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
 	Command.PersistentFlags().StringP("app", "a", "", appUsage)
 	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
+	Command.PersistentFlags().String("app-config", "", "Override path to app config file")
 	_ = Command.MarkPersistentFlagRequired("env")
 
 	// Subcommand-specific flags.
-	ecsDeployCmd.Flags().StringP("tag", "t", "latest", "Container image tag")
-	ecsDeployCmd.Flags().String("app-config", "", "Override path to app config file")
+	ecsDeployCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
 
-	ecsRenderCmd.Flags().StringP("tag", "t", "latest", "Container image tag")
-	ecsRenderCmd.Flags().String("app-config", "", "Override path to app config file")
-
-	ecsDbMigrateCmd.Flags().String("app-config", "", "Override path to app config file")
+	ecsRenderCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
 
 	ecsCleanupCmd.Flags().Int("keep", 5, "Number of task definition revisions to keep")
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
-
-	ecsVarsCmd.Flags().String("app-config", "", "Override path to app config file")
-
-	ecsSecretsCmd.Flags().String("app-config", "", "Override path to app config file")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -119,6 +112,16 @@ func requireAppInMonoRepo(cfg *config.OpsConfig, app string) {
 	if cfg.IsMonoRepo() && app == "" {
 		log.Fatal("--app is required in mono-repo mode (repo_mode: mono)")
 	}
+}
+
+// resolveTag returns tag if non-empty, otherwise falls back to env.
+// This makes "ops ecs deploy --env stage" pull the :stage image by default,
+// matching the tag that "ops push" writes as the environment pointer.
+func resolveTag(tag, env string) string {
+	if tag != "" {
+		return tag
+	}
+	return env
 }
 
 // loadApp loads and merges an app's config for the given environment.
@@ -196,7 +199,7 @@ var ecsDeployCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
-		tag, _ := cmd.Flags().GetString("tag")
+		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
@@ -256,7 +259,7 @@ var ecsRenderCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
-		tag, _ := cmd.Flags().GetString("tag")
+		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
