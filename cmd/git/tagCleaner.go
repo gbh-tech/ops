@@ -22,27 +22,30 @@ var TagCleanerCommand = &cobra.Command{
 		config := gh.BuildGitHubConfig()
 		opts := tagCleanerCommandFlags(cmd)
 
-		var owner string
-		var repo string
-		var tagOptions *github.ListOptions
-
-		if opts.Owner == "" {
+		owner := opts.Owner
+		if owner == "" {
 			owner = config.Organization
 		}
 
-		if opts.Repo == "" {
+		repo := opts.Repo
+		if repo == "" {
 			repo = config.Repository
 		}
 
-		tags, _, _ := gh.Client().Repositories.ListTags(
+		tagOptions := &github.ListOptions{PerPage: opts.Quantity}
+
+		tags, _, err := gh.Client().Repositories.ListTags(
 			context.Background(),
 			owner,
 			repo,
 			tagOptions,
 		)
+		if err != nil {
+			log.Fatal("Failed to list tags", "owner", owner, "repo", repo, "err", err)
+		}
 
 		for _, tag := range tags {
-			log.Infof("Tag name: %s", tag.GetName())
+			log.Info("Tag", "name", tag.GetName())
 		}
 	},
 }

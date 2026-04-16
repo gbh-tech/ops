@@ -13,6 +13,7 @@ var encryptCommand = &cobra.Command{
 	Use:   "encrypt",
 	Short: "Encrypts secrets",
 	Run: func(cmd *cobra.Command, args []string) {
+		requireWerfProvider()
 		opts := secretsCommandFlags(cmd)
 
 		if !opts.Root && opts.Env == "" {

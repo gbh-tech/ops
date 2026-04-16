@@ -7,27 +7,21 @@ import (
 )
 
 func CheckBinary(binary string) {
-	var cmd *exec.Cmd
+	var err error
 
-	// @TODO: kubectl does not return to stdout/stderr normally.
 	if binary == "kubectl" {
-		// cmd = exec.Command(binary, "--version", "--client=true")
-		return
-	}
-
-	cmd = exec.Command(binary, "--version")
-	err := cmd.Run()
-
-	if err != nil {
-		cmd = exec.Command(binary, "version")
-		err = cmd.Run()
+		err = exec.Command(binary, "version", "--client=true").Run()
+	} else {
+		err = exec.Command(binary, "--version").Run()
+		if err != nil {
+			err = exec.Command(binary, "version").Run()
+		}
 	}
 
 	if err != nil {
 		log.Fatal(
 			"Required command binary not found or cannot be executed.",
-			"binary",
-			binary,
+			"binary", binary, "err", err,
 		)
 	}
 }

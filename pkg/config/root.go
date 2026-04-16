@@ -79,12 +79,14 @@ func LoadConfig() *OpsConfig {
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
-			log.Fatalf("Ops config file not found!")
+			log.Fatal("Ops config file not found")
+		} else {
+			log.Fatal("Failed to read Ops config file", "err", err)
 		}
 	}
 
 	if err := viper.Unmarshal(&config); err != nil {
-		log.Fatalf("Unable to parse Ops config file, %v", err)
+		log.Fatal("Unable to parse Ops config file", "err", err)
 	}
 
 	CheckDeploymentProviderConfig(&config.Deployment)

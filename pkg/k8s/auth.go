@@ -46,14 +46,10 @@ func UpdateConfigForAKS(clusterName string, resourceGroup string) {
 	if err != nil {
 		var execError *exec.Error
 		if errors.As(err, &execError) {
-			log.Fatalf(
-				"Command execution failed: %v %v",
-				execError.Name,
-				execError.Err,
-			)
+			log.Fatal("Command execution failed", "name", execError.Name, "err", execError.Err)
 		}
-		log.Fatalf("Failed to get Azure Kubernetes Service credentials: %v", err)
+		log.Fatal("Failed to get Azure Kubernetes Service credentials", "err", err)
 	}
 
-	log.Infof("Azure Kubernetes Service credentials added!")
+	log.Info("Azure Kubernetes Service credentials added")
 }

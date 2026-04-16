@@ -13,6 +13,7 @@ var decryptCommand = &cobra.Command{
 	Use:   "decrypt",
 	Short: "Decrypts secrets",
 	Run: func(cmd *cobra.Command, args []string) {
+		requireWerfProvider()
 		opts := secretsCommandFlags(cmd)
 
 		if !opts.Root && opts.Env == "" {

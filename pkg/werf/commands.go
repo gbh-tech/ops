@@ -45,7 +45,7 @@ func Command(werfConfig config.WerfConfig, options *CommandOptions) {
 	additionalSecretValuesPath := GetSecretValuesPaths(werfConfig)
 	cmd = append(cmd, additionalSecretValuesPath...)
 
-	log.Infof("Werf command: %v", cmd)
+	log.Info("Werf command", "cmd", cmd)
 	execWerfCommand(cmd)
 }
 
@@ -70,7 +70,7 @@ func CommandWithoutRepo(werfConfig config.WerfConfig, options *CommandNoRepoOpti
 	additionalSecretValuesPath := GetSecretValuesPaths(werfConfig)
 	cmd = append(cmd, additionalSecretValuesPath...)
 
-	log.Infof("Werf command: %v", cmd)
+	log.Info("Werf command", "cmd", cmd)
 	execWerfCommand(cmd)
 }
 
@@ -87,7 +87,7 @@ func CommandWithSecrets(options *CommandSecretsOptions) {
 		options.FilePath,
 	}
 
-	log.Infof("Werf command: %v", cmd)
+	log.Info("Werf command", "cmd", cmd)
 	execWerfCommand(cmd)
 
 	if options.Command == "decrypt" {
@@ -107,6 +107,6 @@ func execWerfCommand(args []string) {
 	err := cmd.Run()
 
 	if err != nil {
-		log.Fatalf("Failed to execute Werf command: %v", err)
+		log.Fatal("Failed to execute Werf command", "err", err)
 	}
 }

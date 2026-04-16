@@ -5,12 +5,23 @@ import (
 	"os"
 	"os/exec"
 
+	pkgapp "ops/pkg/app"
 	"ops/pkg/config"
-	pkgecs "ops/pkg/ecs"
 	"path/filepath"
 
 	"charm.land/log/v2"
 )
+
+// resolveTag returns tag when explicitly provided, otherwise falls back to env.
+// This keeps build/push consistent with "ops ecs deploy" which defaults to the
+// env name so the workflow ops build → ops push → ops ecs deploy all agree
+// on the same tag without requiring an explicit --tag on every invocation.
+func resolveTag(tag, env string) string {
+	if tag != "" {
+		return tag
+	}
+	return env
+}
 
 // resolveImageURI builds the full image URI: {registryURL}/{env}/{imageName}:{tag}
 func resolveImageURI(registryURL, env, imageName, tag string) string {
@@ -35,7 +46,7 @@ func resolveImageName(cfg *config.OpsConfig, app, appConfigPath string) string {
 // imageFromConfig reads the image field from the global section of an app config.
 // Returns empty string if the file cannot be read or has no image field.
 func imageFromConfig(path string) string {
-	appCfg, err := pkgecs.LoadAppConfig(path)
+	appCfg, err := pkgapp.LoadAppConfig(path)
 	if err != nil {
 		return ""
 	}

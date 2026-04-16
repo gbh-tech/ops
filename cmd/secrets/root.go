@@ -1,6 +1,9 @@
 package secrets
 
 import (
+	"ops/pkg/config"
+
+	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -14,6 +17,18 @@ var Command = &cobra.Command{
 	Short: "Manage deployment/applications secrets stored in version control by the deployment provider (Werf, Ansible Vault, etc)",
 }
 
+// requireWerfProvider fatals with a clear message when the deployment provider
+// is not werf, since the secrets commands invoke the werf CLI directly.
+func requireWerfProvider() {
+	cfg := config.LoadConfig()
+	if cfg.Deployment.Provider != "werf" {
+		log.Fatal(
+			"ops secrets requires deployment.provider = \"werf\"",
+			"current", cfg.Deployment.Provider,
+		)
+	}
+}
+
 func secretsCommandFlags(cmd *cobra.Command) SecretsCommandOptions {
 	envi, _ := cmd.Flags().GetString("env")
 	root, _ := cmd.Flags().GetBool("root")
@@ -25,6 +40,7 @@ func secretsCommandFlags(cmd *cobra.Command) SecretsCommandOptions {
 }
 
 func init() {
+	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
 	Command.PersistentFlags().BoolP(
 		"root",
 		"r",

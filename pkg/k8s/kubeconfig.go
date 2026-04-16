@@ -42,7 +42,7 @@ func SetConfig(clusterName string) {
 	err := clientcmd.WriteToFile(*config, kubeConfigPath)
 
 	if err != nil {
-		log.Fatalf("Failed to write kube config: %v", err)
+		log.Fatal("Failed to write kube config", "err", err)
 	}
 
 	log.Info("Context successfully set to selected cluster!", "context", clusterName)
@@ -53,7 +53,7 @@ func GetConfig() *api.Config {
 	config, err := clientcmd.LoadFromFile(kubeConfigPath)
 
 	if err != nil {
-		log.Fatalf("Failed to load kube config: %v", err)
+		log.Fatal("Failed to load kube config", "err", err)
 	}
 
 	return config

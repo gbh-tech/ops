@@ -30,13 +30,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringP(
-		"env",
-		"e",
-		"",
-		"Environment as target",
-	)
-
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(kube.ConfigCommand)
 	rootCmd.AddCommand(git.GetTicketIDCommand)

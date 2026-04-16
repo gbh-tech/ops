@@ -30,7 +30,7 @@ func SetAccountSubscription(subscriptionId string) {
 	_, err := accountSubscription.Output()
 
 	if err != nil {
-		log.Fatalf("Failed to set Azure account subscription: %v", err)
+		log.Fatal("Failed to set Azure account subscription", "err", err)
 	}
 
 	log.Info("Azure accounted set!", "subscription", subscriptionId)
@@ -43,14 +43,14 @@ func CurrentAccount() AccountInfo {
 	output, err := accountInfo.Output()
 
 	if err != nil {
-		log.Fatalf("Failed to get Azure account information: %v", err)
+		log.Fatal("Failed to get Azure account information", "err", err)
 	}
 
 	var account AccountInfo
 
 	err = json.Unmarshal(output, &account)
 	if err != nil {
-		log.Fatalf("Failed to parse Azure account information: %v", err)
+		log.Fatal("Failed to parse Azure account information", "err", err)
 	}
 
 	log.Info(

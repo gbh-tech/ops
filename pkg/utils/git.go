@@ -13,7 +13,7 @@ func CurrentBranch() string {
 
 	out, err := ref.Output()
 	if err != nil {
-		log.Fatalf("Failed to determine current branch: %v", err)
+		log.Fatal("Failed to determine current branch", "err", err)
 	}
 
 	return string(out)
@@ -29,7 +29,7 @@ func GetTicketId(ref string) string {
 
 	if match == "" {
 		log.Error("Failed to extract Ticket ID.")
-		log.Fatalf("Ref '%s' %s", strings.TrimSpace(ref), "doesn't match the expected name convention.")
+		log.Fatal("Ref doesn't match the expected name convention", "ref", strings.TrimSpace(ref))
 	}
 
 	ticket := re.FindString(ref)
