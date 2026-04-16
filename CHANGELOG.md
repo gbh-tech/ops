@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+### Minor Changes
+
+- 8229b99: Refactor CLI architecture
+
 ## 1.2.1
 
 ### Patch Changes
