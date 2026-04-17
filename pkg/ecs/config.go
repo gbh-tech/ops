@@ -209,9 +209,15 @@ var NormalizeSecrets = app.NormalizeSecrets
 //
 //   - {serviceName}/shared  → keys from app [global].secrets
 //   - {serviceName}/{env}   → keys from app [env].secrets (env-specific wins)
-func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSSecret {
-	globalMap := app.NormalizeSecrets(appCfg["global"].Secrets)
-	envMap := app.NormalizeSecrets(appCfg[env].Secrets)
+func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECSSecret, error) {
+	globalMap, err := app.NormalizeSecrets(appCfg["global"].Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("global.secrets: %w", err)
+	}
+	envMap, err := app.NormalizeSecrets(appCfg[env].Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("%s.secrets: %w", env, err)
+	}
 
 	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
 	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
@@ -235,7 +241,7 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSS
 		})
 	}
 
-	return secrets
+	return secrets, nil
 }
 
 // BuildSecretSpec, ResolveBuildSecretSpecs, and ResolveBuildArgs are re-exported

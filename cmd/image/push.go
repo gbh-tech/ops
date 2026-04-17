@@ -49,9 +49,9 @@ points directly to an app config that defines the image name.`,
 		}
 
 		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
-		var appCfg pkgapp.AppConfig
-		if appConfigPath != "" {
-			appCfg, _ = pkgapp.LoadAppConfig(appConfigPath)
+		appCfg, err := pkgapp.LoadAppConfig(appConfigPath)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
 		}
 		imageName := resolveImageName(cfg, app, appCfg)
 		versionedURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)

@@ -192,7 +192,10 @@ var ecsDeployCmd = &cobra.Command{
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
 		appCfg, merged, names := loadApp(ec, app, env, appConfigOverride)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
+		if err != nil {
+			log.Fatal("Invalid secrets config", "err", err)
+		}
 
 		log.Info("Deploying", "app", merged.Name, "env", env, "tag", tag, "family", names.Family)
 
@@ -275,7 +278,10 @@ var ecsRenderCmd = &cobra.Command{
 			log.Fatal("Invalid app config", "path", path, "err", err)
 		}
 		names := pkgecs.ComputeNames(merged, env, base.ECS.Cluster)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
+		if err != nil {
+			log.Fatal("Invalid secrets config", "err", err)
+		}
 		input := pkgecs.BuildTaskDefinition(base, merged, names, env, tag, secrets)
 
 		ctr := input.ContainerDefinitions[0]
@@ -524,7 +530,10 @@ var ecsSecretsCmd = &cobra.Command{
 
 		cfg := config.LoadConfig()
 		appCfg, merged := loadAppForInspect(app, env, appConfigOverride)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.SecretArnPrefix)
+		if err != nil {
+			log.Fatal("Invalid secrets config", "err", err)
+		}
 
 		if len(secrets) == 0 {
 			fmt.Printf("No secrets configured for app=%q env=%q\n", merged.Name, env)

@@ -157,25 +157,31 @@ func LoadAppConfig(path string) (AppConfig, error) {
 }
 
 // NormalizeSecrets converts the secrets field (which may be a []string or
-// map[string]string) into a canonical map[envVar]jsonKey.
-func NormalizeSecrets(raw any) map[string]string {
+// map[string]string) into a canonical map[envVar]jsonKey. It returns an error
+// for any non-string element so that malformed config entries fail fast rather
+// than being silently dropped and causing missing secrets at runtime.
+func NormalizeSecrets(raw any) (map[string]string, error) {
 	if raw == nil {
-		return nil
+		return nil, nil
 	}
 	result := make(map[string]string)
 
 	switch v := raw.(type) {
 	case []interface{}:
-		for _, item := range v {
-			if key, ok := item.(string); ok {
-				result[key] = key
+		for i, item := range v {
+			key, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("secrets[%d]: expected string, got %T", i, item)
 			}
+			result[key] = key
 		}
 	case map[string]interface{}:
 		for envVar, jsonKey := range v {
-			if k, ok := jsonKey.(string); ok {
-				result[envVar] = k
+			k, ok := jsonKey.(string)
+			if !ok {
+				return nil, fmt.Errorf("secrets[%q]: expected string value, got %T", envVar, jsonKey)
 			}
+			result[envVar] = k
 		}
 	case []string:
 		for _, key := range v {
@@ -185,8 +191,10 @@ func NormalizeSecrets(raw any) map[string]string {
 		for k, vv := range v {
 			result[k] = vv
 		}
+	default:
+		return nil, fmt.Errorf("secrets: unsupported type %T", raw)
 	}
-	return result
+	return result, nil
 }
 
 // BuildSecretSpec describes one Docker BuildKit secret that ops will fetch from
@@ -210,9 +218,15 @@ type BuildSecretSpec struct {
 //   - Keys only in global are still included
 //
 // The returned slice is sorted by ID for deterministic --secret flag ordering.
-func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix string) []BuildSecretSpec {
-	globalMap := NormalizeSecrets(appCfg["global"].BuildSecrets)
-	envMap := NormalizeSecrets(appCfg[env].BuildSecrets)
+func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix string) ([]BuildSecretSpec, error) {
+	globalMap, err := NormalizeSecrets(appCfg["global"].BuildSecrets)
+	if err != nil {
+		return nil, fmt.Errorf("global.build_secrets: %w", err)
+	}
+	envMap, err := NormalizeSecrets(appCfg[env].BuildSecrets)
+	if err != nil {
+		return nil, fmt.Errorf("%s.build_secrets: %w", env, err)
+	}
 
 	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
 	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
@@ -229,7 +243,7 @@ func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix strin
 	}
 
 	sort.Slice(specs, func(i, j int) bool { return specs[i].ID < specs[j].ID })
-	return specs
+	return specs, nil
 }
 
 // ResolveBuildArgs merges global and env-specific build_args maps.

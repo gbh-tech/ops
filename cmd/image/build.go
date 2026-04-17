@@ -52,9 +52,12 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
 
 		// Load AppConfig once; shared by image name resolution and build config.
-		var appCfg pkgapp.AppConfig
-		if appConfigPath != "" {
-			appCfg, _ = pkgapp.LoadAppConfig(appConfigPath)
+		// Fail immediately if the path resolves but the file cannot be read or
+		// parsed — silently falling back to a nil config would hide mistyped
+		// --app-config paths and produce unexpected image names.
+		appCfg, err := pkgapp.LoadAppConfig(appConfigPath)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
 		}
 
 		imageName := resolveImageName(cfg, app, appCfg)
@@ -118,7 +121,10 @@ func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgap
 	serviceName := resolveServiceName(appCfg, app, cfg)
 
 	// --- build_secrets ---
-	specs := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.SecretArnPrefix)
+	specs, err := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.SecretArnPrefix)
+	if err != nil {
+		log.Fatal("Invalid build_secrets config", "err", err)
+	}
 	if len(specs) > 0 {
 		secretArgs, cleanup = fetchAndWriteSecrets(ctx, cfg, specs)
 	}
@@ -190,6 +196,10 @@ func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pk
 	}
 
 	// Fetch and write one file per secret key inside tmpDir.
+	// os.CreateTemp gives each file an OS-assigned name inside tmpDir so
+	// user-controlled id values cannot escape the directory via path traversal.
+	// id is only used as the Docker secret name in the --secret flag, never as
+	// a filesystem path component.
 	idToFile := map[string]string{}
 	for _, g := range byARN {
 		values, ferr := pkgaws.FetchSecretKeys(ctx, smClient, g.arn, g.keys)
@@ -199,11 +209,18 @@ func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pk
 		for i, id := range g.ids {
 			key := g.keys[i]
 			val := values[key] // FetchSecretKeys errors on missing keys
-			filePath := fmt.Sprintf("%s/%s", tmpDir, id)
-			if werr := os.WriteFile(filePath, []byte(val), 0600); werr != nil {
+			f, cerr := os.CreateTemp(tmpDir, "secret-*")
+			if cerr != nil {
+				log.Fatal("Failed to create temp file for build secret", "id", id, "err", cerr)
+			}
+			if _, werr := f.Write([]byte(val)); werr != nil {
+				_ = f.Close()
 				log.Fatal("Failed to write build secret file", "id", id, "err", werr)
 			}
-			idToFile[id] = filePath
+			if cerr := f.Close(); cerr != nil {
+				log.Fatal("Failed to close build secret file", "id", id, "err", cerr)
+			}
+			idToFile[id] = f.Name()
 		}
 	}
 
