@@ -4,7 +4,7 @@
   "private": true,
   "description": "Cloudflare Worker that serves the ops CLI install script at ops.gbh.tech",
   "scripts": {
-    "prebuild": "base64 -i ../install.sh -o src/install.sh.b64",
+    "prebuild": "base64 < ../install.sh > src/install.sh.b64",
     "predev": "npm run prebuild",
     "predeploy": "npm run prebuild",
     "precheck": "npm run prebuild",
