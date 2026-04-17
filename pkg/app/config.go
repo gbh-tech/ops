@@ -5,6 +5,7 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -134,17 +135,50 @@ func LoadFile(path string, out any) error {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".toml":
-		if err := toml.Unmarshal(data, out); err != nil {
+		md, err := toml.Decode(string(data), out)
+		if err != nil {
 			return fmt.Errorf("parsing TOML %s: %w", path, err)
 		}
+		if extras := unknownTOMLKeys(md); len(extras) > 0 {
+			return fmt.Errorf(
+				"unknown keys in %s: %s\n"+
+					"hint: in TOML, every bare key/value after a [subtable] header "+
+					"belongs to that subtable, not the parent — move scalars above "+
+					"subtable headers or use the [section.key] map form",
+				path, strings.Join(extras, ", "),
+			)
+		}
 	case ".yaml", ".yml":
-		if err := yaml.Unmarshal(data, out); err != nil {
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		dec.KnownFields(true)
+		if err := dec.Decode(out); err != nil {
 			return fmt.Errorf("parsing YAML %s: %w", path, err)
 		}
 	default:
 		return fmt.Errorf("unsupported config format %q (use .toml or .yaml)", ext)
 	}
 	return nil
+}
+
+// unknownTOMLKeys returns a sorted list of dotted key paths from the TOML
+// MetaData that were not decoded into the target struct. Sub-keys under
+// AppSection.Secrets and AppSection.BuildSecrets are excluded: those fields
+// are typed as interface{} so TOML marks their children as undecoded by
+// design. We identify them by checking that "secrets" or "build_secrets"
+// appears at index 1 of the key path (i.e. directly under a section like
+// "global" or "production", not nested inside another field).
+func unknownTOMLKeys(md toml.MetaData) []string {
+	var unknown []string
+	for _, k := range md.Undecoded() {
+		// k[0] = section name ("global", "stage", …)
+		// k[1] = AppSection field name
+		if len(k) >= 2 && (k[1] == "secrets" || k[1] == "build_secrets") {
+			continue
+		}
+		unknown = append(unknown, k.String())
+	}
+	sort.Strings(unknown)
+	return unknown
 }
 
 // LoadAppConfig reads an app config file (TOML or YAML by extension).
