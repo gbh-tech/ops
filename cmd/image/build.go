@@ -9,7 +9,6 @@ import (
 	pkgapp "ops/pkg/app"
 	pkgaws "ops/pkg/aws"
 	"ops/pkg/config"
-	pkgecs "ops/pkg/ecs"
 	"ops/pkg/utils"
 
 	"charm.land/log/v2"
@@ -51,7 +50,14 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		platform, _ := cmd.Flags().GetString("platform")
 
 		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
-		imageName := resolveImageName(cfg, app, appConfigPath)
+
+		// Load AppConfig once; shared by image name resolution and build config.
+		var appCfg pkgapp.AppConfig
+		if appConfigPath != "" {
+			appCfg, _ = pkgapp.LoadAppConfig(appConfigPath)
+		}
+
+		imageName := resolveImageName(cfg, app, appCfg)
 		imageURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)
 
 		if dockerfile == "" {
@@ -68,9 +74,9 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		// Resolve build_secrets and build_args from the app config.
 		var secretArgs []string
 		var buildArgArgs []string
-		if appConfigPath != "" {
+		if appCfg != nil {
 			var cleanup func()
-			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(cmd.Context(), cfg, appConfigPath, app, env)
+			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(cmd.Context(), cfg, appCfg, app, env)
 			defer cleanup()
 		}
 
@@ -102,28 +108,23 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 	},
 }
 
-// resolveBuildConfig loads the app config, resolves build_secrets and
-// build_args, and returns the corresponding docker CLI argument slices plus a
-// cleanup function that removes any temp files written for secrets. The caller
-// must invoke cleanup() after docker build completes (success or failure).
-func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appConfigPath, app, env string) (secretArgs, buildArgArgs []string, cleanup func()) {
+// resolveBuildConfig resolves build_secrets and build_args from an already-loaded
+// AppConfig and returns the corresponding docker CLI argument slices plus a cleanup
+// function that removes any temp files written for secrets. The caller must invoke
+// cleanup() after docker build completes (success or failure).
+func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgapp.AppConfig, app, env string) (secretArgs, buildArgArgs []string, cleanup func()) {
 	cleanup = func() {} // no-op default
-
-	appCfg, err := pkgapp.LoadAppConfig(appConfigPath)
-	if err != nil {
-		log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
-	}
 
 	serviceName := resolveServiceName(appCfg, app, cfg)
 
 	// --- build_secrets ---
-	specs := pkgecs.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.SecretArnPrefix)
+	specs := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.SecretArnPrefix)
 	if len(specs) > 0 {
 		secretArgs, cleanup = fetchAndWriteSecrets(ctx, cfg, specs)
 	}
 
 	// --- build_args ---
-	buildArgs := pkgecs.ResolveBuildArgs(appCfg, env)
+	buildArgs := pkgapp.ResolveBuildArgs(appCfg, env)
 	keys := make([]string, 0, len(buildArgs))
 	for k := range buildArgs {
 		keys = append(keys, k)
@@ -155,12 +156,21 @@ func resolveServiceName(appCfg pkgapp.AppConfig, app string, cfg *config.OpsConf
 }
 
 // fetchAndWriteSecrets fetches all build secret specs from Secrets Manager,
-// writes each plaintext value to a temp file, and returns the accumulated
-// --secret flag args along with a cleanup function that removes all temp files.
-// The caller must invoke cleanup() after docker build completes.
-func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pkgecs.BuildSecretSpec) (args []string, cleanup func()) {
+// writes each plaintext value into a dedicated temp directory, and returns the
+// accumulated --secret flag args along with a cleanup function. The caller must
+// invoke cleanup() after docker build completes (success or failure); it removes
+// the entire temp directory in one call.
+func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pkgapp.BuildSecretSpec) (args []string, cleanup func()) {
 	awsCfg := pkgaws.NewAWSConfig(ctx, cfg.AWS.Region, cfg.AWS.Profile)
 	smClient := pkgaws.NewSecretsManagerClient(awsCfg)
+
+	// Create a single temp directory for all secret files. One RemoveAll in
+	// cleanup handles partial failures cleanly.
+	tmpDir, err := os.MkdirTemp("", "ops-build-secrets-*")
+	if err != nil {
+		log.Fatal("Failed to create temp directory for build secrets", "err", err)
+	}
+	cleanup = func() { _ = os.RemoveAll(tmpDir) }
 
 	// Group specs by ARN to minimise Secrets Manager API calls.
 	type specGroup struct {
@@ -179,39 +189,21 @@ func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pk
 		g.keys = append(g.keys, spec.JSONKey)
 	}
 
-	// Fetch and write one temp file per secret key.
-	var tmpFiles []string
+	// Fetch and write one file per secret key inside tmpDir.
 	idToFile := map[string]string{}
 	for _, g := range byARN {
-		values, err := pkgaws.FetchSecretKeys(ctx, smClient, g.arn, g.keys)
-		if err != nil {
-			log.Fatal("Failed to fetch build secrets", "arn", g.arn, "err", err)
+		values, ferr := pkgaws.FetchSecretKeys(ctx, smClient, g.arn, g.keys)
+		if ferr != nil {
+			log.Fatal("Failed to fetch build secrets", "arn", g.arn, "err", ferr)
 		}
 		for i, id := range g.ids {
 			key := g.keys[i]
-			val, ok := values[key]
-			if !ok {
-				log.Fatal("Secret key not found in fetched secret", "key", key, "arn", g.arn)
+			val := values[key] // FetchSecretKeys errors on missing keys
+			filePath := fmt.Sprintf("%s/%s", tmpDir, id)
+			if werr := os.WriteFile(filePath, []byte(val), 0600); werr != nil {
+				log.Fatal("Failed to write build secret file", "id", id, "err", werr)
 			}
-			f, ferr := os.CreateTemp("", "ops-build-secret-*")
-			if ferr != nil {
-				log.Fatal("Failed to create temp file for build secret", "id", id, "err", ferr)
-			}
-			tmpPath := f.Name()
-			if _, werr := f.WriteString(val); werr != nil {
-				_ = f.Close()
-				_ = os.Remove(tmpPath)
-				log.Fatal("Failed to write build secret to temp file", "id", id, "err", werr)
-			}
-			_ = f.Close()
-			tmpFiles = append(tmpFiles, tmpPath)
-			idToFile[id] = tmpPath
-		}
-	}
-
-	cleanup = func() {
-		for _, p := range tmpFiles {
-			_ = os.Remove(p)
+			idToFile[id] = filePath
 		}
 	}
 

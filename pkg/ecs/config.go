@@ -191,7 +191,9 @@ func applySection(dst *AppSection, src AppSection) {
 			dst.Environment[k] = v
 		}
 	}
-	// Secrets are merged separately in ResolveSecrets.
+	// Secrets, BuildSecrets, and BuildArgs are resolved by their own functions
+	// (ResolveSecrets, ResolveBuildSecretSpecs, ResolveBuildArgs) and are
+	// intentionally omitted here.
 
 	// Volumes replace rather than merge: the more-specific section wins entirely.
 	if len(src.Volumes) > 0 {
@@ -199,38 +201,8 @@ func applySection(dst *AppSection, src AppSection) {
 	}
 }
 
-// NormalizeSecrets converts the secrets field (which may be a []string or
-// map[string]string) into a canonical map[envVar]jsonKey.
-func NormalizeSecrets(raw interface{}) map[string]string {
-	if raw == nil {
-		return nil
-	}
-	result := make(map[string]string)
-
-	switch v := raw.(type) {
-	case []interface{}:
-		for _, item := range v {
-			if key, ok := item.(string); ok {
-				result[key] = key
-			}
-		}
-	case map[string]interface{}:
-		for envVar, jsonKey := range v {
-			if k, ok := jsonKey.(string); ok {
-				result[envVar] = k
-			}
-		}
-	case []string:
-		for _, key := range v {
-			result[key] = key
-		}
-	case map[string]string:
-		for k, vv := range v {
-			result[k] = vv
-		}
-	}
-	return result
-}
+// NormalizeSecrets is re-exported from pkg/app for callers that import pkg/ecs.
+var NormalizeSecrets = app.NormalizeSecrets
 
 // ResolveSecrets builds the ECS secrets list from the consolidated Secrets
 // Manager convention:
@@ -238,8 +210,8 @@ func NormalizeSecrets(raw interface{}) map[string]string {
 //   - {serviceName}/shared  → keys from app [global].secrets
 //   - {serviceName}/{env}   → keys from app [env].secrets (env-specific wins)
 func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSSecret {
-	globalMap := NormalizeSecrets(appCfg["global"].Secrets)
-	envMap := NormalizeSecrets(appCfg[env].Secrets)
+	globalMap := app.NormalizeSecrets(appCfg["global"].Secrets)
+	envMap := app.NormalizeSecrets(appCfg[env].Secrets)
 
 	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
 	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
@@ -266,66 +238,13 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSS
 	return secrets
 }
 
-// BuildSecretSpec describes one Docker BuildKit secret that ops will fetch from
-// Secrets Manager at image build time and pass as --secret id=<ID>,src=<file>.
-type BuildSecretSpec struct {
-	// ID is the Docker --secret id (matches the id= in --mount=type=secret,id=).
-	ID string
-	// ARN is the base Secrets Manager secret ARN (no JSON key suffix).
-	ARN string
-	// JSONKey is the key to extract from the JSON blob stored in ARN.
-	JSONKey string
-}
+// BuildSecretSpec, ResolveBuildSecretSpecs, and ResolveBuildArgs are re-exported
+// from pkg/app. They are provider-agnostic and live there to keep pkg/ecs focused
+// on ECS task definitions.
+type BuildSecretSpec = app.BuildSecretSpec
 
-// ResolveBuildSecretSpecs resolves the build_secrets fields from the app config
-// into BuildSecretSpec triples using the same merge-with-override semantics as
-// ResolveSecrets:
-//
-//   - Global keys NOT present in the env section → fetched from {arnPrefix}:{serviceName}/shared
-//   - Env-specific keys → fetched from {arnPrefix}:{serviceName}/{env}
-//   - If a key appears in both, the env version wins and the global entry is dropped
-//   - Keys only in global are still included
-func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix string) []BuildSecretSpec {
-	globalMap := NormalizeSecrets(appCfg["global"].BuildSecrets)
-	envMap := NormalizeSecrets(appCfg[env].BuildSecrets)
-
-	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
-	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
-
-	var specs []BuildSecretSpec
-
-	for id, jsonKey := range globalMap {
-		if _, overridden := envMap[id]; !overridden {
-			specs = append(specs, BuildSecretSpec{ID: id, ARN: sharedARN, JSONKey: jsonKey})
-		}
-	}
-	for id, jsonKey := range envMap {
-		specs = append(specs, BuildSecretSpec{ID: id, ARN: envARN, JSONKey: jsonKey})
-	}
-
-	return specs
-}
-
-// ResolveBuildArgs merges global and env-specific build_args maps.
-// Env values override matching global keys; non-matching global keys are still
-// included. Returns nil when neither section defines any build args.
-func ResolveBuildArgs(appCfg AppConfig, env string) map[string]string {
-	globalArgs := appCfg["global"].BuildArgs
-	envArgs := appCfg[env].BuildArgs
-
-	if len(globalArgs) == 0 && len(envArgs) == 0 {
-		return nil
-	}
-
-	merged := make(map[string]string, len(globalArgs)+len(envArgs))
-	for k, v := range globalArgs {
-		merged[k] = v
-	}
-	for k, v := range envArgs {
-		merged[k] = v
-	}
-	return merged
-}
+var ResolveBuildSecretSpecs = app.ResolveBuildSecretSpecs
+var ResolveBuildArgs = app.ResolveBuildArgs
 
 // ComputeNames derives the ECS family name, service name, and CloudWatch log
 // group from the merged config.
