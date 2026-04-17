@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -104,7 +105,7 @@ type AppSection struct {
 	// BuildSecrets lists secrets to fetch from Secrets Manager at image build
 	// time. Same list/map forms as Secrets. Fetched values are exposed to the
 	// Dockerfile via Docker BuildKit --mount=type=secret.
-	BuildSecrets interface{} `toml:"build_secrets" yaml:"build_secrets"`
+	BuildSecrets any `toml:"build_secrets" yaml:"build_secrets"`
 
 	// BuildArgs are plain key/value pairs passed as docker --build-arg at
 	// build time. Env section values override matching global values; non-
@@ -153,4 +154,101 @@ func LoadAppConfig(path string) (AppConfig, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// NormalizeSecrets converts the secrets field (which may be a []string or
+// map[string]string) into a canonical map[envVar]jsonKey.
+func NormalizeSecrets(raw any) map[string]string {
+	if raw == nil {
+		return nil
+	}
+	result := make(map[string]string)
+
+	switch v := raw.(type) {
+	case []interface{}:
+		for _, item := range v {
+			if key, ok := item.(string); ok {
+				result[key] = key
+			}
+		}
+	case map[string]interface{}:
+		for envVar, jsonKey := range v {
+			if k, ok := jsonKey.(string); ok {
+				result[envVar] = k
+			}
+		}
+	case []string:
+		for _, key := range v {
+			result[key] = key
+		}
+	case map[string]string:
+		for k, vv := range v {
+			result[k] = vv
+		}
+	}
+	return result
+}
+
+// BuildSecretSpec describes one Docker BuildKit secret that ops will fetch from
+// Secrets Manager at image build time and pass as --secret id=<ID>,src=<file>.
+type BuildSecretSpec struct {
+	// ID is the Docker --secret id (matches the id= in --mount=type=secret,id=).
+	ID string
+	// ARN is the base Secrets Manager secret ARN (no JSON key suffix).
+	ARN string
+	// JSONKey is the key to extract from the JSON blob stored in ARN.
+	JSONKey string
+}
+
+// ResolveBuildSecretSpecs resolves the build_secrets fields from the app config
+// into BuildSecretSpec triples using the same merge-with-override semantics as
+// ResolveSecrets:
+//
+//   - Global keys NOT present in the env section → fetched from {arnPrefix}:{serviceName}/shared
+//   - Env-specific keys → fetched from {arnPrefix}:{serviceName}/{env}
+//   - If a key appears in both, the env version wins and the global entry is dropped
+//   - Keys only in global are still included
+//
+// The returned slice is sorted by ID for deterministic --secret flag ordering.
+func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix string) []BuildSecretSpec {
+	globalMap := NormalizeSecrets(appCfg["global"].BuildSecrets)
+	envMap := NormalizeSecrets(appCfg[env].BuildSecrets)
+
+	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
+	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
+
+	var specs []BuildSecretSpec
+
+	for id, jsonKey := range globalMap {
+		if _, overridden := envMap[id]; !overridden {
+			specs = append(specs, BuildSecretSpec{ID: id, ARN: sharedARN, JSONKey: jsonKey})
+		}
+	}
+	for id, jsonKey := range envMap {
+		specs = append(specs, BuildSecretSpec{ID: id, ARN: envARN, JSONKey: jsonKey})
+	}
+
+	sort.Slice(specs, func(i, j int) bool { return specs[i].ID < specs[j].ID })
+	return specs
+}
+
+// ResolveBuildArgs merges global and env-specific build_args maps.
+// Env values override matching global keys; non-matching global keys are still
+// included. Returns nil when neither section defines any build args.
+func ResolveBuildArgs(appCfg AppConfig, env string) map[string]string {
+	globalArgs := appCfg["global"].BuildArgs
+	envArgs := appCfg[env].BuildArgs
+
+	if len(globalArgs) == 0 && len(envArgs) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(globalArgs)+len(envArgs))
+	for k, v := range globalArgs {
+		merged[k] = v
+	}
+	for k, v := range envArgs {
+		merged[k] = v
+	}
+	return merged
 }

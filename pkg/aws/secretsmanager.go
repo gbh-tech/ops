@@ -18,10 +18,11 @@ func NewSecretsManagerClient(cfg aws.Config) *secretsmanager.Client {
 // FetchSecretKeys fetches secretARN from Secrets Manager, parses the JSON
 // value, and returns the plaintext string for each key in keys.
 //
-// The secret value must be a JSON object. Missing keys produce an error.
+// The secret value must be a JSON object. Non-string values and missing keys
+// both produce descriptive errors.
 func FetchSecretKeys(ctx context.Context, client *secretsmanager.Client, secretARN string, keys []string) (map[string]string, error) {
 	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: &secretARN,
+		SecretId: aws.String(secretARN),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetching secret %s: %w", secretARN, err)
@@ -31,18 +32,22 @@ func FetchSecretKeys(ctx context.Context, client *secretsmanager.Client, secretA
 		return nil, fmt.Errorf("secret %s has no string value (binary secrets are not supported)", secretARN)
 	}
 
-	var blob map[string]string
+	var blob map[string]any
 	if err := json.Unmarshal([]byte(*out.SecretString), &blob); err != nil {
 		return nil, fmt.Errorf("secret %s is not a JSON object: %w", secretARN, err)
 	}
 
 	result := make(map[string]string, len(keys))
 	for _, key := range keys {
-		val, ok := blob[key]
+		raw, ok := blob[key]
 		if !ok {
 			return nil, fmt.Errorf("key %q not found in secret %s", key, secretARN)
 		}
-		result[key] = val
+		str, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("key %q in secret %s is not a string value (got %T)", key, secretARN, raw)
+		}
+		result[key] = str
 	}
 	return result, nil
 }
