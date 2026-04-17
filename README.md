@@ -10,6 +10,7 @@
   - [External](#external)
   - [Development](#development)
 - [:package: Installation](#package-installation)
+  - [Install script (recommended)](#install-script-recommended)
   - [From Source](#from-source)
   - [Using `go install`](#using-go-install)
   - [Pre-built binaries](#pre-built-binaries)
@@ -69,6 +70,42 @@ The following tools are required for full functionality:
 - **GoReleaser**: 2.7.0 (for building releases)
 
 ## :package: Installation
+
+### Install script (recommended)
+
+Install the latest release into `~/.ops/bin` (no sudo, adds itself to your
+shell `PATH`):
+
+```bash
+curl -fsSL https://ops.gbh.tech/install | bash
+```
+
+Pin a specific version:
+
+```bash
+curl -fsSL https://ops.gbh.tech/install | bash -s -- v1.3.0
+# or
+OPS_VERSION=v1.3.0 curl -fsSL https://ops.gbh.tech/install | bash
+```
+
+Override the install location or opt out of the PATH edit:
+
+```bash
+OPS_INSTALL_DIR=/opt/ops OPS_NO_MODIFY_PATH=1 \
+  curl -fsSL https://ops.gbh.tech/install | bash
+```
+
+Supported platforms: Darwin (arm64, x86_64) and Linux (arm64, x86_64, i386) —
+matching the archives produced by [`.goreleaser.yaml`](.goreleaser.yaml). The
+script downloads the release tarball from
+[GitHub Releases](https://github.com/gbh-tech/ops/releases), verifies its
+SHA-256 checksum, extracts the binary, and updates `~/.bashrc`, `~/.zshrc`,
+`~/.bash_profile`, or `~/.config/fish/config.fish` as appropriate.
+
+The script is served by the [`worker/`](worker) Cloudflare Worker; the
+script source lives at [`install.sh`](install.sh) and can also be used via
+`curl -fsSL https://raw.githubusercontent.com/gbh-tech/ops/main/install.sh | bash`
+as a fallback.
 
 ### From Source
 
