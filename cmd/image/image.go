@@ -29,31 +29,18 @@ func resolveImageURI(registryURL, env, imageName, tag string) string {
 }
 
 // resolveImageName determines the image name to use for build/push.
-// It loads the app config when available and reads the image field from the
-// global section, falling back to the app name (or project in single-repo mode).
-func resolveImageName(cfg *config.OpsConfig, app, appConfigPath string) string {
-	if appConfigPath != "" {
-		if name := imageFromConfig(appConfigPath); name != "" {
-			return name
+// Pass the already-loaded AppConfig (or nil if unavailable) to read the image
+// field from the global section; falls back to the app flag or project name.
+func resolveImageName(cfg *config.OpsConfig, app string, appCfg pkgapp.AppConfig) string {
+	if appCfg != nil {
+		if global, ok := appCfg["global"]; ok && global.Image != "" {
+			return global.Image
 		}
 	}
 	if app != "" {
 		return app
 	}
 	return cfg.Project
-}
-
-// imageFromConfig reads the image field from the global section of an app config.
-// Returns empty string if the file cannot be read or has no image field.
-func imageFromConfig(path string) string {
-	appCfg, err := pkgapp.LoadAppConfig(path)
-	if err != nil {
-		return ""
-	}
-	if global, ok := appCfg["global"]; ok && global.Image != "" {
-		return global.Image
-	}
-	return ""
 }
 
 // defaultDockerfile returns the default Dockerfile path for the given app.

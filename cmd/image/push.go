@@ -1,6 +1,7 @@
 package image
 
 import (
+	pkgapp "ops/pkg/app"
 	"ops/pkg/config"
 	"ops/pkg/utils"
 
@@ -48,7 +49,11 @@ points directly to an app config that defines the image name.`,
 		}
 
 		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
-		imageName := resolveImageName(cfg, app, appConfigPath)
+		appCfg, err := pkgapp.LoadAppConfig(appConfigPath)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
+		}
+		imageName := resolveImageName(cfg, app, appCfg)
 		versionedURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)
 		envURI := resolveImageURI(cfg.Registry.URL, env, imageName, env)
 

@@ -134,7 +134,10 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged := pkgecs.ResolveConfig(ec.base, appCfg, env)
+	merged, err := pkgecs.ResolveConfig(ec.base, appCfg, env)
+	if err != nil {
+		log.Fatal("Invalid app config", "path", path, "err", err)
+	}
 	names := pkgecs.ComputeNames(merged, env, ec.base.ECS.Cluster)
 	return appCfg, merged, names
 }
@@ -151,7 +154,10 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pk
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+	merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+	if err != nil {
+		log.Fatal("Invalid app config", "path", path, "err", err)
+	}
 	return appCfg, merged
 }
 
@@ -186,7 +192,10 @@ var ecsDeployCmd = &cobra.Command{
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
 		appCfg, merged, names := loadApp(ec, app, env, appConfigOverride)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
+		if err != nil {
+			log.Fatal("Invalid secrets config", "err", err)
+		}
 
 		log.Info("Deploying", "app", merged.Name, "env", env, "tag", tag, "family", names.Family)
 
@@ -230,7 +239,14 @@ var ecsDeployCmd = &cobra.Command{
 			log.Warn("Cleanup failed (non-fatal)", "err", err)
 		}
 
-		log.Info(fmt.Sprintf("Deploy initiated. Run 'ops ecs wait --app %s --env %s' to wait for stability.", app, env))
+		waitCmd := fmt.Sprintf("ops ecs wait --env %s", env)
+		if app != "" {
+			waitCmd = fmt.Sprintf("ops ecs wait --app %s --env %s", app, env)
+		}
+		if appConfigOverride != "" {
+			waitCmd = fmt.Sprintf("%s --app-config %s", waitCmd, appConfigOverride)
+		}
+		log.Info(fmt.Sprintf("Deploy initiated. Run '%s' to wait for stability.", waitCmd))
 	},
 }
 
@@ -257,9 +273,15 @@ var ecsRenderCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
-		merged := pkgecs.ResolveConfig(base, appCfg, env)
+		merged, err := pkgecs.ResolveConfig(base, appCfg, env)
+		if err != nil {
+			log.Fatal("Invalid app config", "path", path, "err", err)
+		}
 		names := pkgecs.ComputeNames(merged, env, base.ECS.Cluster)
-		secrets := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, base.ECS.SecretArnPrefix)
+		if err != nil {
+			log.Fatal("Invalid secrets config", "err", err)
+		}
 		input := pkgecs.BuildTaskDefinition(base, merged, names, env, tag, secrets)
 
 		ctr := input.ContainerDefinitions[0]
@@ -276,9 +298,27 @@ var ecsRenderCmd = &cobra.Command{
 			{"Env vars", fmt.Sprintf("%d", len(ctr.Environment))},
 			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
 			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
+			{"Volumes", fmt.Sprintf("%d", len(input.Volumes))},
 		}
 		if merged.DatabaseMigrations {
 			rows = append(rows, []string{"Migration cmd", strings.Join(merged.MigrationCommand, " ")})
+		}
+		for _, v := range merged.Volumes {
+			volType := "host"
+			switch {
+			case v.EFS != nil:
+				volType = fmt.Sprintf("efs:%s", v.EFS.FileSystemId)
+			case v.Docker != nil:
+				volType = "docker"
+			}
+			readOnly := ""
+			if v.ReadOnly {
+				readOnly = " (ro)"
+			}
+			rows = append(rows, []string{
+				fmt.Sprintf("  Volume: %s", v.Name),
+				fmt.Sprintf("%s → %s%s", volType, v.ContainerPath, readOnly),
+			})
 		}
 
 		t := table.New().
@@ -304,10 +344,11 @@ var ecsStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		status, err := pkgecs.GetServiceStatus(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service)
@@ -331,10 +372,11 @@ var ecsWaitCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.WaitForStability(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service); err != nil {
@@ -349,10 +391,11 @@ var ecsRollbackCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.Rollback(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service, names.Family); err != nil {
@@ -413,10 +456,11 @@ var ecsCleanupCmd = &cobra.Command{
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		keep, _ := cmd.Flags().GetInt("keep")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.Family, keep); err != nil {
@@ -432,10 +476,11 @@ var ecsLogsCmd = &cobra.Command{
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		since, _ := cmd.Flags().GetDuration("since")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, merged, names := loadApp(ec, app, env, "")
+		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 		sinceTime := time.Now().Add(-since)
 
 		ctx := context.Background()
@@ -484,26 +529,14 @@ var ecsSecretsCmd = &cobra.Command{
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		cfg := config.LoadConfig()
-		requireAppInMonoRepo(cfg, app)
-
-		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
-		appCfg, err := pkgecs.LoadAppConfig(path)
+		appCfg, merged := loadAppForInspect(app, env, appConfigOverride)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.SecretArnPrefix)
 		if err != nil {
-			log.Fatal("Failed to load app config", "path", path, "err", err)
+			log.Fatal("Invalid secrets config", "err", err)
 		}
-
-		secretsName := app
-		if global, ok := appCfg["global"]; ok && global.SecretsName != "" {
-			secretsName = global.SecretsName
-		}
-		if global, ok := appCfg["global"]; ok && global.Name != "" && secretsName == app {
-			secretsName = global.Name
-		}
-
-		secrets := pkgecs.ResolveSecrets(appCfg, env, secretsName, cfg.ECS.SecretArnPrefix)
 
 		if len(secrets) == 0 {
-			fmt.Printf("No secrets configured for app=%q env=%q\n", app, env)
+			fmt.Printf("No secrets configured for app=%q env=%q\n", merged.Name, env)
 			return
 		}
 

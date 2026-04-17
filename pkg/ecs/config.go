@@ -6,6 +6,25 @@ import (
 	"ops/pkg/app"
 )
 
+// validateGlobalVolumes rejects host-local volume types in the [global] app
+// config section. Global volumes are applied to every environment and every
+// task replica; only network-attached shared file systems (EFS) support safe
+// concurrent multi-writer access across hosts.
+func validateGlobalVolumes(volumes []app.VolumeConfig) error {
+	for _, v := range volumes {
+		if v.Host != nil || v.Docker != nil {
+			return fmt.Errorf(
+				"volume %q uses a host-local type (host/docker) which is not safe "+
+					"for the [global] config section: tasks on different EC2 instances "+
+					"get independent storage with no shared access; "+
+					"move this volume to a per-environment section instead",
+				v.Name,
+			)
+		}
+	}
+	return nil
+}
+
 // Re-export provider-agnostic types so existing callers of pkg/ecs that use
 // AppConfig / AppSection / HealthCheckConfig / LoadFile / LoadAppConfig don't
 // need to change their imports.
@@ -73,7 +92,13 @@ type ECSSecret struct {
 //	base defaults → app [global] → app [env]
 //
 // Secrets are excluded here; use ResolveSecrets separately.
-func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig {
+// An error is returned when the global section contains volume types that are
+// not safe for concurrent multi-host access (host, docker).
+func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig, error) {
+	if err := validateGlobalVolumes(appCfg["global"].Volumes); err != nil {
+		return MergedConfig{}, err
+	}
+
 	defaultDesiredCount := base.Defaults.DesiredCount
 	merged := AppSection{
 		CPU:          base.Defaults.CPU,
@@ -90,12 +115,19 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig 
 		applySection(&merged, appCfg[env])
 	}
 
+	if merged.Name == "" {
+		return MergedConfig{}, fmt.Errorf(
+			"app config is missing a required \"name\" field; " +
+				"add 'name: <your-app-name>' to the [global] section",
+		)
+	}
+
 	secretsName := merged.SecretsName
 	if secretsName == "" {
 		secretsName = merged.Name
 	}
 
-	return MergedConfig{AppSection: merged, SecretsName: secretsName}
+	return MergedConfig{AppSection: merged, SecretsName: secretsName}, nil
 }
 
 // applySection overlays non-zero fields from src onto dst.
@@ -159,50 +191,33 @@ func applySection(dst *AppSection, src AppSection) {
 			dst.Environment[k] = v
 		}
 	}
-	// Secrets are merged separately in ResolveSecrets.
+	// Secrets, BuildSecrets, and BuildArgs are resolved by their own functions
+	// (ResolveSecrets, ResolveBuildSecretSpecs, ResolveBuildArgs) and are
+	// intentionally omitted here.
+
+	// Volumes replace rather than merge: the more-specific section wins entirely.
+	if len(src.Volumes) > 0 {
+		dst.Volumes = src.Volumes
+	}
 }
 
-// NormalizeSecrets converts the secrets field (which may be a []string or
-// map[string]string) into a canonical map[envVar]jsonKey.
-func NormalizeSecrets(raw interface{}) map[string]string {
-	if raw == nil {
-		return nil
-	}
-	result := make(map[string]string)
-
-	switch v := raw.(type) {
-	case []interface{}:
-		for _, item := range v {
-			if key, ok := item.(string); ok {
-				result[key] = key
-			}
-		}
-	case map[string]interface{}:
-		for envVar, jsonKey := range v {
-			if k, ok := jsonKey.(string); ok {
-				result[envVar] = k
-			}
-		}
-	case []string:
-		for _, key := range v {
-			result[key] = key
-		}
-	case map[string]string:
-		for k, vv := range v {
-			result[k] = vv
-		}
-	}
-	return result
-}
+// NormalizeSecrets is re-exported from pkg/app for callers that import pkg/ecs.
+var NormalizeSecrets = app.NormalizeSecrets
 
 // ResolveSecrets builds the ECS secrets list from the consolidated Secrets
 // Manager convention:
 //
 //   - {serviceName}/shared  → keys from app [global].secrets
 //   - {serviceName}/{env}   → keys from app [env].secrets (env-specific wins)
-func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSSecret {
-	globalMap := NormalizeSecrets(appCfg["global"].Secrets)
-	envMap := NormalizeSecrets(appCfg[env].Secrets)
+func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECSSecret, error) {
+	globalMap, err := app.NormalizeSecrets(appCfg["global"].Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("global.secrets: %w", err)
+	}
+	envMap, err := app.NormalizeSecrets(appCfg[env].Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("%s.secrets: %w", env, err)
+	}
 
 	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
 	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
@@ -226,8 +241,16 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSS
 		})
 	}
 
-	return secrets
+	return secrets, nil
 }
+
+// BuildSecretSpec, ResolveBuildSecretSpecs, and ResolveBuildArgs are re-exported
+// from pkg/app. They are provider-agnostic and live there to keep pkg/ecs focused
+// on ECS task definitions.
+type BuildSecretSpec = app.BuildSecretSpec
+
+var ResolveBuildSecretSpecs = app.ResolveBuildSecretSpecs
+var ResolveBuildArgs = app.ResolveBuildArgs
 
 // ComputeNames derives the ECS family name, service name, and CloudWatch log
 // group from the merged config.

@@ -1,0 +1,228 @@
+# deploy/config.toml — ECS app deployment configuration
+#
+# This file is the canonical reference for every directive supported by
+# `ops ecs deploy`. Copy it into your app directory:
+#
+#   Mono-repo:    apps/{app}/deploy/config.toml
+#   Single-repo:  deploy/config.toml
+#
+# Config resolution: base defaults (from .ops/config.yaml [ecs.defaults])
+# are applied first, then [global] overlays them, then the target env section
+# overlays global. Any field not set in a section inherits from the layer below.
+#
+# All fields are optional unless noted as REQUIRED.
+
+# ---------------------------------------------------------------------------
+# [global] — applied to every environment
+# ---------------------------------------------------------------------------
+# Only multi-write-safe volume types (efs) may be declared here.
+# All other fields can be overridden freely by env-specific sections.
+[global]
+
+# REQUIRED. Unique name for this app. Drives the ECS family, service name,
+# CloudWatch log group, container name, and default image repo name.
+name = "my-app"
+
+# Container image to deploy.
+# - If omitted, defaults to `name` (resolved against the ECR URL in
+#   .ops/config.yaml as {ecr_url}/{env}/{name}:{tag}).
+# - A bare name (no "/") is treated as an ECR image under the configured URL.
+# - A path containing "/" is used as-is; if the basename has no ":", the deploy
+#   tag is appended automatically.
+# image = "my-app"
+# image = "123456789.dkr.ecr.us-east-1.amazonaws.com/my-org/my-app"
+# image = "my-org/my-app:latest"
+
+# TCP port the container listens on. Required for ALB health checks.
+# Omit for background workers that have no HTTP interface.
+# port = 8080
+
+# CPU units (1 vCPU = 1024 units). Overrides ecs.defaults.cpu.
+# cpu = 512
+
+# Memory in MiB. Overrides ecs.defaults.memory.
+# memory = 1024
+
+# Number of running task replicas. Overrides ecs.defaults.desired_count.
+# desired_count = 1
+
+# ECS network mode. Overrides ecs.defaults.network_mode.
+# Valid values: awsvpc (recommended), bridge, host, none.
+# network_mode = "awsvpc"
+
+# ECS launch type. Overrides ecs.defaults.launch_type.
+# Valid values: EC2, FARGATE, EXTERNAL.
+# launch_type = "EC2"
+
+# CloudWatch log driver. Overrides ecs.defaults.log_driver.
+# Only "awslogs" is currently wired up in the log configuration builder.
+# log_driver = "awslogs"
+
+# Override the container entrypoint command.
+# command = ["node", "server.js"]
+
+# Static environment variables injected into the container.
+# For secrets, use the `secrets` field below.
+[global.environment]
+# RAILS_ENV = "production"
+# NODE_ENV = "production"
+
+# Secrets pulled from AWS Secrets Manager.
+# Secrets are looked up at two paths:
+#   {secret_arn_prefix}:{name}/shared  — for keys declared in [global]
+#   {secret_arn_prefix}:{name}/{env}   — for keys declared in an env section
+#
+# Two forms are supported:
+#
+# List form (env var name == JSON key in the secret):
+#   secrets = ["DATABASE_URL", "REDIS_URL"]
+#
+# Map form (env var name → JSON key):
+#   [global.secrets]
+#   DATABASE_URL = "db_url"
+#   API_KEY = "api_key"
+
+# Override the Secrets Manager secret name used to build ARNs.
+# Defaults to `name`. Useful when multiple apps share one secret.
+# secrets_name = "shared-backend"
+
+# Override the ECS task execution role ARN for this app.
+# Supports {service} and {env} template placeholders.
+# Inherits from ecs.execution_role in .ops/config.yaml when omitted.
+# execution_role = "arn:aws:iam::123456789:role/{service}-{env}-task-exec"
+
+# Override the ECS task role ARN for this app.
+# Supports {service} and {env} template placeholders.
+# Inherits from ecs.task_role in .ops/config.yaml when omitted.
+# task_role = "arn:aws:iam::123456789:role/{service}-{env}-tasks"
+
+# HTTP path used for ALB and container health checks (requires `port`).
+# health_check_path = "/health"
+
+# Fine-grained container health check settings (requires health_check_path).
+# [global.container_health_check]
+# interval    = 30   # seconds between checks
+# timeout     = 5    # seconds before a check is considered failed
+# retries     = 3    # consecutive failures before the container is unhealthy
+# start_period = 60  # grace period after container start before checks count
+
+# Run database migrations before updating the service on each deploy.
+# database_migrations = false
+
+# Command used when database_migrations = true.
+# migration_command = ["bundle", "exec", "rails", "db:migrate"]
+
+# Secrets fetched from AWS Secrets Manager at image BUILD time and injected
+# into the Dockerfile via Docker BuildKit --mount=type=secret.
+# Same list/map forms as `secrets`. Fetched values are written to temp files
+# and passed as --secret id=<KEY>,src=<tmpfile> to docker build.
+# Use inside a Dockerfile with: RUN --mount=type=secret,id=KEY ...
+#
+# List form (secret id == JSON key in the SM secret):
+#   build_secrets = ["COMPOSER_AUTH_TOKEN", "NPM_TOKEN"]
+#
+# Map form (docker secret id → JSON key in the SM secret):
+#   [global.build_secrets]
+#   composer_auth = "COMPOSER_AUTH_TOKEN"
+#
+# Secrets Manager path convention (shared with runtime `secrets`):
+#   {secret_arn_prefix}:{name}/shared  — for keys declared in [global]
+#   {secret_arn_prefix}:{name}/{env}   — for keys declared in an env section
+
+# Plain key/value pairs passed to docker build as --build-arg KEY=VALUE.
+# Values are NOT secret and are visible in docker history; use build_secrets
+# for credentials. Env section values override matching global values;
+# non-matching global values are still included.
+#
+# [global.build_args]
+# NODE_ENV = "production"
+# SENTRY_DSN = "https://example@o0.ingest.sentry.io/0"
+
+# EFS volumes declared in [global] are safe for concurrent access from all
+# task replicas across availability zones. Host-local types (host, docker)
+# must be declared in per-environment sections only.
+#
+# [[global.volumes]]
+# name           = "shared-data"    # unique volume name within this task
+# container_path = "/mnt/data"      # absolute path inside the container
+# read_only      = false
+#
+#   [global.volumes.efs]
+#   file_system_id      = "fs-0123456789abcdef0"  # REQUIRED
+#   root_directory      = "/app-data"              # default: "/" (EFS root)
+#   transit_encryption  = "ENABLED"                # "ENABLED" or "DISABLED"
+#   access_point_id     = "fsap-0123456789abcdef0" # optional EFS access point
+#   iam                 = "ENABLED"                # "ENABLED" or "DISABLED"
+#                                                  # requires transit_encryption ENABLED
+
+# ---------------------------------------------------------------------------
+# [stage] — overrides applied only when deploying to the stage environment
+# ---------------------------------------------------------------------------
+[stage]
+# desired_count = 1
+# cpu = 256
+# memory = 512
+
+# Per-env environment variables merge with (and can override) [global.environment].
+# [stage.environment]
+# LOG_LEVEL = "debug"
+
+# Per-env secrets are resolved from {secret_arn_prefix}:{name}/stage.
+# They merge with global secrets; per-env values take precedence.
+# [stage.secrets]
+# STRIPE_KEY = "stripe_key"
+
+# Per-env build secrets are resolved from {secret_arn_prefix}:{name}/stage.
+# They MERGE with global build_secrets: env keys override matching global keys;
+# non-matching global keys are still fetched from the shared secret path.
+# [stage.build_secrets]
+# COMPOSER_AUTH_TOKEN = "COMPOSER_AUTH_TOKEN"
+
+# Per-env build_args MERGE with global build_args: env keys override matching
+# global keys; non-matching global keys are still included.
+# [stage.build_args]
+# NODE_ENV = "staging"
+
+# Per-env volumes REPLACE global volumes entirely (they do not merge).
+# All volume types are allowed here: efs, host, and docker.
+#
+# EFS volume (safe for multiple replicas across hosts):
+# [[stage.volumes]]
+# name           = "shared-data"
+# container_path = "/mnt/data"
+#
+#   [stage.volumes.efs]
+#   file_system_id     = "fs-0123456789abcdef0"
+#   root_directory     = "/app-data/stage"
+#   transit_encryption = "ENABLED"
+#
+# Bind mount — maps a path on the EC2 host into the container.
+# Only safe when desired_count = 1 or tasks are pinned to one host.
+# [[stage.volumes]]
+# name           = "tmp-scratch"
+# container_path = "/tmp/scratch"
+#
+#   [stage.volumes.host]
+#   source_path = "/scratch"   # omit for a Docker-managed ephemeral directory
+#
+# Docker-managed volume:
+# [[stage.volumes]]
+# name           = "cache"
+# container_path = "/var/cache"
+#
+#   [stage.volumes.docker]
+#   driver        = "local"
+#   scope         = "task"    # "task" (ephemeral) or "shared" (persists on host)
+#   autoprovision = true      # only meaningful for scope = "shared"
+#   # driver_opts and labels accept arbitrary string key/value maps
+
+# ---------------------------------------------------------------------------
+# [production] — overrides applied only when deploying to production
+# ---------------------------------------------------------------------------
+[production]
+# desired_count = 3
+# cpu = 1024
+# memory = 2048
+
+# [production.environment]
+# LOG_LEVEL = "warn"

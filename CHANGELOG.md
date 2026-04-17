@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0
+
+### Minor Changes
+
+- d2c3825: Support volumes in ECS task defs
+
+### Patch Changes
+
+- 156d5e0: Minor improvements and fixes
+
 ## 1.3.0
 
 ### Minor Changes
