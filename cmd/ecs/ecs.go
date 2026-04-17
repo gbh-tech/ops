@@ -240,6 +240,9 @@ var ecsDeployCmd = &cobra.Command{
 		if app != "" {
 			waitCmd = fmt.Sprintf("ops ecs wait --app %s --env %s", app, env)
 		}
+		if appConfigOverride != "" {
+			waitCmd = fmt.Sprintf("%s --app-config %s", waitCmd, appConfigOverride)
+		}
 		log.Info(fmt.Sprintf("Deploy initiated. Run '%s' to wait for stability.", waitCmd))
 	},
 }
@@ -335,10 +338,11 @@ var ecsStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		status, err := pkgecs.GetServiceStatus(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service)
@@ -362,10 +366,11 @@ var ecsWaitCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.WaitForStability(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service); err != nil {
@@ -380,10 +385,11 @@ var ecsRollbackCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.Rollback(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service, names.Family); err != nil {
@@ -444,10 +450,11 @@ var ecsCleanupCmd = &cobra.Command{
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		keep, _ := cmd.Flags().GetInt("keep")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, "")
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
 		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.Family, keep); err != nil {
@@ -463,10 +470,11 @@ var ecsLogsCmd = &cobra.Command{
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		since, _ := cmd.Flags().GetDuration("since")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, merged, names := loadApp(ec, app, env, "")
+		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 		sinceTime := time.Now().Add(-since)
 
 		ctx := context.Background()
