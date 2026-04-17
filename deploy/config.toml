@@ -11,6 +11,19 @@
 # overlays global. Any field not set in a section inherits from the layer below.
 #
 # All fields are optional unless noted as REQUIRED.
+#
+# TOML SUBTABLE SCOPING — READ THIS BEFORE EDITING
+# -------------------------------------------------
+# In TOML, once a [section.subtable] header appears, every bare key/value that
+# follows belongs to that subtable until the next [header] arrives. This means:
+#
+#   [global.environment]      # opens the subtable
+#   NODE_ENV = "production"   # belongs to global.environment ✓
+#   secrets = ["API_KEY"]     # WRONG — this belongs to global.environment, not global!
+#
+# To avoid the trap, put every top-level scalar (secrets, build_secrets, etc.)
+# ABOVE all [section.subtable] headers, or use the dedicated map form such as
+# [global.secrets] and [global.build_secrets] which are their own headers.
 
 # ---------------------------------------------------------------------------
 # [global] — applied to every environment
@@ -61,26 +74,8 @@ name = "my-app"
 # Override the container entrypoint command.
 # command = ["node", "server.js"]
 
-# Static environment variables injected into the container.
-# For secrets, use the `secrets` field below.
-[global.environment]
-# RAILS_ENV = "production"
-# NODE_ENV = "production"
-
-# Secrets pulled from AWS Secrets Manager.
-# Secrets are looked up at two paths:
-#   {secret_arn_prefix}:{name}/shared  — for keys declared in [global]
-#   {secret_arn_prefix}:{name}/{env}   — for keys declared in an env section
-#
-# Two forms are supported:
-#
-# List form (env var name == JSON key in the secret):
-#   secrets = ["DATABASE_URL", "REDIS_URL"]
-#
-# Map form (env var name → JSON key):
-#   [global.secrets]
-#   DATABASE_URL = "db_url"
-#   API_KEY = "api_key"
+# HTTP path used for ALB and container health checks (requires `port`).
+# health_check_path = "/health"
 
 # Override the Secrets Manager secret name used to build ARNs.
 # Defaults to `name`. Useful when multiple apps share one secret.
@@ -96,8 +91,55 @@ name = "my-app"
 # Inherits from ecs.task_role in .ops/config.yaml when omitted.
 # task_role = "arn:aws:iam::123456789:role/{service}-{env}-tasks"
 
-# HTTP path used for ALB and container health checks (requires `port`).
-# health_check_path = "/health"
+# Run database migrations before updating the service on each deploy.
+# database_migrations = false
+
+# Command used when database_migrations = true.
+# migration_command = ["bundle", "exec", "rails", "db:migrate"]
+
+# ---------------------------------------------------------------------------
+# Subtable sections for [global] — declare these AFTER all scalars above.
+# ---------------------------------------------------------------------------
+
+# Static environment variables injected into the container.
+# For secrets, use [global.secrets] below.
+[global.environment]
+# RAILS_ENV = "production"
+# NODE_ENV = "production"
+
+# Secrets pulled from AWS Secrets Manager.
+# Global secrets are resolved from: {secret_arn_prefix}:{name}/shared
+# Per-env secrets are resolved from: {secret_arn_prefix}:{name}/{env}
+#
+# Use the map form (env var → JSON key in the secret). This is the recommended
+# form because it is header-delimited and immune to the TOML subtable scoping
+# trap described at the top of this file.
+#
+# [global.secrets]
+# DATABASE_URL = "db_url"
+# API_KEY      = "api_key"
+#
+# Alternatively, use the list form when the env var name matches the JSON key:
+#   secrets = ["DATABASE_URL", "REDIS_URL"]   # place this ABOVE [global.environment]
+
+# Secrets fetched from AWS Secrets Manager at image BUILD time, injected via
+# Docker BuildKit --mount=type=secret. Same path convention as [global.secrets].
+# Use inside a Dockerfile with: RUN --mount=type=secret,id=KEY ...
+#
+# [global.build_secrets]
+# composer_auth = "COMPOSER_AUTH_TOKEN"
+#
+# List form (secret id == JSON key):
+#   build_secrets = ["COMPOSER_AUTH_TOKEN", "NPM_TOKEN"]  # place ABOVE [global.environment]
+
+# Plain key/value pairs passed to docker build as --build-arg KEY=VALUE.
+# Values are NOT secret and visible in docker history; use [global.build_secrets]
+# for credentials. Env section values override matching global values;
+# non-matching global values are still included.
+#
+# [global.build_args]
+# NODE_ENV = "production"
+# SENTRY_DSN = "https://example@o0.ingest.sentry.io/0"
 
 # Fine-grained container health check settings (requires health_check_path).
 # [global.container_health_check]
@@ -105,38 +147,6 @@ name = "my-app"
 # timeout     = 5    # seconds before a check is considered failed
 # retries     = 3    # consecutive failures before the container is unhealthy
 # start_period = 60  # grace period after container start before checks count
-
-# Run database migrations before updating the service on each deploy.
-# database_migrations = false
-
-# Command used when database_migrations = true.
-# migration_command = ["bundle", "exec", "rails", "db:migrate"]
-
-# Secrets fetched from AWS Secrets Manager at image BUILD time and injected
-# into the Dockerfile via Docker BuildKit --mount=type=secret.
-# Same list/map forms as `secrets`. Fetched values are written to temp files
-# and passed as --secret id=<KEY>,src=<tmpfile> to docker build.
-# Use inside a Dockerfile with: RUN --mount=type=secret,id=KEY ...
-#
-# List form (secret id == JSON key in the SM secret):
-#   build_secrets = ["COMPOSER_AUTH_TOKEN", "NPM_TOKEN"]
-#
-# Map form (docker secret id → JSON key in the SM secret):
-#   [global.build_secrets]
-#   composer_auth = "COMPOSER_AUTH_TOKEN"
-#
-# Secrets Manager path convention (shared with runtime `secrets`):
-#   {secret_arn_prefix}:{name}/shared  — for keys declared in [global]
-#   {secret_arn_prefix}:{name}/{env}   — for keys declared in an env section
-
-# Plain key/value pairs passed to docker build as --build-arg KEY=VALUE.
-# Values are NOT secret and are visible in docker history; use build_secrets
-# for credentials. Env section values override matching global values;
-# non-matching global values are still included.
-#
-# [global.build_args]
-# NODE_ENV = "production"
-# SENTRY_DSN = "https://example@o0.ingest.sentry.io/0"
 
 # EFS volumes declared in [global] are safe for concurrent access from all
 # task replicas across availability zones. Host-local types (host, docker)
@@ -164,22 +174,27 @@ name = "my-app"
 # memory = 512
 
 # Per-env environment variables merge with (and can override) [global.environment].
-# [stage.environment]
+[stage.environment]
 # LOG_LEVEL = "debug"
 
 # Per-env secrets are resolved from {secret_arn_prefix}:{name}/stage.
 # They merge with global secrets; per-env values take precedence.
+#
 # [stage.secrets]
 # STRIPE_KEY = "stripe_key"
+#
+# List form: secrets = ["STRIPE_KEY"]   # place ABOVE [stage.environment]
 
 # Per-env build secrets are resolved from {secret_arn_prefix}:{name}/stage.
 # They MERGE with global build_secrets: env keys override matching global keys;
 # non-matching global keys are still fetched from the shared secret path.
+#
 # [stage.build_secrets]
 # COMPOSER_AUTH_TOKEN = "COMPOSER_AUTH_TOKEN"
 
 # Per-env build_args MERGE with global build_args: env keys override matching
 # global keys; non-matching global keys are still included.
+#
 # [stage.build_args]
 # NODE_ENV = "staging"
 
@@ -224,5 +239,10 @@ name = "my-app"
 # cpu = 1024
 # memory = 2048
 
-# [production.environment]
+[production.environment]
 # LOG_LEVEL = "warn"
+
+# Per-env secrets resolved from {secret_arn_prefix}:{name}/production.
+#
+# [production.secrets]
+# STRIPE_KEY = "stripe_key"
