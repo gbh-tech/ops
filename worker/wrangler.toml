@@ -1,0 +1,31 @@
+name = "ops-installer"
+main = "src/index.ts"
+compatibility_date = "2026-04-16"
+
+# Keep the workers.dev subdomain enabled as a WAF-free fallback URL,
+# useful for debugging when zone-level protections on gbh.tech misbehave.
+workers_dev = true
+
+# Bundle the base64-encoded install script as a Text module. The .b64 file
+# is regenerated from the repo-root install.sh by the [build] command below
+# so it stays in sync no matter how wrangler is invoked (npm, npx, CI).
+[[rules]]
+type = "Text"
+globs = ["**/*.b64"]
+fallthrough = false
+
+# Runs before every `wrangler deploy` / `wrangler dev`, including when
+# wrangler is invoked directly via npx (which would skip npm pre-hooks).
+[build]
+command = "base64 -i ../install.sh -o src/install.sh.b64"
+
+# Bind the worker to ops.gbh.tech. The zone (gbh.tech) must already be
+# active on the Cloudflare account; `custom_domain = true` makes Cloudflare
+# provision the DNS + cert automatically on first deploy.
+[[routes]]
+pattern = "ops.gbh.tech"
+custom_domain = true
+
+[observability]
+enabled = true
+head_sampling_rate = 1

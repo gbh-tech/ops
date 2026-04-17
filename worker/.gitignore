@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+dist/
+*.log
+.dev.vars
+worker-configuration.d.ts
+src/install.sh.b64

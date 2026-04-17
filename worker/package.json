@@ -1,0 +1,21 @@
+{
+  "name": "ops-installer-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that serves the ops CLI install script at ops.gbh.tech",
+  "scripts": {
+    "prebuild": "base64 < ../install.sh > src/install.sh.b64",
+    "predev": "npm run prebuild",
+    "predeploy": "npm run prebuild",
+    "precheck": "npm run prebuild",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run --outdir=./dist && tsc --noEmit",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
+  }
+}
