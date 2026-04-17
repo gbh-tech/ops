@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"ops/pkg/app"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -20,7 +22,9 @@ func BuildTaskDefinition(
 ) awsecs.RegisterTaskDefinitionInput {
 	appName := merged.Name
 	image := resolveImage(base.AWS.ECRUrl, env, merged.Image, appName, imageTag)
-	container := buildContainer(appName, image, merged, names, base.AWS.Region, secrets)
+
+	taskVolumes, mountPoints := buildVolumes(merged.Volumes)
+	container := buildContainer(appName, image, merged, names, base.AWS.Region, secrets, mountPoints)
 
 	executionRole := ExpandTemplate(coalesce(merged.ExecutionRole, base.ECS.ExecutionRole), appName, env)
 	taskRole := ExpandTemplate(coalesce(merged.TaskRole, base.ECS.TaskRole), appName, env)
@@ -37,6 +41,10 @@ func BuildTaskDefinition(
 		ContainerDefinitions:    []ecstypes.ContainerDefinition{container},
 	}
 
+	if len(taskVolumes) > 0 {
+		input.Volumes = taskVolumes
+	}
+
 	if executionRole != "" {
 		input.ExecutionRoleArn = aws.String(executionRole)
 	}
@@ -45,6 +53,80 @@ func BuildTaskDefinition(
 	}
 
 	return input
+}
+
+// buildVolumes converts the merged VolumeConfig list into the two parallel
+// slices that ECS expects: task-level Volume definitions and container-level
+// MountPoint references. Each entry in volumes produces exactly one of each.
+func buildVolumes(volumes []app.VolumeConfig) ([]ecstypes.Volume, []ecstypes.MountPoint) {
+	if len(volumes) == 0 {
+		return nil, nil
+	}
+
+	taskVolumes := make([]ecstypes.Volume, 0, len(volumes))
+	mountPoints := make([]ecstypes.MountPoint, 0, len(volumes))
+
+	for _, v := range volumes {
+		vol := ecstypes.Volume{Name: aws.String(v.Name)}
+
+		switch {
+		case v.EFS != nil:
+			efsCfg := &ecstypes.EFSVolumeConfiguration{
+				FileSystemId: aws.String(v.EFS.FileSystemId),
+			}
+			if v.EFS.RootDirectory != "" {
+				efsCfg.RootDirectory = aws.String(v.EFS.RootDirectory)
+			}
+			if v.EFS.TransitEncryption != "" {
+				efsCfg.TransitEncryption = ecstypes.EFSTransitEncryption(strings.ToUpper(v.EFS.TransitEncryption))
+			}
+			if v.EFS.AccessPointId != "" || v.EFS.IAM != "" {
+				efsCfg.AuthorizationConfig = &ecstypes.EFSAuthorizationConfig{}
+				if v.EFS.AccessPointId != "" {
+					efsCfg.AuthorizationConfig.AccessPointId = aws.String(v.EFS.AccessPointId)
+				}
+				if v.EFS.IAM != "" {
+					efsCfg.AuthorizationConfig.Iam = ecstypes.EFSAuthorizationConfigIAM(strings.ToUpper(v.EFS.IAM))
+				}
+			}
+			vol.EfsVolumeConfiguration = efsCfg
+
+		case v.Host != nil:
+			vol.Host = &ecstypes.HostVolumeProperties{}
+			if v.Host.SourcePath != "" {
+				vol.Host.SourcePath = aws.String(v.Host.SourcePath)
+			}
+
+		case v.Docker != nil:
+			dockerCfg := &ecstypes.DockerVolumeConfiguration{}
+			if v.Docker.Driver != "" {
+				dockerCfg.Driver = aws.String(v.Docker.Driver)
+			}
+			if v.Docker.Scope != "" {
+				dockerCfg.Scope = ecstypes.Scope(strings.ToLower(v.Docker.Scope))
+			}
+			if v.Docker.Autoprovision != nil {
+				dockerCfg.Autoprovision = v.Docker.Autoprovision
+			}
+			if len(v.Docker.DriverOpts) > 0 {
+				dockerCfg.DriverOpts = v.Docker.DriverOpts
+			}
+			if len(v.Docker.Labels) > 0 {
+				dockerCfg.Labels = v.Docker.Labels
+			}
+			vol.DockerVolumeConfiguration = dockerCfg
+
+		}
+
+		taskVolumes = append(taskVolumes, vol)
+		mountPoints = append(mountPoints, ecstypes.MountPoint{
+			SourceVolume:  aws.String(v.Name),
+			ContainerPath: aws.String(v.ContainerPath),
+			ReadOnly:      aws.Bool(v.ReadOnly),
+		})
+	}
+
+	return taskVolumes, mountPoints
 }
 
 // ExpandTemplate replaces {service} and {env} placeholders in s.
@@ -79,11 +161,16 @@ func buildContainer(
 	names Names,
 	region string,
 	secrets []ECSSecret,
+	mountPoints []ecstypes.MountPoint,
 ) ecstypes.ContainerDefinition {
 	c := ecstypes.ContainerDefinition{
 		Name:      aws.String(appName),
 		Image:     aws.String(image),
 		Essential: aws.Bool(true),
+	}
+
+	if len(mountPoints) > 0 {
+		c.MountPoints = mountPoints
 	}
 
 	if merged.Port != 0 {

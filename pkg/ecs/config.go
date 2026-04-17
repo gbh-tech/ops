@@ -6,6 +6,25 @@ import (
 	"ops/pkg/app"
 )
 
+// validateGlobalVolumes rejects host-local volume types in the [global] app
+// config section. Global volumes are applied to every environment and every
+// task replica; only network-attached shared file systems (EFS) support safe
+// concurrent multi-writer access across hosts.
+func validateGlobalVolumes(volumes []app.VolumeConfig) error {
+	for _, v := range volumes {
+		if v.Host != nil || v.Docker != nil {
+			return fmt.Errorf(
+				"volume %q uses a host-local type (host/docker) which is not safe "+
+					"for the [global] config section: tasks on different EC2 instances "+
+					"get independent storage with no shared access; "+
+					"move this volume to a per-environment section instead",
+				v.Name,
+			)
+		}
+	}
+	return nil
+}
+
 // Re-export provider-agnostic types so existing callers of pkg/ecs that use
 // AppConfig / AppSection / HealthCheckConfig / LoadFile / LoadAppConfig don't
 // need to change their imports.
@@ -73,7 +92,13 @@ type ECSSecret struct {
 //	base defaults → app [global] → app [env]
 //
 // Secrets are excluded here; use ResolveSecrets separately.
-func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig {
+// An error is returned when the global section contains volume types that are
+// not safe for concurrent multi-host access (host, docker).
+func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig, error) {
+	if err := validateGlobalVolumes(appCfg["global"].Volumes); err != nil {
+		return MergedConfig{}, err
+	}
+
 	defaultDesiredCount := base.Defaults.DesiredCount
 	merged := AppSection{
 		CPU:          base.Defaults.CPU,
@@ -90,12 +115,19 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) MergedConfig 
 		applySection(&merged, appCfg[env])
 	}
 
+	if merged.Name == "" {
+		return MergedConfig{}, fmt.Errorf(
+			"app config is missing a required \"name\" field; " +
+				"add 'name: <your-app-name>' to the [global] section",
+		)
+	}
+
 	secretsName := merged.SecretsName
 	if secretsName == "" {
 		secretsName = merged.Name
 	}
 
-	return MergedConfig{AppSection: merged, SecretsName: secretsName}
+	return MergedConfig{AppSection: merged, SecretsName: secretsName}, nil
 }
 
 // applySection overlays non-zero fields from src onto dst.
@@ -160,6 +192,11 @@ func applySection(dst *AppSection, src AppSection) {
 		}
 	}
 	// Secrets are merged separately in ResolveSecrets.
+
+	// Volumes replace rather than merge: the more-specific section wins entirely.
+	if len(src.Volumes) > 0 {
+		dst.Volumes = src.Volumes
+	}
 }
 
 // NormalizeSecrets converts the secrets field (which may be a []string or
@@ -227,6 +264,67 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) []ECSS
 	}
 
 	return secrets
+}
+
+// BuildSecretSpec describes one Docker BuildKit secret that ops will fetch from
+// Secrets Manager at image build time and pass as --secret id=<ID>,src=<file>.
+type BuildSecretSpec struct {
+	// ID is the Docker --secret id (matches the id= in --mount=type=secret,id=).
+	ID string
+	// ARN is the base Secrets Manager secret ARN (no JSON key suffix).
+	ARN string
+	// JSONKey is the key to extract from the JSON blob stored in ARN.
+	JSONKey string
+}
+
+// ResolveBuildSecretSpecs resolves the build_secrets fields from the app config
+// into BuildSecretSpec triples using the same merge-with-override semantics as
+// ResolveSecrets:
+//
+//   - Global keys NOT present in the env section → fetched from {arnPrefix}:{serviceName}/shared
+//   - Env-specific keys → fetched from {arnPrefix}:{serviceName}/{env}
+//   - If a key appears in both, the env version wins and the global entry is dropped
+//   - Keys only in global are still included
+func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix string) []BuildSecretSpec {
+	globalMap := NormalizeSecrets(appCfg["global"].BuildSecrets)
+	envMap := NormalizeSecrets(appCfg[env].BuildSecrets)
+
+	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
+	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
+
+	var specs []BuildSecretSpec
+
+	for id, jsonKey := range globalMap {
+		if _, overridden := envMap[id]; !overridden {
+			specs = append(specs, BuildSecretSpec{ID: id, ARN: sharedARN, JSONKey: jsonKey})
+		}
+	}
+	for id, jsonKey := range envMap {
+		specs = append(specs, BuildSecretSpec{ID: id, ARN: envARN, JSONKey: jsonKey})
+	}
+
+	return specs
+}
+
+// ResolveBuildArgs merges global and env-specific build_args maps.
+// Env values override matching global keys; non-matching global keys are still
+// included. Returns nil when neither section defines any build args.
+func ResolveBuildArgs(appCfg AppConfig, env string) map[string]string {
+	globalArgs := appCfg["global"].BuildArgs
+	envArgs := appCfg[env].BuildArgs
+
+	if len(globalArgs) == 0 && len(envArgs) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(globalArgs)+len(envArgs))
+	for k, v := range globalArgs {
+		merged[k] = v
+	}
+	for k, v := range envArgs {
+		merged[k] = v
+	}
+	return merged
 }
 
 // ComputeNames derives the ECS family name, service name, and CloudWatch log

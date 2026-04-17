@@ -60,6 +60,8 @@ repo_mode: "mono"
 apps_dir: "apps"
 
 # Only required when deployment.provider is ecs
+# Per-app deployment config lives in deploy/config.toml (mono-repo: apps/{app}/deploy/config.toml).
+# See deploy/config.toml in this repo for a fully-annotated example of all supported directives.
 ecs:
   cluster: "lighthouse-platform"
   secret_arn_prefix: "arn:aws:secretsmanager:us-east-1:091791791455:secret"
