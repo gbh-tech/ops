@@ -4,7 +4,7 @@
 # Usage:
 #   curl -fsSL https://ops.gbh.tech/install | bash
 #   curl -fsSL https://ops.gbh.tech/install | bash -s -- v1.3.0
-#   OPS_VERSION=v1.3.0 curl -fsSL https://ops.gbh.tech/install | bash
+#   curl -fsSL https://ops.gbh.tech/install | OPS_VERSION=v1.3.0 bash
 #
 # Environment overrides:
 #   OPS_VERSION      Release tag to install (default: latest)
