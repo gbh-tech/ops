@@ -23,9 +23,6 @@ curl -fsSL http://localhost:8787/install | head -n 5
 
 ## Deploy
 
-CI handles this on pushes to `main` that touch `install.sh` or `worker/**`
-(see [`.github/workflows/deploy-worker.yaml`](../.github/workflows/deploy-worker.yaml)).
-
 To deploy manually:
 
 ```bash

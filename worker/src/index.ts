@@ -8,7 +8,8 @@
 
 import scriptB64 from "./install.sh.b64";
 
-const script = atob(scriptB64.trim());
+const binary = atob(scriptB64.trim());
+const script = Uint8Array.from(binary, (c) => c.charCodeAt(0));
 
 const SCRIPT_HEADERS: HeadersInit = {
   "content-type": "text/x-shellscript; charset=utf-8",
