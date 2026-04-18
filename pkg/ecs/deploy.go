@@ -148,7 +148,10 @@ func RunMigrationTask(ctx context.Context, client *awsecs.Client, opts Migration
 // WaitForStability blocks until the service reaches a stable state.
 func WaitForStability(ctx context.Context, client *awsecs.Client, cluster, service string) error {
 	log.Info("Waiting for service stability...", "service", service)
-	waiter := awsecs.NewServicesStableWaiter(client)
+	waiter := awsecs.NewServicesStableWaiter(client, func(o *awsecs.ServicesStableWaiterOptions) {
+		o.MinDelay = 10 * time.Second
+		o.MaxDelay = 10 * time.Second
+	})
 	if err := waiter.Wait(ctx, &awsecs.DescribeServicesInput{
 		Cluster:  aws.String(cluster),
 		Services: []string{service},
