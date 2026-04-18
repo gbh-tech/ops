@@ -676,6 +676,11 @@ Example:
 			Task:             *found,
 		})
 		if err != nil {
+			if taskArn != "" {
+				if logErr := pkgecs.PrintTaskLogs(ctx, ec.cwClient, names.LogGroup, appName, appName, taskArn); logErr != nil {
+					log.Warn("Could not fetch task logs", "err", logErr)
+				}
+			}
 			log.Fatal("Scheduled task failed", "name", taskName, "err", err)
 		}
 		log.Info("Task complete, fetching logs...")
@@ -791,13 +796,18 @@ Example:
 		appName := merged.Name
 		log.Info("Starting ECS Exec session", "task", taskArn, "container", appName, "command", command)
 
-		execCmd := exec.Command("aws", "ecs", "execute-command",
+		execArgs := []string{"ecs", "execute-command",
 			"--cluster", ec.base.ECS.Cluster,
 			"--task", taskArn,
 			"--container", appName,
 			"--interactive",
 			"--command", command,
-		)
+			"--region", ec.cfg.AWS.Region,
+		}
+		if ec.cfg.AWS.Profile != "" {
+			execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
+		}
+		execCmd := exec.Command("aws", execArgs...)
 		execCmd.Stdin = os.Stdin
 		execCmd.Stdout = os.Stdout
 		execCmd.Stderr = os.Stderr

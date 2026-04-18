@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -286,10 +287,10 @@ func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunSchedu
 		},
 	}
 	if opts.Task.CPU != 0 {
-		overrides.ContainerOverrides[0].Cpu = aws.Int32(int32(opts.Task.CPU))
+		overrides.Cpu = aws.String(strconv.Itoa(opts.Task.CPU))
 	}
 	if opts.Task.Memory != 0 {
-		overrides.ContainerOverrides[0].Memory = aws.Int32(int32(opts.Task.Memory))
+		overrides.Memory = aws.String(strconv.Itoa(opts.Task.Memory))
 	}
 
 	runInput := &awsecs.RunTaskInput{
@@ -346,10 +347,26 @@ func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunSchedu
 		return taskArn, fmt.Errorf("describe task: %w", err)
 	}
 	if len(descOut.Tasks) > 0 {
-		for _, c := range descOut.Tasks[0].Containers {
-			if aws.ToString(c.Name) == opts.AppName && c.ExitCode != nil && *c.ExitCode != 0 {
-				return taskArn, fmt.Errorf("task exited with code %d", *c.ExitCode)
+		task := descOut.Tasks[0]
+		for _, c := range task.Containers {
+			if aws.ToString(c.Name) == opts.AppName {
+				if reason := aws.ToString(c.Reason); reason != "" {
+					return taskArn, fmt.Errorf("container failed: %s", reason)
+				}
+				if c.ExitCode != nil {
+					if *c.ExitCode != 0 {
+						return taskArn, fmt.Errorf("task exited with code %d", *c.ExitCode)
+					}
+					// ExitCode 0 is definitive success; skip task-level StoppedReason.
+					return taskArn, nil
+				}
+				// No Reason and no ExitCode: not definitive; fall through to StoppedReason.
+				break
 			}
+		}
+		// Target container not found or produced no definitive exit status.
+		if stoppedReason := aws.ToString(task.StoppedReason); stoppedReason != "" {
+			return taskArn, fmt.Errorf("task stopped: %s", stoppedReason)
 		}
 	}
 
@@ -366,13 +383,13 @@ func scheduleName(appName, env, taskName string) string {
 // EventBridge Scheduler to override the container command when invoking ECS RunTask.
 type containerRunInput struct {
 	ContainerOverrides []containerCommandOverride `json:"containerOverrides"`
+	Cpu                string                     `json:"cpu,omitempty"`
+	Memory             string                     `json:"memory,omitempty"`
 }
 
 type containerCommandOverride struct {
 	Name    string   `json:"name"`
 	Command []string `json:"command"`
-	Cpu     int      `json:"cpu,omitempty"`
-	Memory  int      `json:"memory,omitempty"`
 }
 
 func buildContainerInputJSON(appName string, t app.ScheduledTaskConfig) (string, error) {
@@ -381,10 +398,14 @@ func buildContainerInputJSON(appName string, t app.ScheduledTaskConfig) (string,
 			{
 				Name:    appName,
 				Command: t.Command,
-				Cpu:     t.CPU,
-				Memory:  t.Memory,
 			},
 		},
+	}
+	if t.CPU != 0 {
+		payload.Cpu = strconv.Itoa(t.CPU)
+	}
+	if t.Memory != 0 {
+		payload.Memory = strconv.Itoa(t.Memory)
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
