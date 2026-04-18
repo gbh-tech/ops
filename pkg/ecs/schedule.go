@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"ops/pkg/app"
 
@@ -227,6 +228,129 @@ func ReconcileSchedules(
 	}
 
 	return created, updated, deleted, nil
+}
+
+// RunScheduledTaskOpts bundles the inputs for RunScheduledTask.
+type RunScheduledTaskOpts struct {
+	// Cluster is the ECS cluster name.
+	Cluster string
+	// Service is the ECS service name ("{app}-{env}"), used to inherit
+	// network configuration.
+	Service string
+	// ScheduledFamily is the "{app}-{env}-scheduled" task definition family.
+	// ECS resolves a bare family name to the latest active revision.
+	ScheduledFamily string
+	// AppName is the ECS container name used in the command override.
+	AppName string
+	// CapacityProvider is the already-expanded capacity provider name.
+	// When empty, no capacity provider strategy is set (ECS uses the
+	// task definition's default launch type).
+	CapacityProvider string
+	// Task is the scheduled task config entry to run ad-hoc.
+	Task app.ScheduledTaskConfig
+}
+
+// RunScheduledTask launches a one-off ECS task for the given scheduled task
+// config using the ScheduledFamily task definition (no port mappings or health
+// checks) and the service's network configuration. It waits for the task to
+// stop, checks the exit code, and returns the task ARN. The approach mirrors
+// RunMigrationTask in deploy.go.
+func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunScheduledTaskOpts) (string, error) {
+	svcOut, err := client.DescribeServices(ctx, &awsecs.DescribeServicesInput{
+		Cluster:  aws.String(opts.Cluster),
+		Services: []string{opts.Service},
+	})
+	if err != nil {
+		return "", fmt.Errorf("describe service %s: %w", opts.Service, err)
+	}
+	if len(svcOut.Services) == 0 {
+		return "", fmt.Errorf("service %s not found in cluster %s", opts.Service, opts.Cluster)
+	}
+	svc := svcOut.Services[0]
+
+	// Use the dedicated scheduled task family (no port mappings / health checks).
+	// ECS resolves a bare family name to the latest active revision.
+	taskDefinition := opts.ScheduledFamily
+	if taskDefinition == "" {
+		// Fall back to the service's current task definition when the scheduled
+		// family is not set (e.g. older deployments that pre-date this feature).
+		taskDefinition = aws.ToString(svc.TaskDefinition)
+	}
+
+	overrides := &ecstypes.TaskOverride{
+		ContainerOverrides: []ecstypes.ContainerOverride{
+			{
+				Name:    aws.String(opts.AppName),
+				Command: opts.Task.Command,
+			},
+		},
+	}
+	if opts.Task.CPU != 0 {
+		overrides.ContainerOverrides[0].Cpu = aws.Int32(int32(opts.Task.CPU))
+	}
+	if opts.Task.Memory != 0 {
+		overrides.ContainerOverrides[0].Memory = aws.Int32(int32(opts.Task.Memory))
+	}
+
+	runInput := &awsecs.RunTaskInput{
+		Cluster:              aws.String(opts.Cluster),
+		TaskDefinition:       aws.String(taskDefinition),
+		NetworkConfiguration: svc.NetworkConfiguration,
+		Overrides:            overrides,
+	}
+	if opts.CapacityProvider != "" {
+		runInput.CapacityProviderStrategy = []ecstypes.CapacityProviderStrategyItem{
+			{
+				CapacityProvider: aws.String(opts.CapacityProvider),
+				Weight:           100,
+				Base:             1,
+			},
+		}
+	}
+
+	runOut, err := client.RunTask(ctx, runInput)
+	if err != nil {
+		return "", fmt.Errorf("run task: %w", err)
+	}
+	if len(runOut.Failures) > 0 {
+		reasons := make([]string, len(runOut.Failures))
+		for i, f := range runOut.Failures {
+			reasons[i] = aws.ToString(f.Reason)
+		}
+		return "", fmt.Errorf("task failed to start: %s", strings.Join(reasons, "; "))
+	}
+	if len(runOut.Tasks) == 0 {
+		return "", fmt.Errorf("no task returned from RunTask")
+	}
+
+	taskArn := aws.ToString(runOut.Tasks[0].TaskArn)
+	log.Info("Task started", "taskArn", taskArn)
+	log.Info("Waiting for task to complete...")
+
+	waiter := awsecs.NewTasksStoppedWaiter(client)
+	if err := waiter.Wait(ctx, &awsecs.DescribeTasksInput{
+		Cluster: aws.String(opts.Cluster),
+		Tasks:   []string{taskArn},
+	}, 30*time.Minute); err != nil {
+		return taskArn, fmt.Errorf("waiting for task to stop: %w", err)
+	}
+
+	descOut, err := client.DescribeTasks(ctx, &awsecs.DescribeTasksInput{
+		Cluster: aws.String(opts.Cluster),
+		Tasks:   []string{taskArn},
+	})
+	if err != nil {
+		return taskArn, fmt.Errorf("describe task: %w", err)
+	}
+	if len(descOut.Tasks) > 0 {
+		for _, c := range descOut.Tasks[0].Containers {
+			if aws.ToString(c.Name) == opts.AppName && c.ExitCode != nil && *c.ExitCode != 0 {
+				return taskArn, fmt.Errorf("task exited with code %d", *c.ExitCode)
+			}
+		}
+	}
+
+	return taskArn, nil
 }
 
 // scheduleName returns the full EventBridge Scheduler name for a task within

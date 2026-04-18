@@ -6,6 +6,9 @@ import (
 	"ops/pkg/aws"
 	"ops/pkg/config"
 	pkgecs "ops/pkg/ecs"
+	"ops/pkg/utils"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -13,8 +16,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"charm.land/log/v2"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +27,7 @@ import (
 // Command is the "ops ecs" parent command.
 var Command = &cobra.Command{
 	Use:   "ecs",
-	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, cleanup, logs, vars, secrets)",
+	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, cleanup, logs, vars, secrets)",
 }
 
 func init() {
@@ -32,6 +37,8 @@ func init() {
 	Command.AddCommand(ecsWaitCmd)
 	Command.AddCommand(ecsRollbackCmd)
 	Command.AddCommand(ecsDbMigrateCmd)
+	Command.AddCommand(ecsScheduleRunCmd)
+	Command.AddCommand(ecsRunCmd)
 	Command.AddCommand(ecsCleanupCmd)
 	Command.AddCommand(ecsLogsCmd)
 	Command.AddCommand(ecsVarsCmd)
@@ -53,6 +60,8 @@ func init() {
 	ecsCleanupCmd.Flags().Int("keep", 5, "Number of task definition revisions to keep")
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
+
+	ecsRunCmd.Flags().StringP("command", "c", "/bin/sh", "Command to execute inside the container")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -211,6 +220,16 @@ var ecsDeployCmd = &cobra.Command{
 		}
 		log.Info("Task definition registered", "arn", taskDefArn)
 
+		var scheduledTaskDefArn string
+		if len(merged.ScheduledTasks) > 0 {
+			scheduledInput := pkgecs.BuildScheduledTaskDefinition(ec.base, merged, names, env, tag, secrets)
+			scheduledTaskDefArn, err = pkgecs.RegisterTaskDefinition(ctx, ec.ecsClient, scheduledInput)
+			if err != nil {
+				log.Fatal("Failed to register scheduled task definition", "err", err)
+			}
+			log.Info("Scheduled task definition registered", "family", names.ScheduledFamily, "arn", scheduledTaskDefArn)
+		}
+
 		if merged.DatabaseMigrations && *merged.DesiredCount > 0 {
 			if len(merged.MigrationCommand) == 0 {
 				log.Fatal("database_migrations is true but migration_command is not set")
@@ -242,7 +261,7 @@ var ecsDeployCmd = &cobra.Command{
 			log.Warn("Cleanup failed (non-fatal)", "err", err)
 		}
 
-		if err := reconcileAppSchedules(ctx, ec, merged.ScheduledTasks, names, env, taskDefArn); err != nil {
+		if err := reconcileAppSchedules(ctx, ec, merged.ScheduledTasks, names, merged.Name, env, scheduledTaskDefArn); err != nil {
 			log.Fatal("Failed to reconcile scheduled tasks", "err", err)
 		}
 
@@ -308,6 +327,9 @@ var ecsRenderCmd = &cobra.Command{
 			{"Volumes", fmt.Sprintf("%d", len(input.Volumes))},
 			{"Scheduled tasks", fmt.Sprintf("%d", len(merged.ScheduledTasks))},
 		}
+		if len(merged.ScheduledTasks) > 0 {
+			rows = append(rows, []string{"Scheduled family", names.ScheduledFamily})
+		}
 		if merged.DatabaseMigrations {
 			rows = append(rows, []string{"Migration cmd", strings.Join(merged.MigrationCommand, " ")})
 		}
@@ -329,14 +351,16 @@ var ecsRenderCmd = &cobra.Command{
 			})
 		}
 		for _, st := range merged.ScheduledTasks {
-			state := "enabled"
+			enabled := "true"
 			if st.Enabled != nil && !*st.Enabled {
-				state = "disabled"
+				enabled = "false"
 			}
-			rows = append(rows, []string{
-				fmt.Sprintf("  Schedule: %s", st.Name),
-				fmt.Sprintf("%s | cmd: %s | %s", st.Schedule, strings.Join(st.Command, " "), state),
-			})
+			rows = append(rows,
+				[]string{fmt.Sprintf("  Schedule: %s", st.Name), ""},
+				[]string{"    enabled", enabled},
+				[]string{"    schedule", st.Schedule},
+				[]string{"    command", wrapWords(strings.Join(st.Command, " "), 60)},
+			)
 		}
 
 		t := table.New().
@@ -571,6 +595,78 @@ var ecsSecretsCmd = &cobra.Command{
 	},
 }
 
+var ecsScheduleRunCmd = &cobra.Command{
+	Use:   "schedule-run <task-name>",
+	Short: "Run a named scheduled task ad-hoc as a one-off ECS task",
+	Long: `Run a named scheduled task immediately as a one-off ECS task.
+
+The task must be declared in the app's deploy/config.toml under [[scheduled_tasks]].
+It uses the dedicated "{app}-{env}-scheduled" task definition (no port mappings or
+health checks) and inherits the service's network configuration, overriding only
+the container command, CPU, and memory.
+
+The command waits for the task to finish and exits non-zero if the task fails.
+Logs are printed from CloudWatch after the task stops.
+
+Example:
+  ops ecs schedule-run daily-cleanup --app my-app --env stage`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		taskName := args[0]
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+
+		ec := loadECSCtx()
+		requireAppInMonoRepo(ec.cfg, app)
+		_, merged, names := loadApp(ec, app, env, appConfigOverride)
+
+		var found *pkgecs.ScheduledTaskConfig
+		for i := range merged.ScheduledTasks {
+			if merged.ScheduledTasks[i].Name == taskName {
+				found = &merged.ScheduledTasks[i]
+				break
+			}
+		}
+		if found == nil {
+			available := make([]string, len(merged.ScheduledTasks))
+			for i, t := range merged.ScheduledTasks {
+				available[i] = t.Name
+			}
+			if len(available) == 0 {
+				log.Fatal("No scheduled tasks configured for this app",
+					"app", merged.Name, "env", env)
+			}
+			log.Fatal("Scheduled task not found",
+				"name", taskName,
+				"available", strings.Join(available, ", "))
+		}
+
+		appName := merged.Name
+		capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, appName, env)
+
+		log.Info("Running scheduled task", "name", taskName, "app", appName, "env", env,
+			"command", strings.Join(found.Command, " "))
+
+		ctx := context.Background()
+		taskArn, err := pkgecs.RunScheduledTask(ctx, ec.ecsClient, pkgecs.RunScheduledTaskOpts{
+			Cluster:          ec.base.ECS.Cluster,
+			Service:          names.Service,
+			ScheduledFamily:  names.ScheduledFamily,
+			AppName:          appName,
+			CapacityProvider: capacityProvider,
+			Task:             *found,
+		})
+		if err != nil {
+			log.Fatal("Scheduled task failed", "name", taskName, "err", err)
+		}
+		log.Info("Task complete, fetching logs...")
+		if err := pkgecs.PrintTaskLogs(ctx, ec.cwClient, names.LogGroup, appName, appName, taskArn); err != nil {
+			log.Warn("Could not fetch task logs", "err", err)
+		}
+	},
+}
+
 // reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
 // to EventBridge Scheduler. It is a no-op when no scheduler is configured and
 // no tasks are declared.
@@ -579,7 +675,7 @@ func reconcileAppSchedules(
 	ec *ecsCtx,
 	tasks []pkgecs.ScheduledTaskConfig,
 	names pkgecs.Names,
-	env, taskDefArn string,
+	appName, env, taskDefArn string,
 ) error {
 	sched := ec.cfg.ECS.Scheduler
 
@@ -598,7 +694,6 @@ func reconcileAppSchedules(
 		)
 	}
 
-	appName := names.Service[:strings.LastIndex(names.Service, "-"+env)]
 	capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, appName, env)
 	groupName := pkgecs.ExpandSchedulerTemplate(sched.GroupName, ec.base.ECS.Cluster, env)
 	roleArn := pkgecs.ExpandSchedulerTemplate(sched.RoleArn, ec.base.ECS.Cluster, env)
@@ -635,4 +730,93 @@ func reconcileAppSchedules(
 		"deleted", len(deleted),
 	)
 	return nil
+}
+
+var ecsRunCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Open an interactive ECS Exec session inside a running container",
+	Long: `Open an interactive shell session inside a running ECS task container using ECS Exec.
+
+Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
+The command connects to the first running task of the service and starts an interactive session.
+
+Example:
+  ops ecs run --app my-app --env stage
+  ops ecs run --app my-app --env stage --command "/bin/bash"`,
+	Run: func(cmd *cobra.Command, args []string) {
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+		command, _ := cmd.Flags().GetString("command")
+
+		utils.CheckBinary("aws")
+		utils.CheckBinary("session-manager-plugin")
+
+		ec := loadECSCtx()
+		requireAppInMonoRepo(ec.cfg, app)
+		_, merged, names := loadApp(ec, app, env, appConfigOverride)
+
+		ctx := context.Background()
+		out, err := ec.ecsClient.ListTasks(ctx, &awsecs.ListTasksInput{
+			Cluster:       awssdk.String(ec.base.ECS.Cluster),
+			ServiceName:   awssdk.String(names.Service),
+			DesiredStatus: ecstypes.DesiredStatusRunning,
+		})
+		if err != nil {
+			log.Fatal("Failed to list running tasks", "err", err)
+		}
+		if len(out.TaskArns) == 0 {
+			log.Fatal("No running tasks found for service", "service", names.Service, "cluster", ec.base.ECS.Cluster)
+		}
+
+		taskArn := out.TaskArns[0]
+		appName := merged.Name
+		log.Info("Starting ECS Exec session", "task", taskArn, "container", appName, "command", command)
+
+		execCmd := exec.Command("aws", "ecs", "execute-command",
+			"--cluster", ec.base.ECS.Cluster,
+			"--task", taskArn,
+			"--container", appName,
+			"--interactive",
+			"--command", command,
+		)
+		execCmd.Stdin = os.Stdin
+		execCmd.Stdout = os.Stdout
+		execCmd.Stderr = os.Stderr
+		if err := execCmd.Run(); err != nil {
+			log.Fatal("ECS Exec session ended with error", "err", err)
+		}
+	},
+}
+
+// wrapWords wraps s onto multiple lines, breaking on whitespace, so that no
+// line exceeds width characters. Words longer than width are kept whole on
+// their own line. Returns s unchanged when it already fits.
+func wrapWords(s string, width int) string {
+	if len(s) <= width || width <= 0 {
+		return s
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+	var lines []string
+	var current strings.Builder
+	for _, w := range words {
+		switch {
+		case current.Len() == 0:
+			current.WriteString(w)
+		case current.Len()+1+len(w) > width:
+			lines = append(lines, current.String())
+			current.Reset()
+			current.WriteString(w)
+		default:
+			current.WriteByte(' ')
+			current.WriteString(w)
+		}
+	}
+	if current.Len() > 0 {
+		lines = append(lines, current.String())
+	}
+	return strings.Join(lines, "\n")
 }
