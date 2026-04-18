@@ -76,6 +76,47 @@ type VolumeConfig struct {
 	Docker *VolumeDockerConfig `toml:"docker" yaml:"docker"`
 }
 
+// ScheduledTaskConfig describes one recurring task that runs on a cron or
+// rate schedule via EventBridge Scheduler. The task reuses the same image and
+// IAM roles as the main service but overrides the container command.
+type ScheduledTaskConfig struct {
+	// Name uniquely identifies this schedule within the app/env pair.
+	// Used as the suffix of the EventBridge Scheduler schedule name:
+	// "{app}-{env}-{name}".
+	Name string `toml:"name" yaml:"name"`
+
+	// Schedule is an EventBridge Scheduler expression:
+	//   cron(0 3 * * ? *)   — daily at 03:00 UTC
+	//   rate(6 hours)        — every 6 hours
+	Schedule string `toml:"schedule" yaml:"schedule"`
+
+	// Command overrides the container entrypoint for this scheduled run.
+	Command []string `toml:"command" yaml:"command"`
+
+	// Timezone is the IANA timezone for cron expressions (default: "UTC").
+	// Has no effect on rate() expressions.
+	Timezone string `toml:"timezone" yaml:"timezone"`
+
+	// Enabled controls whether the schedule is ENABLED or DISABLED in
+	// EventBridge Scheduler (default: true).
+	Enabled *bool `toml:"enabled" yaml:"enabled"`
+
+	// CPU overrides the task-level CPU units for this scheduled run only.
+	// When 0, the task definition's CPU value is used.
+	CPU int `toml:"cpu" yaml:"cpu"`
+
+	// Memory overrides the task-level memory in MiB for this scheduled run only.
+	// When 0, the task definition's memory value is used.
+	Memory int `toml:"memory" yaml:"memory"`
+
+	// FlexibleWindowMinutes sets the maximum number of minutes EventBridge
+	// Scheduler may shift the start time within. 0 = OFF (exact start time).
+	FlexibleWindowMinutes int `toml:"flexible_window_minutes" yaml:"flexible_window_minutes"`
+
+	// Description is an optional human-readable note stored on the schedule.
+	Description string `toml:"description" yaml:"description"`
+}
+
 // AppSection is a single named section within an app config (global, stage,
 // production, etc.). Secrets can be a list of strings or a map of
 // env-var → json-key; both forms normalise to a map via NormalizeSecrets.
@@ -117,6 +158,12 @@ type AppSection struct {
 	// Per-environment sections may use any volume type. The [global] section
 	// is restricted to multi-write-safe types (EFS).
 	Volumes []VolumeConfig `toml:"volumes" yaml:"volumes"`
+
+	// ScheduledTasks is the list of recurring tasks that run on a cron or rate
+	// schedule via EventBridge Scheduler. Per-environment sections REPLACE the
+	// global list entirely (like Volumes), so re-declare all tasks when
+	// overriding per-env.
+	ScheduledTasks []ScheduledTaskConfig `toml:"scheduled_tasks" yaml:"scheduled_tasks"`
 }
 
 // AppConfig is the top-level structure of an app's config.toml / config.yaml.

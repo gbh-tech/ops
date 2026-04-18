@@ -15,6 +15,7 @@ import (
 	"charm.land/log/v2"
 	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	"github.com/spf13/cobra"
 )
 
@@ -56,10 +57,11 @@ func init() {
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
 type ecsCtx struct {
-	cfg       *config.OpsConfig
-	base      *pkgecs.BaseConfig
-	ecsClient *awsecs.Client
-	cwClient  *cwlogs.Client
+	cfg         *config.OpsConfig
+	base        *pkgecs.BaseConfig
+	ecsClient   *awsecs.Client
+	cwClient    *cwlogs.Client
+	schedClient *scheduler.Client
 }
 
 // buildBaseConfig assembles a pkgecs.BaseConfig from the ops config. This is
@@ -103,10 +105,11 @@ func loadECSCtx() *ecsCtx {
 	awsCfg := aws.NewAWSConfig(ctx, cfg.AWS.Region, cfg.AWS.Profile)
 
 	return &ecsCtx{
-		cfg:       cfg,
-		base:      buildBaseConfig(cfg),
-		ecsClient: awsecs.NewFromConfig(awsCfg),
-		cwClient:  cwlogs.NewFromConfig(awsCfg),
+		cfg:         cfg,
+		base:        buildBaseConfig(cfg),
+		ecsClient:   awsecs.NewFromConfig(awsCfg),
+		cwClient:    cwlogs.NewFromConfig(awsCfg),
+		schedClient: scheduler.NewFromConfig(awsCfg),
 	}
 }
 
@@ -239,6 +242,10 @@ var ecsDeployCmd = &cobra.Command{
 			log.Warn("Cleanup failed (non-fatal)", "err", err)
 		}
 
+		if err := reconcileAppSchedules(ctx, ec, merged.ScheduledTasks, names, env, taskDefArn); err != nil {
+			log.Fatal("Failed to reconcile scheduled tasks", "err", err)
+		}
+
 		waitCmd := fmt.Sprintf("ops ecs wait --env %s", env)
 		if app != "" {
 			waitCmd = fmt.Sprintf("ops ecs wait --app %s --env %s", app, env)
@@ -299,6 +306,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
 			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
 			{"Volumes", fmt.Sprintf("%d", len(input.Volumes))},
+			{"Scheduled tasks", fmt.Sprintf("%d", len(merged.ScheduledTasks))},
 		}
 		if merged.DatabaseMigrations {
 			rows = append(rows, []string{"Migration cmd", strings.Join(merged.MigrationCommand, " ")})
@@ -318,6 +326,16 @@ var ecsRenderCmd = &cobra.Command{
 			rows = append(rows, []string{
 				fmt.Sprintf("  Volume: %s", v.Name),
 				fmt.Sprintf("%s → %s%s", volType, v.ContainerPath, readOnly),
+			})
+		}
+		for _, st := range merged.ScheduledTasks {
+			state := "enabled"
+			if st.Enabled != nil && !*st.Enabled {
+				state = "disabled"
+			}
+			rows = append(rows, []string{
+				fmt.Sprintf("  Schedule: %s", st.Name),
+				fmt.Sprintf("%s | cmd: %s | %s", st.Schedule, strings.Join(st.Command, " "), state),
 			})
 		}
 
@@ -551,4 +569,70 @@ var ecsSecretsCmd = &cobra.Command{
 
 		renderKeyValueTable("Variable", "ValueFrom (ARN)", rows)
 	},
+}
+
+// reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
+// to EventBridge Scheduler. It is a no-op when no scheduler is configured and
+// no tasks are declared.
+func reconcileAppSchedules(
+	ctx context.Context,
+	ec *ecsCtx,
+	tasks []pkgecs.ScheduledTaskConfig,
+	names pkgecs.Names,
+	env, taskDefArn string,
+) error {
+	sched := ec.cfg.ECS.Scheduler
+
+	if len(tasks) == 0 && sched.GroupName == "" {
+		return nil
+	}
+	if len(tasks) == 0 {
+		// Scheduler is configured but this app has no tasks — nothing to do.
+		return nil
+	}
+
+	if sched.GroupName == "" || sched.RoleArn == "" {
+		log.Fatal(
+			"app declares scheduled_tasks but ecs.scheduler.{group_name,role_arn} are not set in .ops/config.yaml",
+			"app", names.Service,
+		)
+	}
+
+	appName := names.Service[:strings.LastIndex(names.Service, "-"+env)]
+	capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, appName, env)
+	groupName := pkgecs.ExpandSchedulerTemplate(sched.GroupName, ec.base.ECS.Cluster, env)
+	roleArn := pkgecs.ExpandSchedulerTemplate(sched.RoleArn, ec.base.ECS.Cluster, env)
+
+	// Fetch the service's network config once, so all schedules share the
+	// same subnets/security groups as the running service.
+	netCfg, err := pkgecs.FetchServiceNetworkConfig(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service)
+	if err != nil {
+		log.Warn("Could not fetch service network config for scheduled tasks (proceeding without)", "err", err)
+		netCfg = nil
+	}
+
+	cfg := pkgecs.ReconcileConfig{
+		GroupName:        groupName,
+		RoleArn:          roleArn,
+		Cluster:          ec.base.ECS.Cluster,
+		Region:           ec.base.AWS.Region,
+		AccountID:        ec.base.AWS.AccountID,
+		AppName:          appName,
+		Env:              env,
+		CapacityProvider: capacityProvider,
+		LaunchType:       ec.base.Defaults.LaunchType,
+		NetworkConfig:    netCfg,
+	}
+
+	log.Info("Reconciling scheduled tasks", "app", appName, "env", env, "count", len(tasks))
+	created, updated, deleted, err := pkgecs.ReconcileSchedules(ctx, ec.schedClient, cfg, taskDefArn, tasks)
+	if err != nil {
+		return err
+	}
+	log.Info("Scheduled tasks reconciled",
+		"created", len(created),
+		"updated", len(updated),
+		"deleted", len(deleted),
+	)
+	return nil
 }

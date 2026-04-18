@@ -246,3 +246,35 @@ name = "my-app"
 #
 # [production.secrets]
 # STRIPE_KEY = "stripe_key"
+
+# ---------------------------------------------------------------------------
+# [[<section>.scheduled_tasks]] — recurring one-off tasks via EventBridge Scheduler
+# ---------------------------------------------------------------------------
+# Each entry registers (or updates) one EventBridge Scheduler schedule that
+# launches a single ECS task using the same image, secrets, environment vars,
+# IAM roles, and network config as the main service — but with the command
+# overridden per entry. Terraform must provision the scheduler IAM role and
+# schedule group first (see ops-cli docs for the Terraform spec).
+#
+# Per-environment [[<env>.scheduled_tasks]] arrays REPLACE the global list
+# entirely (they do not merge). Re-declare all tasks you want in that env.
+#
+# NOTE: In TOML, [[global.scheduled_tasks]] must appear AFTER all scalar
+# fields and subtable headers in [global] to avoid the subtable scoping trap.
+#
+# [[global.scheduled_tasks]]
+# name               = "daily-cleanup"               # REQUIRED. Unique within this app/env.
+#                                                    # Becomes: {app}-{env}-daily-cleanup in EventBridge.
+# schedule           = "cron(0 3 * * ? *)"           # REQUIRED. cron() or rate() expression.
+# command            = ["node", "scripts/cleanup.js"] # REQUIRED. Container command override.
+# timezone           = "America/New_York"             # optional; default "UTC". Applies to cron() only.
+# enabled            = true                           # optional; default true. Set false to DISABLE in EventBridge.
+# cpu                = 256                            # optional; override task CPU for this schedule only.
+# memory             = 512                            # optional; override task memory (MiB) for this schedule only.
+# flexible_window_minutes = 15                        # optional; default 0 (exact start). Max minutes to shift start time.
+# description        = "Purge temp files nightly"    # optional; stored as a note on the schedule.
+#
+# [[global.scheduled_tasks]]
+# name     = "weekly-report"
+# schedule = "cron(0 8 ? * MON *)"
+# command  = ["bundle", "exec", "rails", "reports:weekly"]

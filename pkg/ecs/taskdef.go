@@ -136,6 +136,14 @@ func ExpandTemplate(s, service, env string) string {
 	return s
 }
 
+// ExpandSchedulerTemplate replaces {cluster} and {env} placeholders in s.
+// Used to expand ecs.scheduler.{group_name,role_arn} values from .ops/config.yaml.
+func ExpandSchedulerTemplate(s, cluster, env string) string {
+	s = strings.ReplaceAll(s, "{cluster}", cluster)
+	s = strings.ReplaceAll(s, "{env}", env)
+	return s
+}
+
 // resolveImage derives the full image URI following the Python renderer logic:
 //   - External images (containing '/') are used as-is if already tagged, else
 //     the imageTag is appended.

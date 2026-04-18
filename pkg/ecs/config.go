@@ -31,6 +31,7 @@ func validateGlobalVolumes(volumes []app.VolumeConfig) error {
 type AppSection = app.AppSection
 type AppConfig = app.AppConfig
 type HealthCheckConfig = app.HealthCheckConfig
+type ScheduledTaskConfig = app.ScheduledTaskConfig
 
 var LoadFile = app.LoadFile
 var LoadAppConfig = app.LoadAppConfig
@@ -198,6 +199,13 @@ func applySection(dst *AppSection, src AppSection) {
 	// Volumes replace rather than merge: the more-specific section wins entirely.
 	if len(src.Volumes) > 0 {
 		dst.Volumes = src.Volumes
+	}
+
+	// ScheduledTasks replace rather than merge: the more-specific section wins
+	// entirely. This keeps reconciliation predictable — the config is always
+	// the single source of truth for what schedules should exist.
+	if len(src.ScheduledTasks) > 0 {
+		dst.ScheduledTasks = src.ScheduledTasks
 	}
 }
 

@@ -11,6 +11,23 @@ type ECSDefaults struct {
 	LogDriver    string `mapstructure:"log_driver"`
 }
 
+// ECSSchedulerConfig holds EventBridge Scheduler settings used when an app
+// declares scheduled_tasks. The IAM role and schedule group must be
+// pre-provisioned by Terraform; ops-cli only creates/updates/deletes the
+// individual schedule resources inside the group.
+type ECSSchedulerConfig struct {
+	// RoleArn is the ARN of the IAM role EventBridge Scheduler assumes to call
+	// ecs:RunTask. Supports {env} and {cluster} template placeholders.
+	// Example: "arn:aws:iam::123456789012:role/ecs-scheduler-{env}"
+	RoleArn string `mapstructure:"role_arn"`
+
+	// GroupName is the EventBridge Scheduler schedule group that all
+	// ops-managed schedules for this cluster live in. Supports {env} and
+	// {cluster} template placeholders.
+	// Example: "{cluster}-{env}"
+	GroupName string `mapstructure:"group_name"`
+}
+
 // ECSConfig holds all ECS-related settings read from .ops/config.yaml.
 // It covers both the infrastructure details (cluster, IAM roles, etc.) that
 // were previously in deploy/base.toml and the app config path pointers.
@@ -29,4 +46,8 @@ type ECSConfig struct {
 
 	// Task definition defaults (previously in deploy/base.toml [defaults])
 	Defaults ECSDefaults `mapstructure:"defaults"`
+
+	// Scheduler holds EventBridge Scheduler settings. Required when any app
+	// declares scheduled_tasks.
+	Scheduler ECSSchedulerConfig `mapstructure:"scheduler"`
 }

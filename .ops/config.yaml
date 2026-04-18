@@ -76,6 +76,16 @@ ecs:
     launch_type: "EC2"
     log_driver: "awslogs"
 
+  # Required when any app declares scheduled_tasks in its deploy/config.toml.
+  # The IAM role and schedule group are provisioned by the aws-ecs Terraform
+  # module (modules/aws-ecs/scheduler.tf). Wire the Terraform outputs here:
+  #   module.ecs.scheduler_role_arn   → role_arn
+  #   module.ecs.scheduler_group_name → group_name
+  # Supports {env} and {cluster} template placeholders in both values.
+  # scheduler:
+  #   role_arn:   "arn:aws:iam::091791791455:role/ecs-scheduler-{env}"
+  #   group_name: "{cluster}-{env}"
+
 # Configuration of the Cloud provider Microsoft Azure
 azure:
   location: "East US"
