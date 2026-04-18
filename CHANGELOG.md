@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+### Patch Changes
+
+- 11eb40e: Robust config parsing to avoid silent errors
+- 5bf606b: Support scheduled tasks
+- fe09a8b: Support advanced scheduled tasks workflows
+
 ## 1.4.0
 
 ### Minor Changes
