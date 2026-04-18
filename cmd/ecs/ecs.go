@@ -57,7 +57,7 @@ func init() {
 
 	ecsRenderCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
 
-	ecsCleanupCmd.Flags().Int("keep", 5, "Number of task definition revisions to keep")
+	ecsCleanupCmd.Flags().Int("keep", 0, "Number of task definition revisions to keep (overrides ecs.cleanup_keep; defaults to 5)")
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
 
@@ -257,8 +257,14 @@ var ecsDeployCmd = &cobra.Command{
 			log.Fatal("Failed to update service", "err", err)
 		}
 
-		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.Family, 5); err != nil {
-			log.Warn("Cleanup failed (non-fatal)", "err", err)
+		keep := ec.cfg.ECS.EffectiveCleanupKeep()
+		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.Family, keep); err != nil {
+			log.Warn("Cleanup failed (non-fatal)", "family", names.Family, "err", err)
+		}
+		if scheduledTaskDefArn != "" {
+			if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.ScheduledFamily, keep); err != nil {
+				log.Warn("Cleanup failed (non-fatal)", "family", names.ScheduledFamily, "err", err)
+			}
 		}
 
 		if err := reconcileAppSchedules(ctx, ec, merged.ScheduledTasks, names, merged.Name, env, scheduledTaskDefArn); err != nil {
@@ -494,19 +500,31 @@ var ecsDbMigrateCmd = &cobra.Command{
 var ecsCleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Remove old ECS task definition revisions, keeping the latest N",
+	Long: `Remove old ECS task definition revisions, keeping the latest N for both
+the service family ("{app}-{env}") and the scheduled family ("{app}-{env}-scheduled").
+
+The number kept defaults to ecs.cleanup_keep from .ops/config.yaml (or 5 when
+unset). Pass --keep to override for a single invocation.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
-		keep, _ := cmd.Flags().GetInt("keep")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
 		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
+		keep := ec.cfg.ECS.EffectiveCleanupKeep()
+		if cmd.Flags().Changed("keep") {
+			keep, _ = cmd.Flags().GetInt("keep")
+		}
+
 		ctx := context.Background()
 		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.Family, keep); err != nil {
-			log.Fatal("Cleanup failed", "err", err)
+			log.Fatal("Cleanup failed", "family", names.Family, "err", err)
+		}
+		if err := pkgecs.CleanupTaskDefinitions(ctx, ec.ecsClient, names.ScheduledFamily, keep); err != nil {
+			log.Fatal("Cleanup failed", "family", names.ScheduledFamily, "err", err)
 		}
 	},
 }
