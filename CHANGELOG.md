@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+
+### Patch Changes
+
+- 7e6594e: Set polling to 10s when using ecs wait
+
 ## 1.4.1
 
 ### Patch Changes
