@@ -47,7 +47,23 @@ type ECSConfig struct {
 	// Task definition defaults (previously in deploy/base.toml [defaults])
 	Defaults ECSDefaults `mapstructure:"defaults"`
 
+	// CleanupKeep is the number of task definition revisions to retain per
+	// family during automatic cleanup after `ops ecs deploy` and as the
+	// default for `ops ecs cleanup`. Applies to both the service family and
+	// the dedicated "{app}-{env}-scheduled" family. Defaults to 5 when zero
+	// or unset; the `--keep` flag on `ops ecs cleanup` overrides this.
+	CleanupKeep int `mapstructure:"cleanup_keep"`
+
 	// Scheduler holds EventBridge Scheduler settings. Required when any app
 	// declares scheduled_tasks.
 	Scheduler ECSSchedulerConfig `mapstructure:"scheduler"`
+}
+
+// EffectiveCleanupKeep returns the configured CleanupKeep, defaulting to 5
+// when zero or negative. Centralizes the default so callers don't repeat it.
+func (c ECSConfig) EffectiveCleanupKeep() int {
+	if c.CleanupKeep <= 0 {
+		return 5
+	}
+	return c.CleanupKeep
 }

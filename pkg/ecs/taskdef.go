@@ -20,11 +20,38 @@ func BuildTaskDefinition(
 	env, imageTag string,
 	secrets []ECSSecret,
 ) awsecs.RegisterTaskDefinitionInput {
+	return buildTaskDefinitionInput(base, merged, names, names.Family, env, imageTag, secrets, true)
+}
+
+// BuildScheduledTaskDefinition is like BuildTaskDefinition but registers under
+// names.ScheduledFamily and strips port mappings and health checks. Used for
+// EventBridge Scheduler scheduled tasks and ad-hoc schedule-run invocations.
+func BuildScheduledTaskDefinition(
+	base *BaseConfig,
+	merged MergedConfig,
+	names Names,
+	env, imageTag string,
+	secrets []ECSSecret,
+) awsecs.RegisterTaskDefinitionInput {
+	return buildTaskDefinitionInput(base, merged, names, names.ScheduledFamily, env, imageTag, secrets, false)
+}
+
+// buildTaskDefinitionInput is the shared implementation for BuildTaskDefinition
+// and BuildScheduledTaskDefinition. withHealthCheck controls whether port
+// mappings and the container health check are included.
+func buildTaskDefinitionInput(
+	base *BaseConfig,
+	merged MergedConfig,
+	names Names,
+	family, env, imageTag string,
+	secrets []ECSSecret,
+	withHealthCheck bool,
+) awsecs.RegisterTaskDefinitionInput {
 	appName := merged.Name
 	image := resolveImage(base.AWS.ECRUrl, env, merged.Image, appName, imageTag)
 
 	taskVolumes, mountPoints := buildVolumes(merged.Volumes)
-	container := buildContainer(appName, image, merged, names, base.AWS.Region, secrets, mountPoints)
+	container := buildContainer(appName, image, merged, names, base.AWS.Region, secrets, mountPoints, withHealthCheck)
 
 	executionRole := ExpandTemplate(coalesce(merged.ExecutionRole, base.ECS.ExecutionRole), appName, env)
 	taskRole := ExpandTemplate(coalesce(merged.TaskRole, base.ECS.TaskRole), appName, env)
@@ -33,7 +60,7 @@ func BuildTaskDefinition(
 	launchType := coalesce(merged.LaunchType, "EC2")
 
 	input := awsecs.RegisterTaskDefinitionInput{
-		Family:                  aws.String(names.Family),
+		Family:                  aws.String(family),
 		NetworkMode:             ecstypes.NetworkMode(strings.ToLower(networkMode)),
 		RequiresCompatibilities: []ecstypes.Compatibility{ecstypes.Compatibility(launchType)},
 		Cpu:                     aws.String(fmt.Sprintf("%d", merged.CPU)),
@@ -170,6 +197,7 @@ func buildContainer(
 	region string,
 	secrets []ECSSecret,
 	mountPoints []ecstypes.MountPoint,
+	withHealthCheck bool,
 ) ecstypes.ContainerDefinition {
 	c := ecstypes.ContainerDefinition{
 		Name:      aws.String(appName),
@@ -181,7 +209,7 @@ func buildContainer(
 		c.MountPoints = mountPoints
 	}
 
-	if merged.Port != 0 {
+	if withHealthCheck && merged.Port != 0 {
 		c.PortMappings = []ecstypes.PortMapping{
 			{
 				ContainerPort: aws.Int32(int32(merged.Port)),
@@ -214,7 +242,7 @@ func buildContainer(
 		}
 	}
 
-	if merged.HealthCheckPath != "" && merged.Port != 0 {
+	if withHealthCheck && merged.HealthCheckPath != "" && merged.Port != 0 {
 		c.HealthCheck = buildHealthCheck(merged)
 	}
 

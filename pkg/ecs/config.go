@@ -77,9 +77,10 @@ type MergedConfig struct {
 
 // Names holds derived ECS resource names.
 type Names struct {
-	Family   string
-	Service  string
-	LogGroup string
+	Family          string
+	Service         string
+	LogGroup        string
+	ScheduledFamily string // "{app}-{env}-scheduled"
 }
 
 // ECSSecret is a single entry in the ECS secrets list.
@@ -260,10 +261,15 @@ type BuildSecretSpec = app.BuildSecretSpec
 var ResolveBuildSecretSpecs = app.ResolveBuildSecretSpecs
 var ResolveBuildArgs = app.ResolveBuildArgs
 
-// ComputeNames derives the ECS family name, service name, and CloudWatch log
-// group from the merged config.
+// ComputeNames derives the ECS family name, service name, CloudWatch log
+// group, and scheduled task family from the merged config.
 func ComputeNames(config MergedConfig, env, cluster string) Names {
 	family := fmt.Sprintf("%s-%s", config.Name, env)
 	logGroup := fmt.Sprintf("/ecs/%s/%s/%s", cluster, env, config.Name)
-	return Names{Family: family, Service: family, LogGroup: logGroup}
+	return Names{
+		Family:          family,
+		Service:         family,
+		LogGroup:        logGroup,
+		ScheduledFamily: family + "-scheduled",
+	}
 }

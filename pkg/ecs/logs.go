@@ -61,3 +61,39 @@ func PrintMigrationLogs(ctx context.Context, client *cwlogs.Client, logGroup, ap
 	}
 	return nil
 }
+
+// PrintTaskLogs prints all log events for a one-off ECS task after it has
+// stopped. The CloudWatch log stream follows the awslogs convention:
+// {streamPrefix}/{containerName}/{taskID}.
+// It paginates through all events so no output is truncated.
+func PrintTaskLogs(ctx context.Context, client *cwlogs.Client, logGroup, streamPrefix, containerName, taskArn string) error {
+	parts := strings.Split(taskArn, "/")
+	taskID := parts[len(parts)-1]
+	logStream := fmt.Sprintf("%s/%s/%s", streamPrefix, containerName, taskID)
+
+	log.Info("Fetching task logs", "stream", logStream)
+
+	var nextToken *string
+	for {
+		out, err := client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
+			LogGroupName:  aws.String(logGroup),
+			LogStreamName: aws.String(logStream),
+			StartFromHead: aws.Bool(true),
+			NextToken:     nextToken,
+		})
+		if err != nil {
+			log.Warn("Could not retrieve task logs", "stream", logStream, "err", err)
+			return nil
+		}
+		for _, event := range out.Events {
+			ts := time.UnixMilli(aws.ToInt64(event.Timestamp))
+			fmt.Printf("%s %s\n", ts.Format(time.RFC3339), aws.ToString(event.Message))
+		}
+		// GetLogEvents returns the same token when there are no more events.
+		if out.NextForwardToken == nil || aws.ToString(out.NextForwardToken) == aws.ToString(nextToken) {
+			break
+		}
+		nextToken = out.NextForwardToken
+	}
+	return nil
+}

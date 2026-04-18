@@ -115,7 +115,10 @@ func RunMigrationTask(ctx context.Context, client *awsecs.Client, opts Migration
 	log.Info("Migration task started", "taskArn", taskArn)
 	log.Info("Waiting for migration to complete...")
 
-	waiter := awsecs.NewTasksStoppedWaiter(client)
+	waiter := awsecs.NewTasksStoppedWaiter(client, func(o *awsecs.TasksStoppedWaiterOptions) {
+		o.MinDelay = 2 * time.Second
+		o.MaxDelay = 15 * time.Second
+	})
 	if err := waiter.Wait(ctx, &awsecs.DescribeTasksInput{
 		Cluster: aws.String(opts.Cluster),
 		Tasks:   []string{taskArn},

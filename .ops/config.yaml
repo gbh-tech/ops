@@ -76,6 +76,12 @@ ecs:
     launch_type: "EC2"
     log_driver: "awslogs"
 
+  # Number of task definition revisions to retain per family during automatic
+  # cleanup after `ops ecs deploy` and as the default for `ops ecs cleanup`.
+  # Applies to both the service family ("{app}-{env}") and the scheduled
+  # family ("{app}-{env}-scheduled"). Defaults to 5 when omitted.
+  # cleanup_keep: 5
+
   # Required when any app declares scheduled_tasks in its deploy/config.toml.
   # The IAM role and schedule group are provisioned by the aws-ecs Terraform
   # module (modules/aws-ecs/scheduler.tf). Wire the Terraform outputs here:
