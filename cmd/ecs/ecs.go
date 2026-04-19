@@ -73,6 +73,15 @@ type ecsCtx struct {
 	schedClient *scheduler.Client
 }
 
+// ecsDefaultReplicas returns the effective replica count from ECSDefaults,
+// preferring the new replicas key over the deprecated desired_count fallback.
+func ecsDefaultReplicas(d config.ECSDefaults) int {
+	if d.Replicas != 0 {
+		return d.Replicas
+	}
+	return d.DesiredCount
+}
+
 // buildBaseConfig assembles a pkgecs.BaseConfig from the ops config. This is
 // the single place that maps OpsConfig fields to BaseConfig fields; both
 // loadECSCtx and loadAppForInspect call it so additions only need one edit.
@@ -91,12 +100,12 @@ func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
 			CapacityProvider: cfg.ECS.CapacityProvider,
 		},
 		Defaults: pkgecs.BaseDefaults{
-			CPU:          cfg.ECS.Defaults.CPU,
-			Memory:       cfg.ECS.Defaults.Memory,
-			DesiredCount: cfg.ECS.Defaults.DesiredCount,
-			NetworkMode:  cfg.ECS.Defaults.NetworkMode,
-			LaunchType:   cfg.ECS.Defaults.LaunchType,
-			LogDriver:    cfg.ECS.Defaults.LogDriver,
+			CPU:         cfg.ECS.Defaults.CPU,
+			Memory:      cfg.ECS.Defaults.Memory,
+			Replicas:    ecsDefaultReplicas(cfg.ECS.Defaults),
+			NetworkMode: cfg.ECS.Defaults.NetworkMode,
+			LaunchType:  cfg.ECS.Defaults.LaunchType,
+			LogDriver:   cfg.ECS.Defaults.LogDriver,
 		},
 	}
 }
@@ -230,7 +239,7 @@ var ecsDeployCmd = &cobra.Command{
 			log.Info("Scheduled task definition registered", "family", names.ScheduledFamily, "arn", scheduledTaskDefArn)
 		}
 
-		if merged.DatabaseMigrations && *merged.DesiredCount > 0 {
+		if merged.DatabaseMigrations && *merged.Replicas > 0 {
 			if len(merged.MigrationCommand) == 0 {
 				log.Fatal("database_migrations is true but migration_command is not set")
 			}
@@ -253,7 +262,7 @@ var ecsDeployCmd = &cobra.Command{
 		}
 
 		log.Info("Updating service", "service", names.Service)
-		if err := pkgecs.UpdateService(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service, taskDefArn, int32(*merged.DesiredCount)); err != nil {
+		if err := pkgecs.UpdateService(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service, taskDefArn, int32(*merged.Replicas)); err != nil {
 			log.Fatal("Failed to update service", "err", err)
 		}
 
@@ -326,7 +335,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"Image", *ctr.Image},
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},
-			{"Replicas", fmt.Sprintf("%d", *merged.DesiredCount)},
+			{"Replicas", fmt.Sprintf("%d", *merged.Replicas)},
 			{"Env vars", fmt.Sprintf("%d", len(ctr.Environment))},
 			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
 			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
@@ -424,9 +433,13 @@ var ecsWaitCmd = &cobra.Command{
 
 		ec := loadECSCtx()
 		requireAppInMonoRepo(ec.cfg, app)
-		_, _, names := loadApp(ec, app, env, appConfigOverride)
+		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
 		ctx := context.Background()
+		if merged.Replicas != nil && *merged.Replicas == 0 {
+			log.Info("replicas is 0, skipping wait for service stability", "app", merged.Name)
+			return
+		}
 		if err := pkgecs.WaitForStability(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service); err != nil {
 			log.Fatal("Service did not stabilize", "err", err)
 		}
@@ -469,8 +482,8 @@ var ecsDbMigrateCmd = &cobra.Command{
 			log.Info("No migrations configured for this app, skipping", "app", merged.Name)
 			return
 		}
-		if *merged.DesiredCount == 0 {
-			log.Info("desired_count is 0, skipping migrations", "app", merged.Name)
+		if *merged.Replicas == 0 {
+			log.Info("replicas is 0, skipping migrations", "app", merged.Name)
 			return
 		}
 		if len(merged.MigrationCommand) == 0 {

@@ -71,7 +71,7 @@ ecs:
   defaults:
     cpu: 256
     memory: 512
-    desired_count: 1
+    replicas: 1
     network_mode: "awsvpc"
     launch_type: "EC2"
     log_driver: "awslogs"

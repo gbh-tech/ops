@@ -121,11 +121,13 @@ type ScheduledTaskConfig struct {
 // production, etc.). Secrets can be a list of strings or a map of
 // env-var → json-key; both forms normalise to a map via NormalizeSecrets.
 type AppSection struct {
-	Name               string            `toml:"name"                yaml:"name"`
-	Image              string            `toml:"image"               yaml:"image"`
-	Port               int               `toml:"port"                yaml:"port"`
-	CPU                int               `toml:"cpu"                 yaml:"cpu"`
-	Memory             int               `toml:"memory"              yaml:"memory"`
+	Name     string `toml:"name"                yaml:"name"`
+	Image    string `toml:"image"               yaml:"image"`
+	Port     int    `toml:"port"                yaml:"port"`
+	CPU      int    `toml:"cpu"                 yaml:"cpu"`
+	Memory   int    `toml:"memory"              yaml:"memory"`
+	Replicas *int   `toml:"replicas"            yaml:"replicas"`
+	// Deprecated: use Replicas instead. Kept for backward compatibility.
 	DesiredCount       *int              `toml:"desired_count"       yaml:"desired_count"`
 	NetworkMode        string            `toml:"network_mode"        yaml:"network_mode"`
 	LaunchType         string            `toml:"launch_type"         yaml:"launch_type"`
@@ -229,10 +231,18 @@ func unknownTOMLKeys(md toml.MetaData) []string {
 }
 
 // LoadAppConfig reads an app config file (TOML or YAML by extension).
+// If a section sets desired_count but not replicas, the value is promoted to
+// replicas so all downstream code only needs to consult AppSection.Replicas.
 func LoadAppConfig(path string) (AppConfig, error) {
 	var cfg AppConfig
 	if err := LoadFile(path, &cfg); err != nil {
 		return nil, err
+	}
+	for k, section := range cfg {
+		if section.Replicas == nil && section.DesiredCount != nil {
+			section.Replicas = section.DesiredCount
+			cfg[k] = section
+		}
 	}
 	return cfg, nil
 }

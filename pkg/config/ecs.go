@@ -3,8 +3,10 @@ package config
 // ECSDefaults holds cluster-wide task definition defaults applied before
 // per-app config values are merged in.
 type ECSDefaults struct {
-	CPU          int    `mapstructure:"cpu"`
-	Memory       int    `mapstructure:"memory"`
+	CPU      int `mapstructure:"cpu"`
+	Memory   int `mapstructure:"memory"`
+	Replicas int `mapstructure:"replicas"`
+	// Deprecated: use Replicas instead. Kept for backward compatibility.
 	DesiredCount int    `mapstructure:"desired_count"`
 	NetworkMode  string `mapstructure:"network_mode"`
 	LaunchType   string `mapstructure:"launch_type"`

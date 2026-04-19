@@ -56,8 +56,9 @@ name = "my-app"
 # Memory in MiB. Overrides ecs.defaults.memory.
 # memory = 1024
 
-# Number of running task replicas. Overrides ecs.defaults.desired_count.
-# desired_count = 1
+# Number of running task replicas. Overrides ecs.defaults.replicas.
+# replicas = 1
+# desired_count = 1  # deprecated alias for replicas
 
 # ECS network mode. Overrides ecs.defaults.network_mode.
 # Valid values: awsvpc (recommended), bridge, host, none.
@@ -169,7 +170,7 @@ name = "my-app"
 # [stage] — overrides applied only when deploying to the stage environment
 # ---------------------------------------------------------------------------
 [stage]
-# desired_count = 1
+# replicas = 1
 # cpu = 256
 # memory = 512
 
@@ -212,7 +213,7 @@ name = "my-app"
 #   transit_encryption = "ENABLED"
 #
 # Bind mount — maps a path on the EC2 host into the container.
-# Only safe when desired_count = 1 or tasks are pinned to one host.
+# Only safe when replicas = 1 or tasks are pinned to one host.
 # [[stage.volumes]]
 # name           = "tmp-scratch"
 # container_path = "/tmp/scratch"
@@ -235,7 +236,7 @@ name = "my-app"
 # [production] — overrides applied only when deploying to production
 # ---------------------------------------------------------------------------
 [production]
-# desired_count = 3
+# replicas = 3
 # cpu = 1024
 # memory = 2048
 

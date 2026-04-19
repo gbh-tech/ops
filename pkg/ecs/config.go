@@ -54,12 +54,12 @@ type BaseECS struct {
 
 // BaseDefaults holds the cluster-wide defaults from base.toml.
 type BaseDefaults struct {
-	CPU          int    `toml:"cpu"           yaml:"cpu"`
-	Memory       int    `toml:"memory"        yaml:"memory"`
-	DesiredCount int    `toml:"desired_count" yaml:"desired_count"`
-	NetworkMode  string `toml:"network_mode"  yaml:"network_mode"`
-	LaunchType   string `toml:"launch_type"   yaml:"launch_type"`
-	LogDriver    string `toml:"log_driver"    yaml:"log_driver"`
+	CPU         int    `toml:"cpu"           yaml:"cpu"`
+	Memory      int    `toml:"memory"        yaml:"memory"`
+	Replicas    int    `toml:"replicas" yaml:"replicas"`
+	NetworkMode string `toml:"network_mode"  yaml:"network_mode"`
+	LaunchType  string `toml:"launch_type"   yaml:"launch_type"`
+	LogDriver   string `toml:"log_driver"    yaml:"log_driver"`
 }
 
 // BaseConfig is the top-level structure of deploy/base.toml.
@@ -101,14 +101,14 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig
 		return MergedConfig{}, err
 	}
 
-	defaultDesiredCount := base.Defaults.DesiredCount
+	defaultReplicas := base.Defaults.Replicas
 	merged := AppSection{
-		CPU:          base.Defaults.CPU,
-		Memory:       base.Defaults.Memory,
-		DesiredCount: &defaultDesiredCount,
-		NetworkMode:  base.Defaults.NetworkMode,
-		LaunchType:   base.Defaults.LaunchType,
-		LogDriver:    base.Defaults.LogDriver,
+		CPU:         base.Defaults.CPU,
+		Memory:      base.Defaults.Memory,
+		Replicas:    &defaultReplicas,
+		NetworkMode: base.Defaults.NetworkMode,
+		LaunchType:  base.Defaults.LaunchType,
+		LogDriver:   base.Defaults.LogDriver,
 	}
 
 	applySection(&merged, appCfg["global"])
@@ -149,8 +149,8 @@ func applySection(dst *AppSection, src AppSection) {
 	if src.Memory != 0 {
 		dst.Memory = src.Memory
 	}
-	if src.DesiredCount != nil {
-		dst.DesiredCount = src.DesiredCount
+	if src.Replicas != nil {
+		dst.Replicas = src.Replicas
 	}
 	if src.NetworkMode != "" {
 		dst.NetworkMode = src.NetworkMode
