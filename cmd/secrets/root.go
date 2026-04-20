@@ -21,10 +21,10 @@ var Command = &cobra.Command{
 // is not werf, since the secrets commands invoke the werf CLI directly.
 func requireWerfProvider() {
 	cfg := config.LoadConfig()
-	if cfg.Deployment.Provider != "werf" {
+	if cfg.DeploymentProvider() != "werf" {
 		log.Fatal(
-			"ops secrets requires deployment.provider = \"werf\"",
-			"current", cfg.Deployment.Provider,
+			"ops secrets requires the active deployment provider to be \"werf\"",
+			"current", cfg.DeploymentProvider(),
 		)
 	}
 }

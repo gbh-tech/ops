@@ -1,30 +1,39 @@
 package config
 
-import "charm.land/log/v2"
+import "fmt"
 
-type RegistryType string
-
-var SupportedRegistries = []RegistryType{
-	"acr",
-	"ecr",
-	"gcr",
-}
-
+// RegistryConfig holds optional overrides for the container image registry.
+// In normal use the registry kind and URL are derived from the active cloud
+// provider (e.g. AWS → ECR with URL `{account_id}.dkr.ecr.{region}.amazonaws.com`).
+// Set `registry.url` only when pulling/pushing to a registry in a different
+// account or region.
 type RegistryConfig struct {
-	Type RegistryType `mapstructure:"type"`
-	URL  string       `mapstructure:"url"`
+	URL string `mapstructure:"url"`
 }
 
-func CheckRegistryConfig(config *RegistryConfig) {
-	for _, registryType := range SupportedRegistries {
-		if config.Type == registryType {
-			return
-		}
+// registryTypeForCloud returns the canonical registry kind for a cloud provider.
+func registryTypeForCloud(cloud string) string {
+	switch cloud {
+	case "aws":
+		return "ecr"
+	case "azure":
+		return "acr"
+	case "gcp":
+		return "gar"
 	}
+	return ""
+}
 
-	log.Fatal(
-		"Container registry specified is not supported or valid:",
-		"registry",
-		config.Type,
-	)
+// deriveRegistryURL builds the default registry URL for a given cloud provider
+// from the provider's own config. Returns an empty string when the required
+// fields are missing; callers should validate.
+func deriveRegistryURL(cloud string, config *OpsConfig) string {
+	switch cloud {
+	case "aws":
+		if config.AWS.AccountId == "" || config.AWS.Region == "" {
+			return ""
+		}
+		return fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com", config.AWS.AccountId, config.AWS.Region)
+	}
+	return ""
 }

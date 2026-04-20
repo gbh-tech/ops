@@ -54,8 +54,9 @@ points directly to an app config that defines the image name.`,
 			log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
 		}
 		imageName := resolveImageName(cfg, app, appCfg)
-		versionedURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)
-		envURI := resolveImageURI(cfg.Registry.URL, env, imageName, env)
+		registryURL := cfg.RegistryURL()
+		versionedURI := resolveImageURI(registryURL, env, imageName, tag)
+		envURI := resolveImageURI(registryURL, env, imageName, env)
 
 		utils.CheckBinary("docker")
 

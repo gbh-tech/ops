@@ -61,7 +61,7 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		}
 
 		imageName := resolveImageName(cfg, app, appCfg)
-		imageURI := resolveImageURI(cfg.Registry.URL, env, imageName, tag)
+		imageURI := resolveImageURI(cfg.RegistryURL(), env, imageName, tag)
 
 		if dockerfile == "" {
 			dockerfile = defaultDockerfile(cfg, app)
@@ -121,7 +121,7 @@ func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgap
 	serviceName := resolveServiceName(appCfg, app, cfg)
 
 	// --- build_secrets ---
-	specs, err := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.SecretArnPrefix)
+	specs, err := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))
 	if err != nil {
 		log.Fatal("Invalid build_secrets config", "err", err)
 	}

@@ -17,11 +17,11 @@ var WerfCommand = &cobra.Command{
 		config := config.LoadConfig()
 		opts := werfCommandFlags(cmd)
 
-		if config.Deployment.Provider != "werf" {
+		if config.DeploymentProvider() != "werf" {
 			log.Fatal(
 				"Please select werf as the deployment provider first.",
 				"deploymentProvider",
-				config.Deployment.Provider,
+				config.DeploymentProvider(),
 			)
 		}
 
@@ -31,7 +31,7 @@ var WerfCommand = &cobra.Command{
 
 		if opts.Repo == "" {
 			opts.Repo = utils.GetFullRegistryRepositoryURL(
-				config.Registry.URL,
+				config.RegistryURL(),
 				config.Env,
 				config.Project,
 			)

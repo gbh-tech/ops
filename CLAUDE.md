@@ -49,17 +49,26 @@ changesets / commitlint tooling).
 ### Configuration (`pkg/config`)
 - `config.LoadConfig()` reads `.ops/config.yaml` via Viper (env prefix `OPS`,
   AutomaticEnv on). The loaded `OpsConfig` struct fans out to per-area configs
-  (`AWSConfig`, `CloudConfig`, `DeploymentConfig`, `K8sConfig`,
-  `RegistryConfig`, `WerfConfig`, etc.) with per-area `Check*` validators.
+  (`AWSConfig`, `AzureConfig`, `K8sConfig`, `ECSConfig`, `WerfConfig`,
+  `RegistryConfig`, `CurrentConfig`, etc.).
 - `LoadConfig` also seeds `AWS_PROFILE` / `AWS_REGION` defaults so downstream
-  shell-outs (aws, werf, kubectl) inherit them.
+  shell-outs (aws, werf, kubectl) inherit them, and runs `Check*` validators
+  only for the active cloud provider.
 - The repo's own `.ops/config.yaml` is checked in and doubles as the example
   config; Werf/Helm values live under `.helm/`.
-- **Provider dispatch pattern**: `cloud.provider` (aws/azure/gcp),
-  `deployment.provider` (werf/ansible), and `registry.type` (ecr/acr/gcr)
-  are validated enums that determine which `pkg/<provider>` code path runs.
-  New providers slot in by adding a package under `pkg/` and extending the
-  corresponding `Check*Config` switch.
+- **Provider dispatch pattern**: cloud (`aws`/`azure`/`gcp`) and deployment
+  (`ecs`/`werf`/`ansible`) providers are inferred from which provider blocks
+  are defined in the config (`aws:`, `azure:`, `ecs:`, `werf:`, …). When
+  multiple blocks coexist, the active provider is chosen by `current.cloud`
+  / `current.deployment` in the config or by the persistent
+  `--current-cloud` / `--current-deployment` CLI flags. The registry kind
+  and URL are derived from the active cloud provider; set `registry.url`
+  only when overriding the default. Use `cfg.CloudProvider()`,
+  `cfg.DeploymentProvider()`, `cfg.RegistryType()`, `cfg.RegistryURL()` from
+  call sites instead of reading the raw fields directly. New providers slot
+  in by adding a package under `pkg/` and a block under `OpsConfig` plus an
+  entry in `definedCloudBlocks` / `definedDeploymentBlocks` in
+  `pkg/config/current.go`.
 
 ### Cloud / platform packages (`pkg/`)
 - `pkg/aws` — ECR login, EKS kubeconfig fetch (shells out to `aws`).

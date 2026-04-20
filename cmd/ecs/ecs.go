@@ -90,13 +90,13 @@ func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
 		AWS: pkgecs.BaseAWS{
 			AccountID: cfg.AWS.AccountId,
 			Region:    cfg.AWS.Region,
-			ECRUrl:    cfg.Registry.URL,
+			ECRUrl:    cfg.RegistryURL(),
 		},
 		ECS: pkgecs.BaseECS{
 			Cluster:          cfg.ECS.Cluster,
-			SecretArnPrefix:  cfg.ECS.SecretArnPrefix,
-			ExecutionRole:    cfg.ECS.ExecutionRole,
-			TaskRole:         cfg.ECS.TaskRole,
+			SecretArnPrefix:  cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS),
+			ExecutionRole:    cfg.ECS.ResolvedExecutionRole(cfg.AWS),
+			TaskRole:         cfg.ECS.ResolvedTaskRole(cfg.AWS),
 			CapacityProvider: cfg.ECS.CapacityProvider,
 		},
 		Defaults: pkgecs.BaseDefaults{
@@ -112,10 +112,10 @@ func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
 
 func loadECSCtx() *ecsCtx {
 	cfg := config.LoadConfig()
-	if cfg.Deployment.Provider != "ecs" {
+	if cfg.DeploymentProvider() != "ecs" {
 		log.Fatal(
-			"deployment.provider must be set to 'ecs'",
-			"current", cfg.Deployment.Provider,
+			"active deployment provider must be 'ecs' (set current.deployment in .ops/config.yaml or pass --current-deployment)",
+			"current", cfg.DeploymentProvider(),
 		)
 	}
 
@@ -303,8 +303,11 @@ var ecsRenderCmd = &cobra.Command{
 
 		// render is a local-only dry-run: no AWS SDK clients are needed.
 		cfg := config.LoadConfig()
-		if cfg.Deployment.Provider != "ecs" {
-			log.Fatal("deployment.provider must be set to 'ecs'", "current", cfg.Deployment.Provider)
+		if cfg.DeploymentProvider() != "ecs" {
+			log.Fatal(
+				"active deployment provider must be 'ecs' (set current.deployment in .ops/config.yaml or pass --current-deployment)",
+				"current", cfg.DeploymentProvider(),
+			)
 		}
 		requireAppInMonoRepo(cfg, app)
 		base := buildBaseConfig(cfg)
@@ -603,11 +606,10 @@ var ecsSecretsCmd = &cobra.Command{
 
 		cfg := config.LoadConfig()
 		appCfg, merged := loadAppForInspect(app, env, appConfigOverride)
-		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.SecretArnPrefix)
+		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))
 		if err != nil {
 			log.Fatal("Invalid secrets config", "err", err)
 		}
-
 		if len(secrets) == 0 {
 			fmt.Printf("No secrets configured for app=%q env=%q\n", merged.Name, env)
 			return

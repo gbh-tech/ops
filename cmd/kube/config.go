@@ -27,7 +27,7 @@ var ConfigCommand = &cobra.Command{
 			opts.ClusterName = config.K8s.ClusterNamePrefix + config.Env
 		}
 
-		switch config.Cloud.Provider {
+		switch config.CloudProvider() {
 		case "aws":
 			aws.EKSLogin(opts.ClusterName, config.AWS.Region)
 		case "azure":
@@ -36,7 +36,7 @@ var ConfigCommand = &cobra.Command{
 			log.Fatal(
 				"Current cloud provider is not yet supported by Op.",
 				"cloudProvider",
-				config.Cloud.Provider,
+				config.CloudProvider(),
 			)
 		}
 
