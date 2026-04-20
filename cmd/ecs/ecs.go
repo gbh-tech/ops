@@ -110,14 +110,23 @@ func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
 	}
 }
 
+func ensureEcsOnAws(cfg *config.OpsConfig) {
+	if cfg.DeploymentProvider() == "ecs" && cfg.CloudProvider() == "aws" {
+		return
+	}
+
+	log.Fatal(
+		"ops ecs commands require deployment=ecs and cloud=aws (set current.deployment/current.cloud in .ops/config.yaml or pass --current-deployment/--current-cloud)",
+		"expected_deployment", "ecs",
+		"actual_deployment", cfg.DeploymentProvider(),
+		"expected_cloud", "aws",
+		"actual_cloud", cfg.CloudProvider(),
+	)
+}
+
 func loadECSCtx() *ecsCtx {
 	cfg := config.LoadConfig()
-	if cfg.DeploymentProvider() != "ecs" {
-		log.Fatal(
-			"active deployment provider must be 'ecs' (set current.deployment in .ops/config.yaml or pass --current-deployment)",
-			"current", cfg.DeploymentProvider(),
-		)
-	}
+	ensureEcsOnAws(cfg)
 
 	ctx := context.Background()
 	awsCfg := aws.NewAWSConfig(ctx, cfg.AWS.Region, cfg.AWS.Profile)
@@ -168,6 +177,7 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 // (vars, secrets, render) that work purely from local config files.
 func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig) {
 	cfg := config.LoadConfig()
+	ensureEcsOnAws(cfg)
 	requireAppInMonoRepo(cfg, app)
 
 	path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
@@ -303,12 +313,7 @@ var ecsRenderCmd = &cobra.Command{
 
 		// render is a local-only dry-run: no AWS SDK clients are needed.
 		cfg := config.LoadConfig()
-		if cfg.DeploymentProvider() != "ecs" {
-			log.Fatal(
-				"active deployment provider must be 'ecs' (set current.deployment in .ops/config.yaml or pass --current-deployment)",
-				"current", cfg.DeploymentProvider(),
-			)
-		}
+		ensureEcsOnAws(cfg)
 		requireAppInMonoRepo(cfg, app)
 		base := buildBaseConfig(cfg)
 
@@ -605,6 +610,7 @@ var ecsSecretsCmd = &cobra.Command{
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		cfg := config.LoadConfig()
+		ensureEcsOnAws(cfg)
 		appCfg, merged := loadAppForInspect(app, env, appConfigOverride)
 		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))
 		if err != nil {
