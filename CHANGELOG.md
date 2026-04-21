@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0
+
+### Minor Changes
+
+- d1af8f3: Add inference to config file and current logic
+
+### Patch Changes
+
+- a36a4e1: Skip waiting for service stability if replicas is 0
+
 ## 1.4.2
 
 ### Patch Changes
