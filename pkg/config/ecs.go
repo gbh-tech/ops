@@ -1,5 +1,10 @@
 package config
 
+import (
+	"fmt"
+	"strings"
+)
+
 // ECSDefaults holds cluster-wide task definition defaults applied before
 // per-app config values are merged in.
 type ECSDefaults struct {
@@ -31,22 +36,31 @@ type ECSSchedulerConfig struct {
 }
 
 // ECSConfig holds all ECS-related settings read from .ops/config.yaml.
-// It covers both the infrastructure details (cluster, IAM roles, etc.) that
-// were previously in deploy/base.toml and the app config path pointers.
+//
+// Fields that previously had to be repeated verbatim (full ARN prefixes,
+// per-account secret prefixes) are now optional: leave them unset and they
+// will be derived from the active AWS config. Provide an explicit value only
+// when you need to point at a different account or region.
 type ECSConfig struct {
-	// App config resolution
 	// AppsDir is the root directory containing per-app subdirectories.
 	// Only used in mono-repo mode (repo_mode: mono). Defaults to "apps".
+	// Top-level `apps_dir` wins over this when both are set.
 	AppsDir string `mapstructure:"apps_dir"`
 
-	// ECS cluster / IAM settings (previously in deploy/base.toml [ecs])
 	Cluster          string `mapstructure:"cluster"`
-	SecretArnPrefix  string `mapstructure:"secret_arn_prefix"`
-	ExecutionRole    string `mapstructure:"execution_role"`
-	TaskRole         string `mapstructure:"task_role"`
 	CapacityProvider string `mapstructure:"capacity_provider"`
 
-	// Task definition defaults (previously in deploy/base.toml [defaults])
+	// SecretArnPrefix overrides the derived secrets manager ARN prefix.
+	// When empty, defaults to `arn:aws:secretsmanager:{region}:{account}:secret`.
+	SecretArnPrefix string `mapstructure:"secret_arn_prefix"`
+
+	// ExecutionRole / TaskRole accept either:
+	//   - a full ARN: "arn:aws:iam::123456789012:role/api-stage-task-exec"
+	//   - a short role name: "api-stage-task-exec" (the ARN prefix is added)
+	// Both support {service} and {env} template placeholders.
+	ExecutionRole string `mapstructure:"execution_role"`
+	TaskRole      string `mapstructure:"task_role"`
+
 	Defaults ECSDefaults `mapstructure:"defaults"`
 
 	// CleanupKeep is the number of task definition revisions to retain per
@@ -68,4 +82,45 @@ func (c ECSConfig) EffectiveCleanupKeep() int {
 		return 5
 	}
 	return c.CleanupKeep
+}
+
+// ResolvedSecretArnPrefix returns the explicit prefix when set, otherwise
+// derives one from the AWS account and region. Returns an empty string when
+// neither is available.
+func (e *ECSConfig) ResolvedSecretArnPrefix(aws AWSConfig) string {
+	if e.SecretArnPrefix != "" {
+		return e.SecretArnPrefix
+	}
+	if aws.Region == "" || aws.AccountId == "" {
+		return ""
+	}
+	return fmt.Sprintf("arn:aws:secretsmanager:%s:%s:secret", aws.Region, aws.AccountId)
+}
+
+// ResolvedExecutionRole returns the execution role with the IAM ARN prefix
+// added when the configured value is a bare role name.
+func (e *ECSConfig) ResolvedExecutionRole(aws AWSConfig) string {
+	return ensureIAMRoleARN(e.ExecutionRole, aws.AccountId)
+}
+
+// ResolvedTaskRole returns the task role with the IAM ARN prefix added when
+// the configured value is a bare role name.
+func (e *ECSConfig) ResolvedTaskRole(aws AWSConfig) string {
+	return ensureIAMRoleARN(e.TaskRole, aws.AccountId)
+}
+
+// ensureIAMRoleARN prepends `arn:aws:iam::{account}:role/` to v unless v is
+// empty or already a full ARN. Template placeholders like {service}/{env} are
+// preserved untouched and expanded later by the ECS layer.
+func ensureIAMRoleARN(v, accountID string) string {
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "arn:") {
+		return v
+	}
+	if accountID == "" {
+		return v
+	}
+	return fmt.Sprintf("arn:aws:iam::%s:role/%s", accountID, v)
 }

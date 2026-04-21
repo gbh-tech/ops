@@ -3,63 +3,59 @@
 company: gbh
 project: ops
 
+# Default target environment when --env is not provided.
 env: stage
 
-cloud:
-  # Can be one of: [ aws, azure, gcp ]
-  provider: "aws"
+# Tie-breakers for inference. Both are optional and only required when more
+# than one cloud or deployment block is defined below. Can also be supplied
+# via the persistent flags --provider / --deployment.
+# provider: aws
+# deployment: werf
 
-# Configuration for Kubernetes clusters
-k8s:
-  # Should match the name of the cluster in the selected Cloud Provider
-  # It's a prefix because Ops assumes the suffix is the environment name.
-  # e.g. `gbh-stage` for the stage environment.
-  # e.g. `gbh-production` for the production environment.
-  cluster_name_prefix: "gbh-"
+# Mono- vs single-repo layout. Controls how app config file paths resolve:
+#   "mono"   (default): apps/{app}/deploy/config.<ext>
+#   "single":           deploy/config.<ext>
+repo_mode: "mono"
 
-deployment:
-  # Can be one of: [ ansible, werf ]
-  provider: werf
-
-registry:
-  # Can be one of: [ acr, ecr, gcr ]
-  type: ecr
-  url: 091791791455.dkr.ecr.us-east-1.amazonaws.com
-
-# Only used if deployment.provider is werf
-werf:
-  # Applications/services managed by Werf (must match werf.yaml images)
-  services: ["api", "web"]
-
-  # Additional files to be added to Werf commands with `--values`
-  # independently of the environment (applies to all templates).
-  values_files: [".helm/custom-env-vars.yaml"]
-
-  # Additional paths where files will be added to Werf commands with `--values`
-  # and `--secret-values` independently of the environment (applies to all templates).
-  values: [".helm/values", ".helm/extra-values"]
-  secrets: [".helm/secrets"]
+# Root directory containing per-app subdirectories (mono-repo only).
+# Defaults to "apps".
+apps_dir: "apps"
 
 # Configuration for git-based commands & related automations
 git:
   default_branch: main
 
-# Configuration of the Cloud provider AWS
+# Configuration for Kubernetes clusters
+k8s:
+  # Should match the name of the cluster in the selected Cloud Provider.
+  # It's a prefix because Ops assumes the suffix is the environment name,
+  # e.g. `gbh-stage` for the stage environment.
+  cluster_name_prefix: "gbh-"
+
+# AWS provider block. Its presence makes "aws" the active cloud provider
+# (and the registry is implicitly ECR). All cross-cutting AWS values like
+# the registry URL and the secrets manager / IAM ARN prefixes are derived
+# from `account_id` and `region` below — no need to repeat them.
 aws:
-  profile: "gbh"  # optional; omit when using env vars (AWS_ACCESS_KEY_ID), IAM role, or instance profile
+  profile: "gbh"  # optional; omit when using env vars, IAM role, or instance profile
   account_id: "091791791455"
   region: "us-east-1"
 
-# Controls how app config file paths are resolved across all providers.
-# "mono" (default): apps/{app}/deploy/config.<ext>
-# "single":         deploy/config.<ext>
-repo_mode: "mono"
+# Werf deployment provider block. Its presence makes "werf" the active
+# deployment provider.
+werf:
+  # Applications/services managed by Werf (must match werf.yaml images)
+  services: ["api", "web"]
 
-# Root directory containing per-app subdirectories (mono-repo only).
-# Shared by all providers (ecs, build, push, etc.). Defaults to "apps".
-apps_dir: "apps"
+  # Additional files passed to Werf via `--values` regardless of environment.
+  values_files: [".helm/custom-env-vars.yaml"]
 
-# Only required when deployment.provider is ecs
+  # Additional paths added to Werf commands with `--values` and
+  # `--secret-values` regardless of environment.
+  values: [".helm/values", ".helm/extra-values"]
+  secrets: [".helm/secrets"]
+
+# Only required when the active deployment provider is ecs.
 # Per-app deployment config lives in deploy/config.toml (mono-repo: apps/{app}/deploy/config.toml).
 # See deploy/config.toml in this repo for a fully-annotated example of all supported directives.
 ecs:
@@ -92,7 +88,7 @@ ecs:
   #   role_arn:   "arn:aws:iam::091791791455:role/ecs-scheduler-{env}"
   #   group_name: "{cluster}-{env}"
 
-# Configuration of the Cloud provider Microsoft Azure
-azure:
-  location: "East US"
-  resource_group: "gbh-rg"
+# # Configuration of the Cloud provider Microsoft Azure
+# azure:
+#   location: "East US"
+#   resource_group: "gbh-rg"

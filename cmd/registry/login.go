@@ -19,23 +19,25 @@ var LoginCommand = &cobra.Command{
 		config := config.LoadConfig()
 		opts := loginCommandFlags(cmd)
 
+		registryType := config.RegistryType()
+		registryURL := config.RegistryURL()
+
 		log.Info(
 			"Detected container registry type:",
 			"type",
-			config.Registry.Type,
+			registryType,
 		)
-
 		log.Info(
 			"Detected container registry:",
 			"url",
-			config.Registry.URL,
+			registryURL,
 		)
 
-		switch config.Registry.Type {
+		switch registryType {
 		case "ecr":
 			url := opts.URL
 			if url == "" {
-				url = config.Registry.URL
+				url = registryURL
 			}
 
 			if url == "" {
@@ -45,8 +47,10 @@ var LoginCommand = &cobra.Command{
 			aws.ECRLogin(url, config.AWS.Region)
 		case "acr":
 			log.Fatal("Azure Container Registry is not supported by Ops.")
-		case "gcr":
-			log.Fatal("Google Cloud Container Registry is not supported by Ops.")
+		case "gar":
+			log.Fatal("Google Artifact Registry is not supported by Ops.")
+		default:
+			log.Fatal("No registry kind could be derived for the active cloud provider.", "cloud", config.CloudProvider())
 		}
 	},
 }
