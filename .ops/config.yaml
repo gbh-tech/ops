@@ -6,11 +6,11 @@ project: ops
 # Default target environment when --env is not provided.
 env: stage
 
-# Optional: only required when more than one provider block is defined.
-# Can also be supplied via the persistent flags --current-cloud / --current-deployment.
-# current:
-#   cloud: aws
-#   deployment: werf
+# Tie-breakers for inference. Both are optional and only required when more
+# than one cloud or deployment block is defined below. Can also be supplied
+# via the persistent flags --provider / --deployment.
+# provider: aws
+# deployment: werf
 
 # Mono- vs single-repo layout. Controls how app config file paths resolve:
 #   "mono"   (default): apps/{app}/deploy/config.<ext>
@@ -88,7 +88,7 @@ ecs:
   #   role_arn:   "arn:aws:iam::091791791455:role/ecs-scheduler-{env}"
   #   group_name: "{cluster}-{env}"
 
-# Configuration of the Cloud provider Microsoft Azure
-azure:
-  location: "East US"
-  resource_group: "gbh-rg"
+# # Configuration of the Cloud provider Microsoft Azure
+# azure:
+#   location: "East US"
+#   resource_group: "gbh-rg"

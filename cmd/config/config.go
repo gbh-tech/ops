@@ -1,10 +1,10 @@
-// Package current provides the persistent --current-* flags and the
-// `ops current` command for inspecting which providers and settings are
-// active for the current invocation.
-package current
+// Package config provides the persistent --provider / --deployment flags
+// and the `ops config` command for inspecting which providers and settings
+// are active for the current invocation.
+package config
 
 import (
-	"ops/pkg/config"
+	pkgconfig "ops/pkg/config"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -13,49 +13,49 @@ import (
 	"github.com/spf13/viper"
 )
 
-// RegisterGlobalFlags wires the persistent --current-cloud and
-// --current-deployment flags onto the given (root) command and binds them
-// to the matching viper keys. When supplied at invocation time they
-// override `current.cloud` / `current.deployment` from .ops/config.yaml.
+// RegisterGlobalFlags wires the persistent --provider and --deployment
+// flags onto the given (root) command and binds them to the matching
+// top-level viper keys. When supplied at invocation time they override
+// `provider:` / `deployment:` from .ops/config.yaml.
 //
 // Kept as an exported function so the root command (and tests) can attach
 // the flags without depending on this package's command tree wiring.
 func RegisterGlobalFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String(
-		"current-cloud",
+		"provider",
 		"",
-		"Active cloud provider (aws|azure|gcp); overrides current.cloud in config",
+		"Active cloud provider (aws|azure|gcp); overrides provider in config",
 	)
 	cmd.PersistentFlags().String(
-		"current-deployment",
+		"deployment",
 		"",
-		"Active deployment provider (ecs|werf|ansible); overrides current.deployment in config",
+		"Active deployment tool (ecs|werf|ansible); overrides deployment in config",
 	)
-	_ = viper.BindPFlag("current.cloud", cmd.PersistentFlags().Lookup("current-cloud"))
-	_ = viper.BindPFlag("current.deployment", cmd.PersistentFlags().Lookup("current-deployment"))
+	_ = viper.BindPFlag("provider", cmd.PersistentFlags().Lookup("provider"))
+	_ = viper.BindPFlag("deployment", cmd.PersistentFlags().Lookup("deployment"))
 }
 
-// Command is the "ops current" command. It loads the config (applying
-// inference and any --current-* flag overrides) and pretty-prints the
-// resolved settings so users can verify which providers are active before
-// running a deploy / push / etc.
+// Command is the "ops config" command. It loads the config (applying
+// inference and any --provider / --deployment overrides) and pretty-prints
+// the resolved settings so users can verify which providers are active
+// before running a deploy / push / etc.
 var Command = &cobra.Command{
-	Use:   "current",
+	Use:   "config",
 	Short: "Print the resolved active providers and derived settings",
 	Long: `Print the resolved active settings for the current invocation.
 
 This is useful for confirming which cloud / deployment provider is in
 effect, what the derived registry URL and ARN prefixes look like, and
-which environment / apps_dir will be used. Honours --current-cloud and
---current-deployment overrides.`,
+which environment / apps_dir will be used. Honours --provider and
+--deployment overrides.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg := config.LoadConfig()
+		cfg := pkgconfig.LoadConfig()
 
 		rows := [][]string{
 			{"env", cfg.Env},
 			{"repo_mode", repoModeOrDefault(cfg)},
 			{"apps_dir", cfg.AppsDirPath()},
-			{"cloud", cfg.CloudProvider()},
+			{"provider", cfg.CloudProvider()},
 			{"deployment", cfg.DeploymentProvider()},
 			{"registry.type", cfg.RegistryType()},
 			{"registry.url", cfg.RegistryURL()},
@@ -104,12 +104,12 @@ which environment / apps_dir will be used. Honours --current-cloud and
 			Rows(rows...)
 
 		if _, err := lipgloss.Println(t); err != nil {
-			log.Fatal("Failed to render current settings", "err", err)
+			log.Fatal("Failed to render config", "err", err)
 		}
 	},
 }
 
-func repoModeOrDefault(c *config.OpsConfig) string {
+func repoModeOrDefault(c *pkgconfig.OpsConfig) string {
 	if c.RepoMode == "" {
 		return "mono (default)"
 	}

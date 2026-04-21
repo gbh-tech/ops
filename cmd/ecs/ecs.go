@@ -116,7 +116,7 @@ func ensureEcsOnAws(cfg *config.OpsConfig) {
 	}
 
 	log.Fatal(
-		"ops ecs commands require deployment=ecs and cloud=aws (set current.deployment/current.cloud in .ops/config.yaml or pass --current-deployment/--current-cloud)",
+		"ops ecs commands require deployment=ecs and provider=aws (set deployment:/provider: in .ops/config.yaml or pass --deployment/--provider)",
 		"expected_deployment", "ecs",
 		"actual_deployment", cfg.DeploymentProvider(),
 		"expected_cloud", "aws",

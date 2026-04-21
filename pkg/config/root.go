@@ -15,9 +15,15 @@ type OpsConfig struct {
 	Project string `mapstructure:"project"`
 	Env     string `mapstructure:"env"`
 
-	// Current selects the active providers when more than one provider block
-	// is defined. Both fields are optional and may be supplied via CLI flags.
-	Current CurrentConfig `mapstructure:"current"`
+	// Provider is the active cloud provider tie-breaker. Optional; only
+	// required when more than one cloud provider block is defined. Can also
+	// be supplied via the persistent --provider flag.
+	Provider string `mapstructure:"provider"`
+
+	// Deployment is the active deployment tool tie-breaker. Optional; only
+	// required when more than one deployment block is defined. Can also be
+	// supplied via the persistent --deployment flag.
+	Deployment string `mapstructure:"deployment"`
 
 	// RepoMode controls how app config file paths are resolved across all providers.
 	// "mono" (default): apps/{app}/deploy/config.<ext>
@@ -32,12 +38,13 @@ type OpsConfig struct {
 	K8s K8sConfig `mapstructure:"k8s"`
 
 	// Cloud provider blocks. Defining a block implies that provider is
-	// available; `current.cloud` (or --current-cloud) selects the active one
-	// when multiple are present.
+	// available; `provider:` (or --provider) selects the active one when
+	// multiple are present.
 	AWS   AWSConfig   `mapstructure:"aws"`
 	Azure AzureConfig `mapstructure:"azure"`
 
-	// Deployment provider blocks. Same selection rules as cloud blocks.
+	// Deployment provider blocks. `deployment:` (or --deployment) selects the
+	// active one when multiple are present.
 	ECS  ECSConfig  `mapstructure:"ecs"`
 	Werf WerfConfig `mapstructure:"werf"`
 
@@ -72,13 +79,13 @@ func (c *OpsConfig) AppsDirPath() string {
 // It always reflects the value chosen during LoadConfig, so callers never
 // see an empty string here.
 func (c *OpsConfig) CloudProvider() string {
-	return c.Current.Cloud
+	return c.Provider
 }
 
 // DeploymentProvider returns the resolved active deployment provider
 // (e.g. "ecs", "werf").
 func (c *OpsConfig) DeploymentProvider() string {
-	return c.Current.Deployment
+	return c.Deployment
 }
 
 // RegistryType returns the canonical registry kind for the active cloud
@@ -139,11 +146,11 @@ func LoadConfig() *OpsConfig {
 
 	// Resolve the active providers before running per-block validators so
 	// downstream code can rely on CloudProvider()/DeploymentProvider().
-	config.Current.Cloud = resolveCurrentCloud(&config)
-	config.Current.Deployment = resolveCurrentDeployment(&config)
+	config.Provider = resolveProvider(&config)
+	config.Deployment = resolveDeployment(&config)
 
 	// Only validate the cloud block we actually care about.
-	switch config.Current.Cloud {
+	switch config.Provider {
 	case "aws":
 		if config.AWS.Profile != "" {
 			if err := os.Setenv("AWS_PROFILE", config.AWS.Profile); err != nil {
