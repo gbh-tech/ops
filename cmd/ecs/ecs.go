@@ -21,6 +21,7 @@ import (
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
@@ -62,6 +63,8 @@ func init() {
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
 
 	ecsRunCmd.Flags().StringP("command", "c", "/bin/sh", "Command to execute inside the container")
+
+	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -574,10 +577,16 @@ var ecsLogsCmd = &cobra.Command{
 var ecsVarsCmd = &cobra.Command{
 	Use:   "vars",
 	Short: "Pretty-print the resolved environment variables for an app and environment",
+	Long: `Print the resolved environment variables for an app and environment.
+
+Use --format to control the output:
+  table  (default) human-readable two-column table
+  dotenv KEY=VALUE lines suitable for piping into a .env file`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+		format, _ := cmd.Flags().GetString("format")
 
 		_, merged := loadAppForInspect(app, env, appConfigOverride)
 
@@ -592,12 +601,22 @@ var ecsVarsCmd = &cobra.Command{
 		}
 		sort.Strings(keys)
 
-		rows := make([][]string, 0, len(keys))
-		for _, k := range keys {
-			rows = append(rows, []string{k, merged.Environment[k]})
+		switch format {
+		case "table":
+			rows := make([][]string, 0, len(keys))
+			for _, k := range keys {
+				rows = append(rows, []string{k, merged.Environment[k]})
+			}
+			renderKeyValueTable("Variable", "Value", rows)
+		case "dotenv":
+			out, err := godotenv.Marshal(merged.Environment)
+			if err != nil {
+				log.Fatal("Failed to marshal environment to dotenv format", "err", err)
+			}
+			fmt.Println(out)
+		default:
+			log.Fatal("Unknown --format value (expected: table, dotenv)", "format", format)
 		}
-
-		renderKeyValueTable("Variable", "Value", rows)
 	},
 }
 
