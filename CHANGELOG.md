@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+
+### Patch Changes
+
+- fb522a9: Added --format flag to ops ecs vars command to export environment variables in dotenv format
+
 ## 1.5.0
 
 ### Minor Changes
