@@ -28,7 +28,7 @@ import (
 // Command is the "ops ecs" parent command.
 var Command = &cobra.Command{
 	Use:   "ecs",
-	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, cleanup, logs, vars, secrets)",
+	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, shell, cleanup, logs, vars, secrets)",
 }
 
 func init() {
@@ -40,6 +40,7 @@ func init() {
 	Command.AddCommand(ecsDbMigrateCmd)
 	Command.AddCommand(ecsScheduleRunCmd)
 	Command.AddCommand(ecsRunCmd)
+	Command.AddCommand(ecsShellCmd)
 	Command.AddCommand(ecsCleanupCmd)
 	Command.AddCommand(ecsLogsCmd)
 	Command.AddCommand(ecsVarsCmd)
@@ -62,9 +63,21 @@ func init() {
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
 
-	ecsRunCmd.Flags().StringP("command", "c", "/bin/sh", "Command to execute inside the container")
+	ecsRunCmd.Flags().StringP("command", "c", "/bin/sh", "Command to execute inside the container (use 'ops shell' to open an interactive shell)")
+
+	ecsShellCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container (e.g. /bin/bash)")
 
 	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
+
+	// ShellCommand is registered at the root level (ops shell) but also available
+	// as ops ecs shell. It declares its own flags since it does not inherit from
+	// Command's PersistentFlags.
+	shellAppUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
+	ShellCommand.Flags().StringP("app", "a", "", shellAppUsage)
+	ShellCommand.Flags().StringP("env", "e", "", "Target environment")
+	ShellCommand.Flags().String("app-config", "", "Override path to app config file")
+	ShellCommand.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container (e.g. /bin/bash)")
+	_ = ShellCommand.MarkFlagRequired("env")
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -797,15 +810,16 @@ func reconcileAppSchedules(
 
 var ecsRunCmd = &cobra.Command{
 	Use:   "run",
-	Short: "Open an interactive ECS Exec session inside a running container",
-	Long: `Open an interactive shell session inside a running ECS task container using ECS Exec.
+	Short: "Run a one-off command inside a running ECS container via ECS Exec",
+	Long: `Run a one-off command inside a running ECS task container using ECS Exec.
 
 Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
-The command connects to the first running task of the service and starts an interactive session.
+The command connects to the first running task of the service and executes the given command.
+To open an interactive shell session use 'ops shell' instead.
 
 Example:
-  ops ecs run --app my-app --env stage
-  ops ecs run --app my-app --env stage --command "/bin/bash"`,
+  ops ecs run --app my-app --env stage --command "ls /app"
+  ops ecs run --app my-app --env stage --command "/bin/bash -c 'echo hello'"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
@@ -854,6 +868,96 @@ Example:
 		if err := execCmd.Run(); err != nil {
 			log.Fatal("ECS Exec session ended with error", "err", err)
 		}
+	},
+}
+
+// openECSShell finds the first running task for the given service and opens an
+// interactive shell session via ECS Exec. It is shared by both ShellCommand
+// (top-level ops shell) and ecsShellCmd (ops ecs shell).
+func openECSShell(ec *ecsCtx, app, env, appConfigOverride, shell string) {
+	utils.CheckBinary("aws")
+	utils.CheckBinary("session-manager-plugin")
+
+	requireAppInMonoRepo(ec.cfg, app)
+	_, merged, names := loadApp(ec, app, env, appConfigOverride)
+
+	ctx := context.Background()
+	out, err := ec.ecsClient.ListTasks(ctx, &awsecs.ListTasksInput{
+		Cluster:       awssdk.String(ec.base.ECS.Cluster),
+		ServiceName:   awssdk.String(names.Service),
+		DesiredStatus: ecstypes.DesiredStatusRunning,
+	})
+	if err != nil {
+		log.Fatal("Failed to list running tasks", "err", err)
+	}
+	if len(out.TaskArns) == 0 {
+		log.Fatal("No running tasks found for service", "service", names.Service, "cluster", ec.base.ECS.Cluster)
+	}
+
+	taskArn := out.TaskArns[0]
+	appName := merged.Name
+	log.Info("Opening shell session", "task", taskArn, "container", appName, "shell", shell)
+
+	execArgs := []string{"ecs", "execute-command",
+		"--cluster", ec.base.ECS.Cluster,
+		"--task", taskArn,
+		"--container", appName,
+		"--interactive",
+		"--command", shell,
+		"--region", ec.cfg.AWS.Region,
+	}
+	if ec.cfg.AWS.Profile != "" {
+		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
+	}
+	execCmd := exec.Command("aws", execArgs...)
+	execCmd.Stdin = os.Stdin
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+	if err := execCmd.Run(); err != nil {
+		log.Fatal("Shell session ended with error", "err", err)
+	}
+}
+
+// ShellCommand is the top-level "ops shell" command for opening an interactive
+// shell inside a running ECS container. It is also registered as "ops ecs shell"
+// via ecsShellCmd for discoverability.
+var ShellCommand = &cobra.Command{
+	Use:   "shell",
+	Short: "Open an interactive shell session inside a running ECS container",
+	Long: `Open an interactive shell inside a running ECS task container using ECS Exec.
+
+Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
+The command connects to the first running task of the service and starts the chosen shell.
+
+Example:
+  ops shell --app my-app --env stage
+  ops shell --app my-app --env stage --shell /bin/bash`,
+	Run: func(cmd *cobra.Command, args []string) {
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+		shell, _ := cmd.Flags().GetString("shell")
+		openECSShell(loadECSCtx(), app, env, appConfigOverride, shell)
+	},
+}
+
+var ecsShellCmd = &cobra.Command{
+	Use:   "shell",
+	Short: "Open an interactive shell session inside a running ECS container",
+	Long: `Open an interactive shell inside a running ECS task container using ECS Exec.
+
+Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
+The command connects to the first running task of the service and starts the chosen shell.
+
+Example:
+  ops ecs shell --app my-app --env stage
+  ops ecs shell --app my-app --env stage --shell /bin/bash`,
+	Run: func(cmd *cobra.Command, args []string) {
+		app, _ := cmd.Flags().GetString("app")
+		env, _ := cmd.Flags().GetString("env")
+		appConfigOverride, _ := cmd.Flags().GetString("app-config")
+		shell, _ := cmd.Flags().GetString("shell")
+		openECSShell(loadECSCtx(), app, env, appConfigOverride, shell)
 	},
 }
 
