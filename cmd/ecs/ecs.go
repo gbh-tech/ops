@@ -40,7 +40,6 @@ func init() {
 	Command.AddCommand(ecsDbMigrateCmd)
 	Command.AddCommand(ecsScheduleRunCmd)
 	Command.AddCommand(ecsRunCmd)
-	Command.AddCommand(ecsShellCmd)
 	Command.AddCommand(ecsCleanupCmd)
 	Command.AddCommand(ecsLogsCmd)
 	Command.AddCommand(ecsVarsCmd)
@@ -63,10 +62,8 @@ func init() {
 
 	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
 
-	ecsRunCmd.Flags().StringP("command", "c", "", "Command to execute inside the container (required; use 'ops ecs shell' to open an interactive shell)")
-	_ = ecsRunCmd.MarkFlagRequired("command")
-
-	ecsShellCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container (e.g. /bin/bash)")
+	ecsRunCmd.Flags().StringP("command", "c", "", "Command to execute inside the container (required unless invoking as 'ops ecs shell')")
+	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
 
 	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
 }
@@ -800,23 +797,35 @@ func reconcileAppSchedules(
 }
 
 var ecsRunCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Run a one-off command inside a running ECS container via ECS Exec",
-	Long: `Run a one-off command inside a running ECS task container using ECS Exec.
+	Use:     "run",
+	Aliases: []string{"shell"},
+	Short:   "Run a one-off command inside a running ECS container via ECS Exec",
+	Long: `Run a command inside a running ECS task container using ECS Exec.
 
 Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
 The command connects to the first running task of the service and executes the given command.
-To open an interactive shell session use 'ops ecs shell' instead.
+Invoke this command as 'ops ecs shell' to open an interactive shell session instead.
 
 Example:
   ops ecs run --app my-app --env stage --command "ls /app"
-  ops ecs run --app my-app --env stage --command "/bin/bash -c 'echo hello'"`,
+  ops ecs run --app my-app --env stage --command "/bin/bash -c 'echo hello'"
+  ops ecs shell --app my-app --env stage
+  ops ecs shell --app my-app --env stage --shell /bin/bash`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 		command, _ := cmd.Flags().GetString("command")
-		execECSCommand(loadECSCtx(), app, env, appConfigOverride, command, false)
+		shell, _ := cmd.Flags().GetString("shell")
+
+		interactive := cmd.CalledAs() == "shell"
+		if interactive {
+			command = shell
+		} else if command == "" {
+			log.Fatal("--command is required unless invoking as 'ops ecs shell'")
+		}
+
+		execECSCommand(loadECSCtx(), app, env, appConfigOverride, command, interactive)
 	},
 }
 
@@ -870,26 +879,6 @@ func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, int
 	if err := execCmd.Run(); err != nil {
 		log.Fatal("ECS Exec ended with error", "err", err)
 	}
-}
-
-var ecsShellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "Open an interactive shell session inside a running ECS container",
-	Long: `Open an interactive shell inside a running ECS task container using ECS Exec.
-
-Requires both the AWS CLI and the session-manager-plugin to be installed and on PATH.
-The command connects to the first running task of the service and starts the chosen shell.
-
-Example:
-  ops ecs shell --app my-app --env stage
-  ops ecs shell --app my-app --env stage --shell /bin/bash`,
-	Run: func(cmd *cobra.Command, args []string) {
-		app, _ := cmd.Flags().GetString("app")
-		env, _ := cmd.Flags().GetString("env")
-		appConfigOverride, _ := cmd.Flags().GetString("app-config")
-		shell, _ := cmd.Flags().GetString("shell")
-		execECSCommand(loadECSCtx(), app, env, appConfigOverride, shell, true)
-	},
 }
 
 // wrapWords wraps s onto multiple lines, breaking on whitespace, so that no
