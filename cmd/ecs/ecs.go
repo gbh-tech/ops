@@ -816,56 +816,15 @@ Example:
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 		command, _ := cmd.Flags().GetString("command")
-
-		utils.CheckBinary("aws")
-		utils.CheckBinary("session-manager-plugin")
-
-		ec := loadECSCtx()
-		requireAppInMonoRepo(ec.cfg, app)
-		_, merged, names := loadApp(ec, app, env, appConfigOverride)
-
-		ctx := context.Background()
-		out, err := ec.ecsClient.ListTasks(ctx, &awsecs.ListTasksInput{
-			Cluster:       awssdk.String(ec.base.ECS.Cluster),
-			ServiceName:   awssdk.String(names.Service),
-			DesiredStatus: ecstypes.DesiredStatusRunning,
-		})
-		if err != nil {
-			log.Fatal("Failed to list running tasks", "err", err)
-		}
-		if len(out.TaskArns) == 0 {
-			log.Fatal("No running tasks found for service", "service", names.Service, "cluster", ec.base.ECS.Cluster)
-		}
-
-		taskArn := out.TaskArns[0]
-		appName := merged.Name
-		log.Info("Starting ECS Exec session", "task", taskArn, "container", appName, "command", command)
-
-		execArgs := []string{"ecs", "execute-command",
-			"--cluster", ec.base.ECS.Cluster,
-			"--task", taskArn,
-			"--container", appName,
-			"--interactive",
-			"--command", command,
-			"--region", ec.cfg.AWS.Region,
-		}
-		if ec.cfg.AWS.Profile != "" {
-			execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
-		}
-		execCmd := exec.Command("aws", execArgs...)
-		execCmd.Stdin = os.Stdin
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
-		if err := execCmd.Run(); err != nil {
-			log.Fatal("ECS Exec session ended with error", "err", err)
-		}
+		execECSCommand(loadECSCtx(), app, env, appConfigOverride, command, false)
 	},
 }
 
-// openECSShell finds the first running task for the given service and opens an
-// interactive shell session via ECS Exec. It is shared by both ShellCommand
-// (top-level ops shell) and ecsShellCmd (ops ecs shell).
-func openECSShell(ec *ecsCtx, app, env, appConfigOverride, shell string) {
+// execECSCommand resolves the first running task for the given service and
+// executes the supplied command via ECS Exec. When interactive is true the
+// session is started with --interactive and stdin is wired to the terminal;
+// when false stdin is left disconnected (suitable for one-off commands).
+func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, interactive bool) {
 	utils.CheckBinary("aws")
 	utils.CheckBinary("session-manager-plugin")
 
@@ -887,25 +846,29 @@ func openECSShell(ec *ecsCtx, app, env, appConfigOverride, shell string) {
 
 	taskArn := out.TaskArns[0]
 	appName := merged.Name
-	log.Info("Opening shell session", "task", taskArn, "container", appName, "shell", shell)
+	log.Info("Starting ECS Exec", "task", taskArn, "container", appName, "command", command, "interactive", interactive)
 
 	execArgs := []string{"ecs", "execute-command",
 		"--cluster", ec.base.ECS.Cluster,
 		"--task", taskArn,
 		"--container", appName,
-		"--interactive",
-		"--command", shell,
+		"--command", command,
 		"--region", ec.cfg.AWS.Region,
+	}
+	if interactive {
+		execArgs = append(execArgs, "--interactive")
 	}
 	if ec.cfg.AWS.Profile != "" {
 		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
 	}
 	execCmd := exec.Command("aws", execArgs...)
-	execCmd.Stdin = os.Stdin
+	if interactive {
+		execCmd.Stdin = os.Stdin
+	}
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
 	if err := execCmd.Run(); err != nil {
-		log.Fatal("Shell session ended with error", "err", err)
+		log.Fatal("ECS Exec ended with error", "err", err)
 	}
 }
 
@@ -925,7 +888,7 @@ Example:
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 		shell, _ := cmd.Flags().GetString("shell")
-		openECSShell(loadECSCtx(), app, env, appConfigOverride, shell)
+		execECSCommand(loadECSCtx(), app, env, appConfigOverride, shell, true)
 	},
 }
 
