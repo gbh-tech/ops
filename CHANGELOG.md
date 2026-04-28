@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+### Minor Changes
+
+- d09160b: Add shell command to support interactive sessions on ECS apps
+
 ## 1.5.1
 
 ### Patch Changes
