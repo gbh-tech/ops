@@ -821,6 +821,8 @@ Example:
 		interactive := cmd.CalledAs() == "shell"
 		if interactive {
 			command = shell
+		} else if command == "" {
+			log.Fatal("--command is required unless invoking as 'ops ecs shell'")
 		}
 
 		execECSCommand(loadECSCtx(), app, env, appConfigOverride, command, interactive)
