@@ -41,7 +41,6 @@ func init() {
 	rootCmd.AddCommand(registry.LoginCommand)
 	rootCmd.AddCommand(deploy.Command)
 	rootCmd.AddCommand(ecscmd.Command)
-	rootCmd.AddCommand(ecscmd.ShellCommand)
 	rootCmd.AddCommand(secrets.Command)
 	rootCmd.AddCommand(imagecmd.BuildCommand)
 	rootCmd.AddCommand(imagecmd.PushCommand)
