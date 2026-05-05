@@ -123,6 +123,9 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig
 				"add 'name: <your-app-name>' to the [global] section",
 		)
 	}
+	if err := validatePorts(merged); err != nil {
+		return MergedConfig{}, err
+	}
 
 	secretsName := merged.SecretsName
 	if secretsName == "" {
@@ -142,6 +145,9 @@ func applySection(dst *AppSection, src AppSection) {
 	}
 	if src.Port != 0 {
 		dst.Port = src.Port
+	}
+	if len(src.Ports) > 0 {
+		dst.Ports = src.Ports
 	}
 	if src.CPU != 0 {
 		dst.CPU = src.CPU
@@ -182,6 +188,9 @@ func applySection(dst *AppSection, src AppSection) {
 	if src.TaskRole != "" {
 		dst.TaskRole = src.TaskRole
 	}
+	if len(src.EntryPoint) > 0 {
+		dst.EntryPoint = src.EntryPoint
+	}
 	if len(src.Command) > 0 {
 		dst.Command = src.Command
 	}
@@ -208,6 +217,18 @@ func applySection(dst *AppSection, src AppSection) {
 	if len(src.ScheduledTasks) > 0 {
 		dst.ScheduledTasks = src.ScheduledTasks
 	}
+}
+
+func validatePorts(config AppSection) error {
+	for _, port := range append([]int{config.Port}, config.Ports...) {
+		if port == 0 {
+			continue
+		}
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("port %d is outside the valid TCP port range 1-65535", port)
+		}
+	}
+	return nil
 }
 
 // NormalizeSecrets is re-exported from pkg/app for callers that import pkg/ecs.

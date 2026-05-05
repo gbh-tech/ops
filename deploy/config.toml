@@ -46,9 +46,14 @@ name = "my-app"
 # image = "123456789.dkr.ecr.us-east-1.amazonaws.com/my-org/my-app"
 # image = "my-org/my-app:latest"
 
-# TCP port the container listens on. Required for ALB health checks.
+# Primary TCP port the container listens on. Required for ALB health checks.
 # Omit for background workers that have no HTTP interface.
 # port = 8080
+#
+# Additional TCP ports to expose in the ECS task definition. Use this when an
+# ECS service has multiple target groups, such as Odoo's HTTP and gevent ports.
+# `port` remains the primary health-check port; duplicate values are ignored.
+# ports = [8080, 8072]
 
 # CPU units (1 vCPU = 1024 units). Overrides ecs.defaults.cpu.
 # cpu = 512
@@ -72,7 +77,10 @@ name = "my-app"
 # Only "awslogs" is currently wired up in the log configuration builder.
 # log_driver = "awslogs"
 
-# Override the container entrypoint command.
+# Override the container entrypoint. This maps to ECS containerDefinitions[].entryPoint.
+# entrypoint = ["/bin/sh", "-c"]
+#
+# Override the container command. This maps to ECS containerDefinitions[].command.
 # command = ["node", "server.js"]
 
 # HTTP path used for ALB and container health checks (requires `port`).
@@ -272,6 +280,8 @@ name = "my-app"
 # enabled            = true                           # optional; default true. Set false to DISABLE in EventBridge.
 # cpu                = 256                            # optional; override task CPU for this schedule only.
 # memory             = 512                            # optional; override task memory (MiB) for this schedule only.
+# capacity_provider  = "FARGATE"                      # optional; override ecs.capacity_provider for this schedule only.
+#                                                    # Supports {service} and {env} placeholders.
 # flexible_window_minutes = 15                        # optional; default 0 (exact start). Max minutes to shift start time.
 # description        = "Purge temp files nightly"    # optional; stored as a note on the schedule.
 #

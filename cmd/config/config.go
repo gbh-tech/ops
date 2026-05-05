@@ -5,6 +5,7 @@ package config
 
 import (
 	pkgconfig "ops/pkg/config"
+	"ops/pkg/utils"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -66,7 +67,7 @@ which environment / apps_dir will be used. Honours --provider and
 			rows = append(rows,
 				[]string{"aws.account_id", cfg.AWS.AccountId},
 				[]string{"aws.region", cfg.AWS.Region},
-				[]string{"aws.profile", orDash(cfg.AWS.Profile)},
+				[]string{"aws.profile", utils.OrDash(cfg.AWS.Profile)},
 			)
 		case "azure":
 			rows = append(rows,
@@ -79,14 +80,14 @@ which environment / apps_dir will be used. Honours --provider and
 		case "ecs":
 			rows = append(rows,
 				[]string{"ecs.cluster", cfg.ECS.Cluster},
-				[]string{"ecs.capacity_provider", orDash(cfg.ECS.CapacityProvider)},
-				[]string{"ecs.execution_role", orDash(cfg.ECS.ResolvedExecutionRole(cfg.AWS))},
-				[]string{"ecs.task_role", orDash(cfg.ECS.ResolvedTaskRole(cfg.AWS))},
-				[]string{"ecs.secret_arn_prefix", orDash(cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))},
+				[]string{"ecs.capacity_provider", utils.OrDash(cfg.ECS.CapacityProvider)},
+				[]string{"ecs.execution_role", utils.OrDash(cfg.ECS.ResolvedExecutionRole(cfg.AWS))},
+				[]string{"ecs.task_role", utils.OrDash(cfg.ECS.ResolvedTaskRole(cfg.AWS))},
+				[]string{"ecs.secret_arn_prefix", utils.OrDash(cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))},
 			)
 		case "werf":
 			rows = append(rows,
-				[]string{"werf.services", joinOrDash(cfg.Werf.Services)},
+				[]string{"werf.services", utils.JoinOrDash(cfg.Werf.Services)},
 			)
 		}
 
@@ -114,22 +115,4 @@ func repoModeOrDefault(c *pkgconfig.OpsConfig) string {
 		return "mono (default)"
 	}
 	return c.RepoMode
-}
-
-func orDash(v string) string {
-	if v == "" {
-		return "-"
-	}
-	return v
-}
-
-func joinOrDash(items []string) string {
-	if len(items) == 0 {
-		return "-"
-	}
-	out := items[0]
-	for _, s := range items[1:] {
-		out += ", " + s
-	}
-	return out
 }
