@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+
+### Minor Changes
+
+- 2fa5dc9: Support multiple ECS container port mappings with the `ports` app config field and ECS entrypoint overrides with `entrypoint`.
+- 2fa5dc9: Allow ECS scheduled tasks to override the default capacity provider with a per-task `capacity_provider` setting.
+
 ## 1.6.0
 
 ### Minor Changes
