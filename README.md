@@ -260,6 +260,9 @@ ops ecs rollback --env production --app my-app
 # Run a standalone database migration task
 ops ecs db-migrate --env production --app my-app
 
+# Run a configured scheduled task immediately
+ops ecs schedule-run daily-cleanup --env production --app my-app
+
 # Remove old task definition revisions, keeping the latest 5 (default)
 ops ecs cleanup --env production --app my-app --keep 5
 

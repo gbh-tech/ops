@@ -109,6 +109,11 @@ type ScheduledTaskConfig struct {
 	// When 0, the task definition's memory value is used.
 	Memory int `toml:"memory" yaml:"memory"`
 
+	// CapacityProvider overrides the default ECS capacity provider for this
+	// scheduled task only. Supports {service} and {env} placeholders. When
+	// empty, ecs.capacity_provider from .ops/config.yaml is used.
+	CapacityProvider string `toml:"capacity_provider" yaml:"capacity_provider"`
+
 	// FlexibleWindowMinutes sets the maximum number of minutes EventBridge
 	// Scheduler may shift the start time within. 0 = OFF (exact start time).
 	FlexibleWindowMinutes int `toml:"flexible_window_minutes" yaml:"flexible_window_minutes"`
@@ -124,6 +129,7 @@ type AppSection struct {
 	Name     string `toml:"name"                yaml:"name"`
 	Image    string `toml:"image"               yaml:"image"`
 	Port     int    `toml:"port"                yaml:"port"`
+	Ports    []int  `toml:"ports"               yaml:"ports"`
 	CPU      int    `toml:"cpu"                 yaml:"cpu"`
 	Memory   int    `toml:"memory"              yaml:"memory"`
 	Replicas *int   `toml:"replicas"            yaml:"replicas"`
@@ -139,6 +145,7 @@ type AppSection struct {
 	SecretsName        string            `toml:"secrets_name"        yaml:"secrets_name"`
 	ExecutionRole      string            `toml:"execution_role"      yaml:"execution_role"`
 	TaskRole           string            `toml:"task_role"           yaml:"task_role"`
+	EntryPoint         []string          `toml:"entrypoint"          yaml:"entrypoint"`
 	Command            []string          `toml:"command"             yaml:"command"`
 	Environment        map[string]string `toml:"environment"         yaml:"environment"`
 

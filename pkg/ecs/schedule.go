@@ -46,10 +46,11 @@ type ReconcileConfig struct {
 	// Env is the deployment environment (e.g. "stage", "production").
 	Env string
 
-	// CapacityProvider is the already-expanded capacity provider name.
-	// When non-empty it is placed in a CapacityProviderStrategy on the ECS
-	// task target, mirroring how RunMigrationTask handles this.
-	// When empty, LaunchType is set instead.
+	// CapacityProvider is the default capacity provider name. It may contain
+	// {service}/{env} placeholders. Individual scheduled tasks may override it.
+	// When the resolved provider is non-empty it is placed in a
+	// CapacityProviderStrategy on the ECS task target. When empty, LaunchType is
+	// set instead.
 	CapacityProvider string
 
 	// LaunchType is the ECS launch type used when CapacityProvider is empty.
@@ -165,10 +166,11 @@ func ReconcileSchedules(
 			TaskCount:            aws.Int32(1),
 			NetworkConfiguration: schedulerNetCfg,
 		}
-		if cfg.CapacityProvider != "" {
+		capacityProvider := ResolveScheduledTaskCapacityProvider(t, cfg.CapacityProvider, cfg.AppName, cfg.Env)
+		if capacityProvider != "" {
 			ecsParams.CapacityProviderStrategy = []schedulertypes.CapacityProviderStrategyItem{
 				{
-					CapacityProvider: aws.String(cfg.CapacityProvider),
+					CapacityProvider: aws.String(capacityProvider),
 					Weight:           100,
 					Base:             1,
 				},
@@ -243,9 +245,11 @@ type RunScheduledTaskOpts struct {
 	ScheduledFamily string
 	// AppName is the ECS container name used in the command override.
 	AppName string
-	// CapacityProvider is the already-expanded capacity provider name.
-	// When empty, no capacity provider strategy is set (ECS uses the
-	// task definition's default launch type).
+	// Env is the deployment environment used to expand capacity provider templates.
+	Env string
+	// CapacityProvider is the default capacity provider name. It may contain
+	// {service}/{env} placeholders. Task.CapacityProvider overrides it.
+	// When the resolved provider is empty, no capacity provider strategy is set.
 	CapacityProvider string
 	// Task is the scheduled task config entry to run ad-hoc.
 	Task app.ScheduledTaskConfig
@@ -299,10 +303,11 @@ func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunSchedu
 		NetworkConfiguration: svc.NetworkConfiguration,
 		Overrides:            overrides,
 	}
-	if opts.CapacityProvider != "" {
+	capacityProvider := ResolveScheduledTaskCapacityProvider(opts.Task, opts.CapacityProvider, opts.AppName, opts.Env)
+	if capacityProvider != "" {
 		runInput.CapacityProviderStrategy = []ecstypes.CapacityProviderStrategyItem{
 			{
-				CapacityProvider: aws.String(opts.CapacityProvider),
+				CapacityProvider: aws.String(capacityProvider),
 				Weight:           100,
 				Base:             1,
 			},
@@ -371,6 +376,17 @@ func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunSchedu
 	}
 
 	return taskArn, nil
+}
+
+// ResolveScheduledTaskCapacityProvider returns the capacity provider that should
+// be used for one scheduled task. The task-specific value wins over the default,
+// and {service}/{env} placeholders are expanded when present.
+func ResolveScheduledTaskCapacityProvider(t app.ScheduledTaskConfig, defaultProvider, appName, env string) string {
+	provider := defaultProvider
+	if t.CapacityProvider != "" {
+		provider = t.CapacityProvider
+	}
+	return ExpandTemplate(provider, appName, env)
 }
 
 // scheduleName returns the full EventBridge Scheduler name for a task within

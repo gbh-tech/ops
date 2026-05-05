@@ -33,7 +33,13 @@ func BuildScheduledTaskDefinition(
 	env, imageTag string,
 	secrets []ECSSecret,
 ) awsecs.RegisterTaskDefinitionInput {
-	return buildTaskDefinitionInput(base, merged, names, names.ScheduledFamily, env, imageTag, secrets, false)
+	input := buildTaskDefinitionInput(base, merged, names, names.ScheduledFamily, env, imageTag, secrets, false)
+	input.RequiresCompatibilities = addFargateCompatibilityForScheduledTasks(
+		input.RequiresCompatibilities,
+		base.ECS.CapacityProvider,
+		merged.ScheduledTasks,
+	)
+	return input
 }
 
 // buildTaskDefinitionInput is the shared implementation for BuildTaskDefinition
@@ -80,6 +86,47 @@ func buildTaskDefinitionInput(
 	}
 
 	return input
+}
+
+// addFargateCompatibilityForScheduledTasks keeps the scheduled task definition
+// compatible with the capacity providers used to launch scheduled tasks.
+//
+// CapacityProviderStrategy is set later when EventBridge Scheduler runs the
+// task, but AWS still requires the registered task definition to include
+// FARGATE in RequiresCompatibilities when the selected capacity provider is
+// FARGATE or FARGATE_SPOT.
+func addFargateCompatibilityForScheduledTasks(
+	current []ecstypes.Compatibility,
+	defaultCapacityProvider string,
+	tasks []app.ScheduledTaskConfig,
+) []ecstypes.Compatibility {
+	for _, task := range tasks {
+		if usesFargateCapacityProvider(task.CapacityProvider) {
+			return appendCompatibility(current, ecstypes.CompatibilityFargate)
+		}
+	}
+	if usesFargateCapacityProvider(defaultCapacityProvider) {
+		return appendCompatibility(current, ecstypes.CompatibilityFargate)
+	}
+	return current
+}
+
+func appendCompatibility(current []ecstypes.Compatibility, compatibility ecstypes.Compatibility) []ecstypes.Compatibility {
+	for _, existing := range current {
+		if existing == compatibility {
+			return current
+		}
+	}
+	return append(current, compatibility)
+}
+
+func usesFargateCapacityProvider(capacityProvider string) bool {
+	switch strings.ToUpper(capacityProvider) {
+	case "FARGATE", "FARGATE_SPOT":
+		return true
+	default:
+		return false
+	}
 }
 
 // buildVolumes converts the merged VolumeConfig list into the two parallel
@@ -209,13 +256,8 @@ func buildContainer(
 		c.MountPoints = mountPoints
 	}
 
-	if withHealthCheck && merged.Port != 0 {
-		c.PortMappings = []ecstypes.PortMapping{
-			{
-				ContainerPort: aws.Int32(int32(merged.Port)),
-				Protocol:      ecstypes.TransportProtocolTcp,
-			},
-		}
+	if withHealthCheck {
+		c.PortMappings = buildPortMappings(containerPorts(merged))
 	}
 
 	if len(merged.Environment) > 0 {
@@ -231,6 +273,9 @@ func buildContainer(
 	if len(merged.Command) > 0 {
 		c.Command = merged.Command
 	}
+	if len(merged.EntryPoint) > 0 {
+		c.EntryPoint = merged.EntryPoint
+	}
 
 	if len(secrets) > 0 {
 		c.Secrets = make([]ecstypes.Secret, len(secrets))
@@ -242,7 +287,7 @@ func buildContainer(
 		}
 	}
 
-	if withHealthCheck && merged.HealthCheckPath != "" && merged.Port != 0 {
+	if withHealthCheck && merged.HealthCheckPath != "" && primaryContainerPort(merged) != 0 {
 		c.HealthCheck = buildHealthCheck(merged)
 	}
 
@@ -259,8 +304,58 @@ func buildContainer(
 	return c
 }
 
+func containerPorts(merged MergedConfig) []int {
+	ports := make([]int, 0, 1+len(merged.Ports))
+	seen := make(map[int]struct{}, 1+len(merged.Ports))
+
+	add := func(port int) {
+		if port == 0 {
+			return
+		}
+		if _, exists := seen[port]; exists {
+			return
+		}
+		seen[port] = struct{}{}
+		ports = append(ports, port)
+	}
+
+	add(merged.Port)
+	for _, port := range merged.Ports {
+		add(port)
+	}
+	return ports
+}
+
+func primaryContainerPort(merged MergedConfig) int {
+	if merged.Port != 0 {
+		return merged.Port
+	}
+	for _, port := range merged.Ports {
+		if port != 0 {
+			return port
+		}
+	}
+	return 0
+}
+
+func buildPortMappings(ports []int) []ecstypes.PortMapping {
+	if len(ports) == 0 {
+		return nil
+	}
+
+	mappings := make([]ecstypes.PortMapping, 0, len(ports))
+	for _, port := range ports {
+		mappings = append(mappings, ecstypes.PortMapping{
+			ContainerPort: aws.Int32(int32(port)),
+			Protocol:      ecstypes.TransportProtocolTcp,
+		})
+	}
+	return mappings
+}
+
 func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 	hc := merged.ContainerHC
+	port := primaryContainerPort(merged)
 
 	interval := int32(30)
 	timeout := int32(5)
@@ -283,7 +378,7 @@ func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 	return &ecstypes.HealthCheck{
 		Command: []string{
 			"CMD-SHELL",
-			fmt.Sprintf("curl -f http://localhost:%d%s || exit 1", merged.Port, merged.HealthCheckPath),
+			fmt.Sprintf("curl -f http://localhost:%d%s || exit 1", port, merged.HealthCheckPath),
 		},
 		Interval:    aws.Int32(interval),
 		Timeout:     aws.Int32(timeout),

@@ -348,6 +348,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},
 			{"Replicas", fmt.Sprintf("%d", *merged.Replicas)},
+			{"Ports", formatPortMappings(ctr.PortMappings)},
 			{"Env vars", fmt.Sprintf("%d", len(ctr.Environment))},
 			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
 			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
@@ -382,10 +383,12 @@ var ecsRenderCmd = &cobra.Command{
 			if st.Enabled != nil && !*st.Enabled {
 				enabled = "false"
 			}
+			capacityProvider := pkgecs.ResolveScheduledTaskCapacityProvider(st, base.ECS.CapacityProvider, merged.Name, env)
 			rows = append(rows,
 				[]string{fmt.Sprintf("  Schedule: %s", st.Name), ""},
 				[]string{"    enabled", enabled},
 				[]string{"    schedule", st.Schedule},
+				[]string{"    capacity provider", utils.OrDash(capacityProvider)},
 				[]string{"    command", wrapWords(strings.Join(st.Command, " "), 60)},
 			)
 		}
@@ -662,7 +665,7 @@ var ecsScheduleRunCmd = &cobra.Command{
 The task must be declared in the app's deploy/config.toml under [[scheduled_tasks]].
 It uses the dedicated "{app}-{env}-scheduled" task definition (no port mappings or
 health checks) and inherits the service's network configuration, overriding only
-the container command, CPU, and memory.
+the container command, CPU, memory, and capacity provider.
 
 The command waits for the task to finish and exits non-zero if the task fails.
 Logs are printed from CloudWatch after the task stops.
@@ -713,6 +716,7 @@ Example:
 			Service:          names.Service,
 			ScheduledFamily:  names.ScheduledFamily,
 			AppName:          appName,
+			Env:              env,
 			CapacityProvider: capacityProvider,
 			Task:             *found,
 		})
@@ -758,7 +762,6 @@ func reconcileAppSchedules(
 		)
 	}
 
-	capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, appName, env)
 	groupName := pkgecs.ExpandSchedulerTemplate(sched.GroupName, ec.base.ECS.Cluster, env)
 	roleArn := pkgecs.ExpandSchedulerTemplate(sched.RoleArn, ec.base.ECS.Cluster, env)
 
@@ -778,7 +781,7 @@ func reconcileAppSchedules(
 		AccountID:        ec.base.AWS.AccountID,
 		AppName:          appName,
 		Env:              env,
-		CapacityProvider: capacityProvider,
+		CapacityProvider: ec.base.ECS.CapacityProvider,
 		LaunchType:       ec.base.Defaults.LaunchType,
 		NetworkConfig:    netCfg,
 	}
@@ -911,4 +914,16 @@ func wrapWords(s string, width int) string {
 		lines = append(lines, current.String())
 	}
 	return strings.Join(lines, "\n")
+}
+
+func formatPortMappings(mappings []ecstypes.PortMapping) string {
+	if len(mappings) == 0 {
+		return "-"
+	}
+
+	ports := make([]string, 0, len(mappings))
+	for _, mapping := range mappings {
+		ports = append(ports, fmt.Sprintf("%d/%s", awssdk.ToInt32(mapping.ContainerPort), mapping.Protocol))
+	}
+	return strings.Join(ports, ", ")
 }
