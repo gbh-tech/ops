@@ -55,6 +55,7 @@ func init() {
 
 	// Subcommand-specific flags.
 	ecsDeployCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
+	ecsDeployCmd.Flags().Bool("skip-migrations", false, "Skip configured database migrations before updating the ECS service")
 
 	ecsRenderCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
 
@@ -217,11 +218,12 @@ func renderKeyValueTable(header1, header2 string, rows [][]string) {
 
 var ecsDeployCmd = &cobra.Command{
 	Use:   "deploy",
-	Short: "Register task definition, run migrations if configured, and update the ECS service",
+	Short: "Register task definition and update the ECS service",
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		tag := resolveTag(cmd.Flags().Lookup("tag").Value.String(), env)
+		skipMigrations, _ := cmd.Flags().GetBool("skip-migrations")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 		ec := loadECSCtx()
@@ -253,7 +255,11 @@ var ecsDeployCmd = &cobra.Command{
 			log.Info("Scheduled task definition registered", "family", names.ScheduledFamily, "arn", scheduledTaskDefArn)
 		}
 
-		if merged.DatabaseMigrations && *merged.Replicas > 0 {
+		if skipMigrations && merged.DatabaseMigrations {
+			log.Info("Skipping configured database migrations", "app", merged.Name)
+		}
+
+		if !skipMigrations && merged.DatabaseMigrations && *merged.Replicas > 0 {
 			if len(merged.MigrationCommand) == 0 {
 				log.Fatal("database_migrations is true but migration_command is not set")
 			}
@@ -267,6 +273,11 @@ var ecsDeployCmd = &cobra.Command{
 				CapacityProvider: capacityProvider,
 			})
 			if err != nil {
+				if taskArn != "" {
+					if logErr := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); logErr != nil {
+						log.Warn("Could not fetch migration logs", "err", logErr)
+					}
+				}
 				log.Fatal("Migration failed", "err", err)
 			}
 			log.Info("Migration complete, fetching logs...")
@@ -516,6 +527,11 @@ var ecsDbMigrateCmd = &cobra.Command{
 			CapacityProvider: capacityProvider,
 		})
 		if err != nil {
+			if taskArn != "" {
+				if logErr := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); logErr != nil {
+					log.Warn("Could not fetch migration logs", "err", logErr)
+				}
+			}
 			log.Fatal("Migration failed", "err", err)
 		}
 		log.Info("Migration complete, fetching logs...")
