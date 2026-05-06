@@ -45,19 +45,28 @@ func PrintMigrationLogs(ctx context.Context, client *cwlogs.Client, logGroup, ap
 	logStream := fmt.Sprintf("%s/%s/%s", appName, appName, taskID)
 	log.Info("Fetching migration logs", "stream", logStream)
 
-	out, err := client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
-		LogGroupName:  aws.String(logGroup),
-		LogStreamName: aws.String(logStream),
-		StartFromHead: aws.Bool(true),
-	})
-	if err != nil {
-		log.Warn("Could not retrieve migration logs", "stream", logStream, "err", err)
-		return nil
-	}
+	var nextToken *string
+	for {
+		out, err := client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
+			LogGroupName:  aws.String(logGroup),
+			LogStreamName: aws.String(logStream),
+			StartFromHead: aws.Bool(true),
+			NextToken:     nextToken,
+		})
+		if err != nil {
+			log.Warn("Could not retrieve migration logs", "stream", logStream, "err", err)
+			return nil
+		}
 
-	for _, event := range out.Events {
-		ts := time.UnixMilli(aws.ToInt64(event.Timestamp))
-		fmt.Printf("%s %s\n", ts.Format(time.RFC3339), aws.ToString(event.Message))
+		for _, event := range out.Events {
+			ts := time.UnixMilli(aws.ToInt64(event.Timestamp))
+			fmt.Printf("%s %s\n", ts.Format(time.RFC3339), aws.ToString(event.Message))
+		}
+		// GetLogEvents returns the same token when there are no more events.
+		if out.NextForwardToken == nil || aws.ToString(out.NextForwardToken) == aws.ToString(nextToken) {
+			break
+		}
+		nextToken = out.NextForwardToken
 	}
 	return nil
 }
