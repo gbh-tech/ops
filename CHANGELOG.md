@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1
+
+### Patch Changes
+
+- 53567b2: Allow ECS deploy migrations to be skipped explicitly and improve migration log output.
+
 ## 1.7.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@gbh-tech/ops",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "scripts": {
     "changeset": "changeset",
