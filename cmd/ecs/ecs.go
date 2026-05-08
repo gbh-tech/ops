@@ -28,7 +28,7 @@ import (
 // Command is the "ops ecs" parent command.
 var Command = &cobra.Command{
 	Use:   "ecs",
-	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, shell, cleanup, logs, vars, secrets)",
+	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, shell, port-forward, db-proxy, cleanup, logs, vars, secrets)",
 }
 
 func init() {
@@ -44,6 +44,8 @@ func init() {
 	Command.AddCommand(ecsLogsCmd)
 	Command.AddCommand(ecsVarsCmd)
 	Command.AddCommand(ecsSecretsCmd)
+	Command.AddCommand(ecsPortForwardCmd)
+	initPortForwardFlags()
 
 	// Persistent flags are inherited by every subcommand.
 	// --app is validated at runtime (required in mono-repo mode, optional in single-repo mode).
