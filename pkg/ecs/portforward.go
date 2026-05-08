@@ -12,6 +12,8 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+
+	"ops/pkg/utils"
 )
 
 const dbProxySubstring = "db-proxy"
@@ -171,6 +173,10 @@ func RunPortForwardSession(ctx context.Context, opts PortForwardSessionOpts) err
 	}
 	if opts.LocalPort <= 0 || opts.LocalPort > 65535 {
 		return fmt.Errorf("invalid local port %d", opts.LocalPort)
+	}
+
+	if err := utils.CheckLocalPortAvailable(opts.LocalPort); err != nil {
+		return err
 	}
 
 	params := map[string][]string{
