@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0
+
+### Minor Changes
+
+- 38b5020: Add port-forwarding feature
+
 ## 1.7.1
 
 ### Patch Changes
