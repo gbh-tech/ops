@@ -2,6 +2,6 @@
 "@gbh-tech/ops": patch
 ---
 
-Reject `container_health_check.command` slices with no argument
+Add unit tests for app, config, ecs, and utils packages
 
-A command like `["CMD"]` or `["CMD-SHELL"]` was previously accepted but would fail at AWS task-definition registration. `validateHealthCheckCommand` now returns a clear error when the slice is shorter than 2 elements, catching the misconfiguration before any AWS call is made.
+Adds test coverage for `pkg/app` (config loading, secret normalization, build args), `pkg/config` (provider/registry inference, path resolution), `pkg/ecs` (config merging, secret resolution, health check validation, port validation), and `pkg/utils` (display helpers, git ticket ID extraction, registry URL construction).
