@@ -1,0 +1,5 @@
+[global]
+name = "legacy-app"
+desired_count = 2
+cpu = 256
+memory = 512
