@@ -232,6 +232,13 @@ func validateHealthCheckCommand(hc HealthCheckConfig) error {
 	}
 	switch hc.Command[0] {
 	case "CMD", "CMD-SHELL":
+		if len(hc.Command) < 2 {
+			return fmt.Errorf(
+				"container_health_check.command must include a mode token and at least one argument, got %v\n"+
+					"hint: [\"CMD-SHELL\", \"curl -f http://localhost:8080/health || exit 1\"] or [\"CMD\", \"/bin/healthcheck\"]",
+				hc.Command,
+			)
+		}
 		return nil
 	default:
 		return fmt.Errorf(
