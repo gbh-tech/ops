@@ -18,10 +18,16 @@ import (
 
 // HealthCheckConfig mirrors the container_health_check section.
 type HealthCheckConfig struct {
-	Interval    int `toml:"interval"    yaml:"interval"`
-	Timeout     int `toml:"timeout"     yaml:"timeout"`
-	Retries     int `toml:"retries"     yaml:"retries"`
+	Interval    int `toml:"interval"     yaml:"interval"`
+	Timeout     int `toml:"timeout"      yaml:"timeout"`
+	Retries     int `toml:"retries"      yaml:"retries"`
 	StartPeriod int `toml:"start_period" yaml:"start_period"`
+
+	// Command is the ECS health check command. The first element must be
+	// "CMD" (exec form, no shell) or "CMD-SHELL" (runs via /bin/sh -c).
+	// Example: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
+	// When empty, ops generates a curl-based CMD-SHELL check using health_check_path and port.
+	Command []string `toml:"command" yaml:"command"`
 }
 
 // VolumeEFSConfig holds EFS-specific volume settings.

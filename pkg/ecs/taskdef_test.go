@@ -56,6 +56,59 @@ func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t 
 	}
 }
 
+func TestBuildTaskDefinitionUsesCustomHealthCheckCommandWithoutPort(t *testing.T) {
+	// A worker with no port and no health_check_path — the only way to get a
+	// health check is via a custom command. This was the silent-discard bug.
+	customCmd := []string{"CMD", "/bin/healthcheck"}
+	merged := MergedConfig{
+		AppSection: AppSection{
+			Name:   "worker",
+			CPU:    256,
+			Memory: 512,
+			ContainerHC: HealthCheckConfig{
+				Command: customCmd,
+			},
+		},
+	}
+
+	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	container := input.ContainerDefinitions[0]
+
+	if container.HealthCheck == nil {
+		t.Fatal("expected health check to be configured; custom command was silently dropped")
+	}
+	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
+		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	}
+}
+
+func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing.T) {
+	// Even when health_check_path and port are set, an explicit command wins.
+	customCmd := []string{"CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"}
+	merged := MergedConfig{
+		AppSection: AppSection{
+			Name:            "api",
+			Port:            8080,
+			CPU:             256,
+			Memory:          512,
+			HealthCheckPath: "/health",
+			ContainerHC: HealthCheckConfig{
+				Command: customCmd,
+			},
+		},
+	}
+
+	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	container := input.ContainerDefinitions[0]
+
+	if container.HealthCheck == nil {
+		t.Fatal("expected health check to be configured")
+	}
+	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
+		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	}
+}
+
 func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 	merged := MergedConfig{
 		AppSection: AppSection{

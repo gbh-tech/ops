@@ -287,7 +287,9 @@ func buildContainer(
 		}
 	}
 
-	if withHealthCheck && merged.HealthCheckPath != "" && primaryContainerPort(merged) != 0 {
+	hasCustomCommand := len(merged.ContainerHC.Command) > 0
+	hasCurlCheck := merged.HealthCheckPath != "" && primaryContainerPort(merged) != 0
+	if withHealthCheck && (hasCustomCommand || hasCurlCheck) {
 		c.HealthCheck = buildHealthCheck(merged)
 	}
 
@@ -355,7 +357,6 @@ func buildPortMappings(ports []int) []ecstypes.PortMapping {
 
 func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 	hc := merged.ContainerHC
-	port := primaryContainerPort(merged)
 
 	interval := int32(30)
 	timeout := int32(5)
@@ -375,11 +376,19 @@ func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 		startPeriod = int32(hc.StartPeriod)
 	}
 
-	return &ecstypes.HealthCheck{
-		Command: []string{
+	var command []string
+	if len(hc.Command) > 0 {
+		command = hc.Command
+	} else {
+		port := primaryContainerPort(merged)
+		command = []string{
 			"CMD-SHELL",
 			fmt.Sprintf("curl -f http://localhost:%d%s || exit 1", port, merged.HealthCheckPath),
-		},
+		}
+	}
+
+	return &ecstypes.HealthCheck{
+		Command:     command,
 		Interval:    aws.Int32(interval),
 		Timeout:     aws.Int32(timeout),
 		Retries:     aws.Int32(retries),

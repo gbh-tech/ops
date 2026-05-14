@@ -126,6 +126,9 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig
 	if err := validatePorts(merged); err != nil {
 		return MergedConfig{}, err
 	}
+	if err := validateHealthCheckCommand(merged.ContainerHC); err != nil {
+		return MergedConfig{}, err
+	}
 
 	secretsName := merged.SecretsName
 	if secretsName == "" {
@@ -170,7 +173,7 @@ func applySection(dst *AppSection, src AppSection) {
 	if src.HealthCheckPath != "" {
 		dst.HealthCheckPath = src.HealthCheckPath
 	}
-	if src.ContainerHC != (HealthCheckConfig{}) {
+	if isNonEmptyHealthCheckConfig(src.ContainerHC) {
 		dst.ContainerHC = src.ContainerHC
 	}
 	if src.DatabaseMigrations {
@@ -216,6 +219,28 @@ func applySection(dst *AppSection, src AppSection) {
 	// the single source of truth for what schedules should exist.
 	if len(src.ScheduledTasks) > 0 {
 		dst.ScheduledTasks = src.ScheduledTasks
+	}
+}
+
+func isNonEmptyHealthCheckConfig(hc HealthCheckConfig) bool {
+	return hc.Interval != 0 || hc.Timeout != 0 || hc.Retries != 0 || hc.StartPeriod != 0 || len(hc.Command) > 0
+}
+
+func validateHealthCheckCommand(hc HealthCheckConfig) error {
+	if len(hc.Command) == 0 {
+		return nil
+	}
+	switch hc.Command[0] {
+	case "CMD", "CMD-SHELL":
+		return nil
+	default:
+		return fmt.Errorf(
+			"container_health_check.command[0] must be \"CMD\" or \"CMD-SHELL\", got %q\n"+
+				"hint: ECS requires the first element to declare the execution mode:\n"+
+				"  CMD-SHELL runs via /bin/sh -c: [\"CMD-SHELL\", \"curl -f http://localhost:8080/health || exit 1\"]\n"+
+				"  CMD uses exec form (no shell):  [\"CMD\", \"/bin/healthcheck\"]",
+			hc.Command[0],
+		)
 	}
 }
 

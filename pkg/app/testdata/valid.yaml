@@ -1,0 +1,13 @@
+global:
+  name: my-app
+  port: 8080
+  cpu: 256
+  memory: 512
+  container_health_check:
+    interval: 30
+    timeout: 5
+    retries: 3
+stage:
+  replicas: 1
+production:
+  replicas: 2
