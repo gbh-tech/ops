@@ -28,6 +28,16 @@ func TestValidateHealthCheckCommand(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "CMD with no argument",
+			hc:      HealthCheckConfig{Command: []string{"CMD"}},
+			wantErr: true,
+		},
+		{
+			name:    "CMD-SHELL with no argument",
+			hc:      HealthCheckConfig{Command: []string{"CMD-SHELL"}},
+			wantErr: true,
+		},
+		{
 			name:    "invalid first element",
 			hc:      HealthCheckConfig{Command: []string{"SHELL", "curl -f http://localhost/health"}},
 			wantErr: true,
