@@ -9,6 +9,7 @@ import (
 	"ops/pkg/utils"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -69,6 +70,7 @@ func init() {
 	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
 
 	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
+	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env)`)
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -603,14 +605,31 @@ var ecsVarsCmd = &cobra.Command{
 
 Use --format to control the output:
   table  (default) human-readable two-column table
-  dotenv KEY=VALUE lines suitable for piping into a .env file`,
+  dotenv KEY=VALUE lines written to {apps_dir}/{app}/.env by default
+
+With --format dotenv, use --output/-o to control the destination:
+  -o -           write to stdout instead of a file
+  -o /path/.env  write to the specified path`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 		format, _ := cmd.Flags().GetString("format")
+		outputPath, _ := cmd.Flags().GetString("output")
 
-		_, merged := loadAppForInspect(app, env, appConfigOverride)
+		cfg := config.LoadConfig()
+		ensureEcsOnAws(cfg)
+		requireAppInMonoRepo(cfg, app)
+
+		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		appCfg, err := pkgecs.LoadAppConfig(path)
+		if err != nil {
+			log.Fatal("Failed to load app config", "path", path, "err", err)
+		}
+		merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+		if err != nil {
+			log.Fatal("Invalid app config", "path", path, "err", err)
+		}
 
 		if len(merged.Environment) == 0 {
 			fmt.Printf("No environment variables configured for app=%q env=%q\n", merged.Name, env)
@@ -631,15 +650,53 @@ Use --format to control the output:
 			}
 			renderKeyValueTable("Variable", "Value", rows)
 		case "dotenv":
-			out, err := godotenv.Marshal(merged.Environment)
-			if err != nil {
-				log.Fatal("Failed to marshal environment to dotenv format", "err", err)
+			// Build output from the pre-sorted keys slice so the file is
+			// deterministic across runs regardless of map iteration order.
+			var sb strings.Builder
+			for _, k := range keys {
+				line, err := godotenv.Marshal(map[string]string{k: merged.Environment[k]})
+				if err != nil {
+					log.Fatal("Failed to marshal environment variable to dotenv format", "key", k, "err", err)
+				}
+				sb.WriteString(line)
+				sb.WriteByte('\n')
 			}
-			fmt.Println(out)
+			out := strings.TrimRight(sb.String(), "\n")
+
+			if outputPath == "-" {
+				fmt.Println(out)
+				return
+			}
+			if outputPath == "" {
+				outputPath = defaultDotenvPath(cfg, app)
+			}
+			if err := writeDotenvFile(outputPath, out); err != nil {
+				log.Fatal("Failed to write .env file", "path", outputPath, "err", err)
+			}
+			fmt.Printf("Wrote %d variables to %s\n", len(merged.Environment), outputPath)
 		default:
 			log.Fatal("Unknown --format value (expected: table, dotenv)", "format", format)
 		}
 	},
+}
+
+// defaultDotenvPath returns the default .env output path for the given app.
+// In mono-repo mode it resolves to {apps_dir}/{app}/.env; in single-repo mode
+// it falls back to ".env" at the working directory root.
+func defaultDotenvPath(cfg *config.OpsConfig, app string) string {
+	if cfg.IsMonoRepo() && app != "" {
+		return filepath.Join(cfg.AppsDirPath(), app, ".env")
+	}
+	return ".env"
+}
+
+// writeDotenvFile ensures parent directories exist, then writes content to
+// path (overwriting any existing file, making the operation idempotent).
+func writeDotenvFile(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create parent directories: %w", err)
+	}
+	return os.WriteFile(path, []byte(content+"\n"), 0o644)
 }
 
 var ecsSecretsCmd = &cobra.Command{
