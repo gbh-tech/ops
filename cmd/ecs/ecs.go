@@ -70,7 +70,7 @@ func init() {
 	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
 
 	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
-	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env)`)
+	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env, or .env in single-repo mode)`)
 }
 
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
@@ -605,7 +605,7 @@ var ecsVarsCmd = &cobra.Command{
 
 Use --format to control the output:
   table  (default) human-readable two-column table
-  dotenv KEY=VALUE lines written to {apps_dir}/{app}/.env by default
+  dotenv KEY=VALUE lines written to {apps_dir}/{app}/.env by default (or .env in single-repo mode)
 
 With --format dotenv, use --output/-o to control the destination:
   -o -           write to stdout instead of a file
