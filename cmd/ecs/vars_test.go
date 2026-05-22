@@ -14,7 +14,7 @@ import (
 func TestDefaultDotenvPath(t *testing.T) {
 	t.Parallel()
 
-	monoDefault := &config.OpsConfig{}           // RepoMode="" → mono, AppsDir="" → "apps"
+	monoDefault := &config.OpsConfig{}                   // RepoMode="" → mono, AppsDir="" → "apps"
 	monoCustom := &config.OpsConfig{AppsDir: "services"} // custom apps dir
 	singleRepo := &config.OpsConfig{RepoMode: "single"}
 
