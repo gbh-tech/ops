@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.0
+
+### Minor Changes
+
+- 56082d9: `ops ecs vars -f dotenv` now writes the resolved environment variables to
+  `{apps_dir}/{app}/.env` by default instead of printing to stdout.
+
+  Use `-o -` to restore the previous stdout behavior, or `-o /path/.env` to
+  write to a custom path. Output is deterministically sorted so repeated runs
+  are idempotent.
+
 ## 1.9.0
 
 ### Minor Changes
