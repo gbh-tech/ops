@@ -143,8 +143,8 @@ func applySection(dst *AppSection, src AppSection) {
 	if src.Name != "" {
 		dst.Name = src.Name
 	}
-	if src.ServiceName != "" {
-		dst.ServiceName = src.ServiceName
+	if src.AppendEnvironment != nil {
+		dst.AppendEnvironment = src.AppendEnvironment
 	}
 	if src.Image != "" {
 		dst.Image = src.Image
@@ -317,13 +317,19 @@ type BuildSecretSpec = app.BuildSecretSpec
 var ResolveBuildSecretSpecs = app.ResolveBuildSecretSpecs
 var ResolveBuildArgs = app.ResolveBuildArgs
 
+// AppendsEnvironment reports whether ECS service operations target the legacy
+// "{name}-{env}" service name instead of the default bare "name".
+func (config MergedConfig) AppendsEnvironment() bool {
+	return config.AppendEnvironment != nil && *config.AppendEnvironment
+}
+
 // ComputeNames derives the ECS family name, service name, CloudWatch log
 // group, and scheduled task family from the merged config.
 func ComputeNames(config MergedConfig, env, cluster string) Names {
 	family := fmt.Sprintf("%s-%s", config.Name, env)
-	service := family
-	if config.ServiceName != "" {
-		service = config.ServiceName
+	service := config.Name
+	if config.AppendsEnvironment() {
+		service = family
 	}
 	logGroup := fmt.Sprintf("/ecs/%s/%s/%s", cluster, env, config.Name)
 	return Names{

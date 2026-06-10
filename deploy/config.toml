@@ -36,12 +36,11 @@
 # log group, container name, and default image repo name.
 name = "my-app"
 
-# Override the ECS service name targeted by service operations. Defaults to
-# {name}-{env}. This does not change the task family, container name, log group,
-# image repo, or scheduler names. Useful when an existing environment has a
-# bare ECS service such as "subgraph-users" while new task families remain
-# environment-scoped as "subgraph-users-stage".
-# service_name = "my-app"
+# ECS service operations target `name` exactly by default. Set
+# append_environment = true to opt in to the legacy `{name}-{env}` ECS service
+# name while leaving the task family, container name, log group, image repo, and
+# scheduler names environment-scoped.
+# append_environment = true
 
 # Container image to deploy.
 # - If omitted, defaults to `name` (resolved against the ECR URL in
@@ -185,10 +184,10 @@ name = "my-app"
 # [stage] — overrides applied only when deploying to the stage environment
 # ---------------------------------------------------------------------------
 [stage]
-# Override only this environment's ECS service target. For example, use this
-# during migrations where stage already has a bare service name but production
-# follows the default {name}-{env} convention.
-# service_name = "my-app"
+# Override only this environment's ECS service target naming. For example, use
+# append_environment = true while migrating an environment that still has a
+# legacy `{name}-{env}` ECS service, or false to override a global opt-in.
+# append_environment = true
 # replicas = 1
 # cpu = 256
 # memory = 512

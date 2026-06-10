@@ -360,6 +360,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"Env", env},
 			{"Family", names.Family},
 			{"Service", names.Service},
+			{"Append environment", fmt.Sprintf("%v", merged.AppendsEnvironment())},
 			{"Image", *ctr.Image},
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},

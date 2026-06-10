@@ -8,7 +8,7 @@ global:
     timeout: 5
     retries: 3
 stage:
-  service_name: my-app
+  append_environment: true
   replicas: 1
 production:
   replicas: 2

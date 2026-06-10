@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestValidateHealthCheckCommand(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -144,32 +148,32 @@ func TestResolveConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("global service name is inherited", func(t *testing.T) {
+	t.Run("global append environment is inherited", func(t *testing.T) {
 		t.Parallel()
 		cfg := AppConfig{
-			"global": AppSection{Name: "api", ServiceName: "api"},
+			"global": AppSection{Name: "api", AppendEnvironment: boolPtr(true)},
 		}
 		merged, err := ResolveConfig(base, cfg, "stage")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if merged.ServiceName != "api" {
-			t.Fatalf("service_name = %q, want %q", merged.ServiceName, "api")
+		if !merged.AppendsEnvironment() {
+			t.Fatal("append_environment = false, want true")
 		}
 	})
 
-	t.Run("env service name overrides global", func(t *testing.T) {
+	t.Run("env append environment overrides global", func(t *testing.T) {
 		t.Parallel()
 		cfg := AppConfig{
-			"global": AppSection{Name: "api", ServiceName: "api"},
-			"stage":  AppSection{ServiceName: "api-stage-public"},
+			"global": AppSection{Name: "api", AppendEnvironment: boolPtr(true)},
+			"stage":  AppSection{AppendEnvironment: boolPtr(false)},
 		}
 		merged, err := ResolveConfig(base, cfg, "stage")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if merged.ServiceName != "api-stage-public" {
-			t.Fatalf("service_name = %q, want %q", merged.ServiceName, "api-stage-public")
+		if merged.AppendsEnvironment() {
+			t.Fatal("append_environment = true, want false")
 		}
 	})
 
@@ -230,16 +234,16 @@ func TestComputeNames(t *testing.T) {
 		wantService string
 	}{
 		{
-			name:        "defaults service to family",
+			name:        "defaults service to name",
 			merged:      MergedConfig{AppSection: AppSection{Name: "api"}},
 			wantFamily:  "api-stage",
-			wantService: "api-stage",
+			wantService: "api",
 		},
 		{
-			name:        "uses service name override",
-			merged:      MergedConfig{AppSection: AppSection{Name: "api", ServiceName: "api"}},
+			name:        "appends environment when enabled",
+			merged:      MergedConfig{AppSection: AppSection{Name: "api", AppendEnvironment: boolPtr(true)}},
 			wantFamily:  "api-stage",
-			wantService: "api",
+			wantService: "api-stage",
 		},
 	}
 
