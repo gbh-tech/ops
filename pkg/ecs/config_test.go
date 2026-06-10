@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestValidateHealthCheckCommand(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -144,6 +148,35 @@ func TestResolveConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("global append environment is inherited", func(t *testing.T) {
+		t.Parallel()
+		cfg := AppConfig{
+			"global": AppSection{Name: "api", AppendEnvironment: boolPtr(true)},
+		}
+		merged, err := ResolveConfig(base, cfg, "stage")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !merged.AppendsEnvironment() {
+			t.Fatal("append_environment = false, want true")
+		}
+	})
+
+	t.Run("env append environment overrides global", func(t *testing.T) {
+		t.Parallel()
+		cfg := AppConfig{
+			"global": AppSection{Name: "api", AppendEnvironment: boolPtr(true)},
+			"stage":  AppSection{AppendEnvironment: boolPtr(false)},
+		}
+		merged, err := ResolveConfig(base, cfg, "stage")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if merged.AppendsEnvironment() {
+			t.Fatal("append_environment = true, want false")
+		}
+	})
+
 	t.Run("missing name returns error", func(t *testing.T) {
 		t.Parallel()
 		cfg := AppConfig{
@@ -194,18 +227,42 @@ func TestResolveSecrets(t *testing.T) {
 
 func TestComputeNames(t *testing.T) {
 	t.Parallel()
-	merged := MergedConfig{AppSection: AppSection{Name: "api"}}
-	names := ComputeNames(merged, "stage", "my-cluster")
-	if names.Family != "api-stage" {
-		t.Fatalf("Family = %q, want %q", names.Family, "api-stage")
+	tests := []struct {
+		name        string
+		merged      MergedConfig
+		wantFamily  string
+		wantService string
+	}{
+		{
+			name:        "defaults service to name",
+			merged:      MergedConfig{AppSection: AppSection{Name: "api"}},
+			wantFamily:  "api-stage",
+			wantService: "api",
+		},
+		{
+			name:        "appends environment when enabled",
+			merged:      MergedConfig{AppSection: AppSection{Name: "api", AppendEnvironment: boolPtr(true)}},
+			wantFamily:  "api-stage",
+			wantService: "api-stage",
+		},
 	}
-	if names.Service != "api-stage" {
-		t.Fatalf("Service = %q, want %q", names.Service, "api-stage")
-	}
-	if names.LogGroup != "/ecs/my-cluster/stage/api" {
-		t.Fatalf("LogGroup = %q, want %q", names.LogGroup, "/ecs/my-cluster/stage/api")
-	}
-	if names.ScheduledFamily != "api-stage-scheduled" {
-		t.Fatalf("ScheduledFamily = %q, want %q", names.ScheduledFamily, "api-stage-scheduled")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			names := ComputeNames(tt.merged, "stage", "my-cluster")
+			if names.Family != tt.wantFamily {
+				t.Fatalf("Family = %q, want %q", names.Family, tt.wantFamily)
+			}
+			if names.Service != tt.wantService {
+				t.Fatalf("Service = %q, want %q", names.Service, tt.wantService)
+			}
+			if names.LogGroup != "/ecs/my-cluster/stage/api" {
+				t.Fatalf("LogGroup = %q, want %q", names.LogGroup, "/ecs/my-cluster/stage/api")
+			}
+			if names.ScheduledFamily != "api-stage-scheduled" {
+				t.Fatalf("ScheduledFamily = %q, want %q", names.ScheduledFamily, "api-stage-scheduled")
+			}
+		})
 	}
 }

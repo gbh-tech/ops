@@ -132,13 +132,14 @@ type ScheduledTaskConfig struct {
 // production, etc.). Secrets can be a list of strings or a map of
 // env-var → json-key; both forms normalise to a map via NormalizeSecrets.
 type AppSection struct {
-	Name     string `toml:"name"                yaml:"name"`
-	Image    string `toml:"image"               yaml:"image"`
-	Port     int    `toml:"port"                yaml:"port"`
-	Ports    []int  `toml:"ports"               yaml:"ports"`
-	CPU      int    `toml:"cpu"                 yaml:"cpu"`
-	Memory   int    `toml:"memory"              yaml:"memory"`
-	Replicas *int   `toml:"replicas"            yaml:"replicas"`
+	Name              string `toml:"name"               yaml:"name"`
+	AppendEnvironment *bool  `toml:"append_environment" yaml:"append_environment"`
+	Image             string `toml:"image"              yaml:"image"`
+	Port              int    `toml:"port"               yaml:"port"`
+	Ports             []int  `toml:"ports"              yaml:"ports"`
+	CPU               int    `toml:"cpu"                yaml:"cpu"`
+	Memory            int    `toml:"memory"             yaml:"memory"`
+	Replicas          *int   `toml:"replicas"           yaml:"replicas"`
 	// Deprecated: use Replicas instead. Kept for backward compatibility.
 	DesiredCount       *int              `toml:"desired_count"       yaml:"desired_count"`
 	NetworkMode        string            `toml:"network_mode"        yaml:"network_mode"`
