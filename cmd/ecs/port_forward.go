@@ -3,7 +3,6 @@ package ecs
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strconv"
 
@@ -50,6 +49,7 @@ func runPortForward(cmd *cobra.Command, args []string) {
 	app, _ := cmd.Flags().GetString("app")
 	env, _ := cmd.Flags().GetString("env")
 	container, _ := cmd.Flags().GetString("container")
+	appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
 	var service string
 	var remotePort int
@@ -117,7 +117,8 @@ func runPortForward(cmd *cobra.Command, args []string) {
 		if err != nil || remotePort <= 0 {
 			log.Fatal("Invalid --port value (must be a positive integer)", "err", err)
 		}
-		service = fmt.Sprintf("%s-%s", app, env)
+		_, _, names := loadApp(ec, app, env, appConfigOverride)
+		service = names.Service
 	}
 
 	if cmd.Flags().Changed("local-port") {

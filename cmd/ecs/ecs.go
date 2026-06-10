@@ -359,6 +359,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"App", merged.Name},
 			{"Env", env},
 			{"Family", names.Family},
+			{"Service", names.Service},
 			{"Image", *ctr.Image},
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},

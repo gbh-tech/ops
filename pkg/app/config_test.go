@@ -115,6 +115,9 @@ func TestLoadAppConfigTOML(t *testing.T) {
 	if global.ContainerHC.Interval != 30 {
 		t.Fatalf("hc interval = %d, want 30", global.ContainerHC.Interval)
 	}
+	if cfg["stage"].ServiceName != "my-app" {
+		t.Fatalf("stage service_name = %q, want %q", cfg["stage"].ServiceName, "my-app")
+	}
 }
 
 func TestLoadAppConfigYAML(t *testing.T) {
@@ -125,6 +128,9 @@ func TestLoadAppConfigYAML(t *testing.T) {
 	}
 	if cfg["global"].Name != "my-app" {
 		t.Fatalf("name = %q, want %q", cfg["global"].Name, "my-app")
+	}
+	if cfg["stage"].ServiceName != "my-app" {
+		t.Fatalf("stage service_name = %q, want %q", cfg["stage"].ServiceName, "my-app")
 	}
 }
 

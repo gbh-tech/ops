@@ -270,6 +270,15 @@ ops ecs cleanup --env production --app my-app --keep 5
 ops ecs logs --env production --app my-app --since 30m
 ```
 
+By default, ECS service operations target `{name}-{env}` from the app's
+`deploy/config.toml`. Set `service_name` in `[global]` or an environment
+section to target an existing ECS service with a different name while leaving
+the task family and app naming unchanged. For example, `[stage] service_name =
+"subgraph-users"` lets `name = "subgraph-users"` deploy the
+`subgraph-users-stage` task family to the existing `subgraph-users` service.
+Run `ops ecs render --env stage --app subgraph-users` to verify the resolved
+service target before deploying.
+
 ### `git`
 
 ```bash

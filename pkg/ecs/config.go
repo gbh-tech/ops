@@ -143,6 +143,9 @@ func applySection(dst *AppSection, src AppSection) {
 	if src.Name != "" {
 		dst.Name = src.Name
 	}
+	if src.ServiceName != "" {
+		dst.ServiceName = src.ServiceName
+	}
 	if src.Image != "" {
 		dst.Image = src.Image
 	}
@@ -318,10 +321,14 @@ var ResolveBuildArgs = app.ResolveBuildArgs
 // group, and scheduled task family from the merged config.
 func ComputeNames(config MergedConfig, env, cluster string) Names {
 	family := fmt.Sprintf("%s-%s", config.Name, env)
+	service := family
+	if config.ServiceName != "" {
+		service = config.ServiceName
+	}
 	logGroup := fmt.Sprintf("/ecs/%s/%s/%s", cluster, env, config.Name)
 	return Names{
 		Family:          family,
-		Service:         family,
+		Service:         service,
 		LogGroup:        logGroup,
 		ScheduledFamily: family + "-scheduled",
 	}

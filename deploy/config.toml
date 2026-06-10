@@ -32,9 +32,16 @@
 # All other fields can be overridden freely by env-specific sections.
 [global]
 
-# REQUIRED. Unique name for this app. Drives the ECS family, service name,
-# CloudWatch log group, container name, and default image repo name.
+# REQUIRED. Unique name for this app. Drives the ECS task family, CloudWatch
+# log group, container name, and default image repo name.
 name = "my-app"
+
+# Override the ECS service name targeted by service operations. Defaults to
+# {name}-{env}. This does not change the task family, container name, log group,
+# image repo, or scheduler names. Useful when an existing environment has a
+# bare ECS service such as "subgraph-users" while new task families remain
+# environment-scoped as "subgraph-users-stage".
+# service_name = "my-app"
 
 # Container image to deploy.
 # - If omitted, defaults to `name` (resolved against the ECR URL in
@@ -178,6 +185,10 @@ name = "my-app"
 # [stage] — overrides applied only when deploying to the stage environment
 # ---------------------------------------------------------------------------
 [stage]
+# Override only this environment's ECS service target. For example, use this
+# during migrations where stage already has a bare service name but production
+# follows the default {name}-{env} convention.
+# service_name = "my-app"
 # replicas = 1
 # cpu = 256
 # memory = 512
