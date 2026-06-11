@@ -1,11 +1,5 @@
 # Changelog
 
-## 2.0.0
-
-### Major Changes
-
-- 9076016: Make ECS service naming explicit: service operations now target `name` exactly by default, and `append_environment = true` opts in to the legacy `{name}-{env}` service target.
-
 ## 1.10.0
 
 ### Minor Changes
