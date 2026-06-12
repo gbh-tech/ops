@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.1
+
+### Patch Changes
+
+- 8494d6c: Fix ecs run command failing with missing Interactive parameter in AWS ECS execute-command API call
+
 ## 1.11.0
 
 ### Minor Changes
