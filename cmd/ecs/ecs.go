@@ -912,7 +912,8 @@ Example:
 // execECSCommand resolves the first running task for the given service and
 // executes the supplied command via ECS Exec. When interactive is true the
 // session is started with --interactive and stdin is wired to the terminal;
-// when false stdin is left disconnected (suitable for one-off commands).
+// when false no interactivity flag is passed (older AWS CLI versions do not
+// accept --no-interactive) and stdin is left disconnected.
 func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, interactive bool) {
 	utils.CheckBinary("aws")
 	utils.CheckBinary("session-manager-plugin")
@@ -946,8 +947,6 @@ func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, int
 	}
 	if interactive {
 		execArgs = append(execArgs, "--interactive")
-	} else {
-		execArgs = append(execArgs, "--no-interactive")
 	}
 	if ec.cfg.AWS.Profile != "" {
 		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
