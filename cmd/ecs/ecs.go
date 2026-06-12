@@ -946,6 +946,8 @@ func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, int
 	}
 	if interactive {
 		execArgs = append(execArgs, "--interactive")
+	} else {
+		execArgs = append(execArgs, "--no-interactive")
 	}
 	if ec.cfg.AWS.Profile != "" {
 		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
