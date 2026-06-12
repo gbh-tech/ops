@@ -940,7 +940,7 @@ func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, int
 		"--container", appName,
 		"--command", command,
 		"--region", ec.cfg.AWS.Region,
-		"--interactive", // ECS execute-command only supports interactive mode at the API level
+		"--interactive",
 	}
 	if ec.cfg.AWS.Profile != "" {
 		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
