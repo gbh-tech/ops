@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.2
+
+### Patch Changes
+
+- 45ba51e: Remove --no-interactive flag that is not supported by all AWS CLI versions; non-interactive ECS exec works without explicit flag
+
 ## 1.11.1
 
 ### Patch Changes
