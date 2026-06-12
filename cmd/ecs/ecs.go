@@ -909,11 +909,7 @@ Example:
 	},
 }
 
-// execECSCommand resolves the first running task for the given service and
-// executes the supplied command via ECS Exec. --interactive is always passed
-// because ECS execute-command only supports interactive mode at the API level.
-// The interactive boolean only controls whether stdin is wired to the caller's
-// terminal (true for shell sessions, false for one-off commands).
+// execECSCommand resolves the first running task for the given service and executes the supplied command via ECS Exec.
 func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, interactive bool) {
 	utils.CheckBinary("aws")
 	utils.CheckBinary("session-manager-plugin")
@@ -944,16 +940,12 @@ func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, int
 		"--container", appName,
 		"--command", command,
 		"--region", ec.cfg.AWS.Region,
+		"--interactive", // ECS execute-command only supports interactive mode at the API level
 	}
-	// Always pass --interactive — ECS execute-command only supports interactive
-	// mode at the API level. The interactive boolean only controls whether stdin
-	// is wired to the caller's terminal.
-	execArgs = append(execArgs, "--interactive")
 	if ec.cfg.AWS.Profile != "" {
 		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
 	}
 	execCmd := exec.Command("aws", execArgs...)
-	// Only wire stdin for shell sessions; leave disconnected for one-off commands.
 	if interactive {
 		execCmd.Stdin = os.Stdin
 	}
