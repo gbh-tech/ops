@@ -261,45 +261,102 @@ func LoadAppConfig(path string) (AppConfig, error) {
 	return cfg, nil
 }
 
-// NormalizeSecrets converts the secrets field (which may be a []string or
-// map[string]string) into a canonical map[envVar]jsonKey. It returns an error
-// for any non-string element so that malformed config entries fail fast rather
-// than being silently dropped and causing missing secrets at runtime.
-func NormalizeSecrets(raw any) (map[string]string, error) {
+// SecretRef is a normalized secret reference. Key is the JSON key within the
+// Secrets Manager secret. When Secret is empty, the key resolves against the
+// service's implicit shared or env secret. When Secret is non-empty, it names
+// an external secret: a bare name appended to the ARN prefix, or a full
+// arn:... ARN.
+type SecretRef struct {
+	Key    string
+	Secret string
+}
+
+// NormalizeSecretRefs parses a raw secrets value from TOML config and returns
+// a map of environment variable name to SecretRef. It accepts the same forms
+// as NormalizeSecrets, plus an inline-table form for external references.
+func NormalizeSecretRefs(raw any) (map[string]SecretRef, error) {
 	if raw == nil {
 		return nil, nil
 	}
-	result := make(map[string]string)
-
 	switch v := raw.(type) {
 	case []interface{}:
-		for i, item := range v {
-			key, ok := item.(string)
+		out := make(map[string]SecretRef, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
 			if !ok {
-				return nil, fmt.Errorf("secrets[%d]: expected string, got %T", i, item)
+				return nil, fmt.Errorf("secrets: expected string items, got %T", item)
 			}
-			result[key] = key
+			out[s] = SecretRef{Key: s}
 		}
-	case map[string]interface{}:
-		for envVar, jsonKey := range v {
-			k, ok := jsonKey.(string)
-			if !ok {
-				return nil, fmt.Errorf("secrets[%q]: expected string value, got %T", envVar, jsonKey)
-			}
-			result[envVar] = k
-		}
+		return out, nil
 	case []string:
-		for _, key := range v {
-			result[key] = key
+		out := make(map[string]SecretRef, len(v))
+		for _, s := range v {
+			out[s] = SecretRef{Key: s}
 		}
+		return out, nil
+	case map[string]interface{}:
+		out := make(map[string]SecretRef, len(v))
+		for envVar, val := range v {
+			switch tv := val.(type) {
+			case string:
+				out[envVar] = SecretRef{Key: tv}
+			case map[string]interface{}:
+				ref := SecretRef{Key: envVar}
+				for k, kv := range tv {
+					switch k {
+					case "secret":
+						s, ok := kv.(string)
+						if !ok {
+							return nil, fmt.Errorf("secrets: %q field \"secret\" must be a string, got %T", envVar, kv)
+						}
+						ref.Secret = s
+					case "key":
+						s, ok := kv.(string)
+						if !ok {
+							return nil, fmt.Errorf("secrets: %q field \"key\" must be a string, got %T", envVar, kv)
+						}
+						ref.Key = s
+					default:
+						return nil, fmt.Errorf("secrets: %q has unknown field %q", envVar, k)
+					}
+				}
+				out[envVar] = ref
+			default:
+				return nil, fmt.Errorf("secrets: unsupported value type %T for %q", val, envVar)
+			}
+		}
+		return out, nil
 	case map[string]string:
-		for k, vv := range v {
-			result[k] = vv
+		out := make(map[string]SecretRef, len(v))
+		for envVar, key := range v {
+			out[envVar] = SecretRef{Key: key}
 		}
+		return out, nil
 	default:
 		return nil, fmt.Errorf("secrets: unsupported type %T", raw)
 	}
-	return result, nil
+}
+
+// NormalizeSecrets parses a raw secrets value from TOML config. External
+// secret references (SecretRef.Secret != "") are rejected because build-time
+// and legacy callers only support keys within the service's implicit secret.
+func NormalizeSecrets(raw any) (map[string]string, error) {
+	refs, err := NormalizeSecretRefs(raw)
+	if err != nil {
+		return nil, err
+	}
+	if refs == nil {
+		return nil, nil
+	}
+	out := make(map[string]string, len(refs))
+	for envVar, ref := range refs {
+		if ref.Secret != "" {
+			return nil, fmt.Errorf("secrets: external secret reference for %q is not supported here", envVar)
+		}
+		out[envVar] = ref.Key
+	}
+	return out, nil
 }
 
 // BuildSecretSpec describes one Docker BuildKit secret that ops will fetch from

@@ -225,6 +225,115 @@ func TestResolveSecrets(t *testing.T) {
 	}
 }
 
+func TestResolveSecretsExternalCombined(t *testing.T) {
+	t.Parallel()
+	const arnPrefix = "arn:aws:secretsmanager:us-east-1:123456789012:secret"
+
+	cfg := AppConfig{
+		"global": AppSection{Secrets: map[string]any{"DB_URL": "db_url"}},
+		"stage": AppSection{Secrets: map[string]any{
+			"PLAIN_KEY": "plain_key",
+			"CLAUDE_API_KEY": map[string]any{
+				"secret": "anthropic/stage",
+				"key":    "CLAUDE_API_KEY",
+			},
+			"ARN_KEY": map[string]any{
+				"secret": "arn:aws:secretsmanager:us-east-1:999:secret:ext",
+				"key":    "K",
+			},
+		}},
+	}
+
+	secrets, err := ResolveSecrets(cfg, "stage", "my-app", arnPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := map[string]string{}
+	for _, s := range secrets {
+		found[s.Name] = s.ValueFrom
+	}
+
+	const wantClaude = "arn:aws:secretsmanager:us-east-1:123456789012:secret:anthropic/stage:CLAUDE_API_KEY::"
+	if found["CLAUDE_API_KEY"] != wantClaude {
+		t.Fatalf("CLAUDE_API_KEY ValueFrom = %q, want %q", found["CLAUDE_API_KEY"], wantClaude)
+	}
+
+	if !strings.Contains(found["PLAIN_KEY"], "my-app/stage") {
+		t.Fatalf("PLAIN_KEY ValueFrom = %q, want my-app/stage path", found["PLAIN_KEY"])
+	}
+
+	const wantARN = "arn:aws:secretsmanager:us-east-1:999:secret:ext:K::"
+	if found["ARN_KEY"] != wantARN {
+		t.Fatalf("ARN_KEY ValueFrom = %q, want %q", found["ARN_KEY"], wantARN)
+	}
+
+	if !strings.Contains(found["DB_URL"], "my-app/shared") {
+		t.Fatalf("DB_URL ValueFrom = %q, want shared path", found["DB_URL"])
+	}
+}
+
+func TestResolveSecretsExternalSubtests(t *testing.T) {
+	t.Parallel()
+	arnPrefix := "arn:aws:secretsmanager:us-east-1:123456789012:secret"
+
+	t.Run("external secret alongside implicit key", func(t *testing.T) {
+		t.Parallel()
+		cfg := AppConfig{
+			"global": AppSection{},
+			"stage": AppSection{Secrets: map[string]any{
+				"CLAUDE_API_KEY": map[string]any{
+					"secret": "anthropic/stage",
+					"key":    "CLAUDE_API_KEY",
+				},
+				"DB_URL": "db_url",
+			}},
+		}
+		secrets, err := ResolveSecrets(cfg, "stage", "my-app", arnPrefix)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := map[string]string{}
+		for _, s := range secrets {
+			found[s.Name] = s.ValueFrom
+		}
+		wantClaude := arnPrefix + ":anthropic/stage:CLAUDE_API_KEY::"
+		if found["CLAUDE_API_KEY"] != wantClaude {
+			t.Fatalf("CLAUDE_API_KEY ValueFrom = %q, want %q", found["CLAUDE_API_KEY"], wantClaude)
+		}
+		wantDB := arnPrefix + ":my-app/stage:db_url::"
+		if found["DB_URL"] != wantDB {
+			t.Fatalf("DB_URL ValueFrom = %q, want %q", found["DB_URL"], wantDB)
+		}
+	})
+
+	t.Run("full ARN passthrough", func(t *testing.T) {
+		t.Parallel()
+		fullARN := "arn:aws:secretsmanager:us-east-1:123456789012:secret:custom-XyZ"
+		cfg := AppConfig{
+			"global": AppSection{},
+			"stage": AppSection{Secrets: map[string]any{
+				"CUSTOM": map[string]any{
+					"secret": fullARN,
+					"key":    "K",
+				},
+			}},
+		}
+		secrets, err := ResolveSecrets(cfg, "stage", "my-app", arnPrefix)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		found := map[string]string{}
+		for _, s := range secrets {
+			found[s.Name] = s.ValueFrom
+		}
+		want := fullARN + ":K::"
+		if found["CUSTOM"] != want {
+			t.Fatalf("CUSTOM ValueFrom = %q, want %q", found["CUSTOM"], want)
+		}
+	})
+}
+
 func TestComputeNames(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
