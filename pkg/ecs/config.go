@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"fmt"
+	"strings"
 
 	"ops/pkg/app"
 )
@@ -269,17 +270,37 @@ func validatePorts(config AppSection) error {
 // NormalizeSecrets is re-exported from pkg/app for callers that import pkg/ecs.
 var NormalizeSecrets = app.NormalizeSecrets
 
+// secretValueFrom builds the ECS ValueFrom string for a single secret ref.
+// arnPrefix is the cluster-level prefix (e.g. "arn:aws:secretsmanager:us-east-1:123456789012:secret").
+// implicitBase is the full ARN for the service's implicit secret (shared or env path).
+// When ref.Secret is non-empty it overrides the implicit base; a bare name is
+// appended to arnPrefix, and a full arn:... value is used as-is.
+func secretValueFrom(arnPrefix, implicitBase string, ref app.SecretRef) string {
+	base := implicitBase
+	if ref.Secret != "" {
+		if strings.HasPrefix(ref.Secret, "arn:") {
+			base = ref.Secret
+		} else {
+			base = fmt.Sprintf("%s:%s", arnPrefix, ref.Secret)
+		}
+	}
+	return fmt.Sprintf("%s:%s::", base, ref.Key)
+}
+
 // ResolveSecrets builds the ECS secrets list from the consolidated Secrets
 // Manager convention:
 //
 //   - {serviceName}/shared  → keys from app [global].secrets
 //   - {serviceName}/{env}   → keys from app [env].secrets (env-specific wins)
+//
+// Both global and env secrets support external Secrets Manager references via
+// inline-table entries: { secret = "other/secret", key = "JSON_KEY" }.
 func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECSSecret, error) {
-	globalMap, err := app.NormalizeSecrets(appCfg["global"].Secrets)
+	globalMap, err := app.NormalizeSecretRefs(appCfg["global"].Secrets)
 	if err != nil {
 		return nil, fmt.Errorf("global.secrets: %w", err)
 	}
-	envMap, err := app.NormalizeSecrets(appCfg[env].Secrets)
+	envMap, err := app.NormalizeSecretRefs(appCfg[env].Secrets)
 	if err != nil {
 		return nil, fmt.Errorf("%s.secrets: %w", env, err)
 	}
@@ -290,19 +311,19 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECS
 	var secrets []ECSSecret
 
 	// Global secrets not overridden by env come from the shared secret.
-	for envVar, jsonKey := range globalMap {
+	for envVar, ref := range globalMap {
 		if _, overridden := envMap[envVar]; !overridden {
 			secrets = append(secrets, ECSSecret{
 				Name:      envVar,
-				ValueFrom: fmt.Sprintf("%s:%s::", sharedARN, jsonKey),
+				ValueFrom: secretValueFrom(arnPrefix, sharedARN, ref),
 			})
 		}
 	}
 	// Env-specific secrets always come from the env secret.
-	for envVar, jsonKey := range envMap {
+	for envVar, ref := range envMap {
 		secrets = append(secrets, ECSSecret{
 			Name:      envVar,
-			ValueFrom: fmt.Sprintf("%s:%s::", envARN, jsonKey),
+			ValueFrom: secretValueFrom(arnPrefix, envARN, ref),
 		})
 	}
 

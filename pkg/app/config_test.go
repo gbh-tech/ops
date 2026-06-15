@@ -71,6 +71,109 @@ func TestNormalizeSecrets(t *testing.T) {
 	}
 }
 
+func TestNormalizeSecretRefs(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		raw     any
+		want    map[string]app.SecretRef
+		wantErr bool
+	}{
+		{
+			name: "nil input",
+			raw:  nil,
+			want: nil,
+		},
+		{
+			name: "slice of strings",
+			raw:  []any{"A", "B"},
+			want: map[string]app.SecretRef{
+				"A": {Key: "A"},
+				"B": {Key: "B"},
+			},
+		},
+		{
+			name: "string map",
+			raw:  map[string]any{"A": "a_key"},
+			want: map[string]app.SecretRef{
+				"A": {Key: "a_key"},
+			},
+		},
+		{
+			name: "external inline table",
+			raw: map[string]any{
+				"CLAUDE_API_KEY": map[string]any{
+					"secret": "anthropic/stage",
+					"key":    "CLAUDE_API_KEY",
+				},
+			},
+			want: map[string]app.SecretRef{
+				"CLAUDE_API_KEY": {Key: "CLAUDE_API_KEY", Secret: "anthropic/stage"},
+			},
+		},
+		{
+			name: "key-only inline table",
+			raw: map[string]any{
+				"DB_URL": map[string]any{"key": "database_url"},
+			},
+			want: map[string]app.SecretRef{
+				"DB_URL": {Key: "database_url"},
+			},
+		},
+		{
+			name: "inline table with no key defaults to envVar",
+			raw: map[string]any{
+				"MY_VAR": map[string]any{"secret": "some/secret"},
+			},
+			want: map[string]app.SecretRef{
+				"MY_VAR": {Key: "MY_VAR", Secret: "some/secret"},
+			},
+		},
+		{
+			name:    "unknown field in inline table",
+			raw:     map[string]any{"X": map[string]any{"unknown": "v"}},
+			wantErr: true,
+		},
+		{
+			name:    "non-string secret field",
+			raw:     map[string]any{"X": map[string]any{"secret": 42}},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := app.NormalizeSecretRefs(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("NormalizeSecretRefs() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeSecretsRejectsExternalRef(t *testing.T) {
+	t.Parallel()
+	raw := map[string]any{
+		"CLAUDE_API_KEY": map[string]any{
+			"secret": "anthropic/stage",
+			"key":    "CLAUDE_API_KEY",
+		},
+	}
+	_, err := app.NormalizeSecrets(raw)
+	if err == nil {
+		t.Fatal("expected error for external ref in NormalizeSecrets, got nil")
+	}
+}
+
 func TestResolveBuildArgs(t *testing.T) {
 	t.Parallel()
 	t.Run("env overrides global", func(t *testing.T) {
@@ -151,6 +254,28 @@ func TestLoadAppConfigUnknownKeyError(t *testing.T) {
 	_, err := app.LoadAppConfig("testdata/unknown_key.toml")
 	if err == nil {
 		t.Fatal("expected error for unknown TOML key, got nil")
+	}
+}
+
+func TestLoadAppConfigExternalSecretsTOML(t *testing.T) {
+	t.Parallel()
+	cfg, err := app.LoadAppConfig("testdata/external_secrets.toml")
+	if err != nil {
+		t.Fatalf("unexpected error loading external_secrets.toml: %v", err)
+	}
+	refs, err := app.NormalizeSecretRefs(cfg["stage"].Secrets)
+	if err != nil {
+		t.Fatalf("NormalizeSecretRefs: %v", err)
+	}
+	ref, ok := refs["CLAUDE_API_KEY"]
+	if !ok {
+		t.Fatal("CLAUDE_API_KEY not found in stage secrets")
+	}
+	if ref.Secret != "anthropic/stage" {
+		t.Fatalf("CLAUDE_API_KEY.Secret = %q, want %q", ref.Secret, "anthropic/stage")
+	}
+	if ref.Key != "CLAUDE_API_KEY" {
+		t.Fatalf("CLAUDE_API_KEY.Key = %q, want %q", ref.Key, "CLAUDE_API_KEY")
 	}
 }
 

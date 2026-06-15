@@ -134,6 +134,17 @@ name = "my-app"
 # DATABASE_URL = "db_url"
 # API_KEY      = "api_key"
 #
+# External Secrets Manager secret — references a secret OUTSIDE the service's
+# implicit shared/env path. Use an inline table with optional `secret` (bare
+# name appended to the ARN prefix, or a full arn:... ARN) and optional `key`
+# (JSON key; defaults to the env-var name when omitted).
+# NOTE: the ECS execution role must be granted secretsmanager:GetSecretValue on
+# the external secret ARN via Terraform before this will work at runtime.
+#
+# [global.secrets]
+# CLAUDE_API_KEY = { secret = "anthropic/shared", key = "CLAUDE_API_KEY" }
+# FULL_ARN_KEY   = { secret = "arn:aws:secretsmanager:us-east-1:9999:secret:ext", key = "K" }
+#
 # Alternatively, use the list form when the env var name matches the JSON key:
 #   secrets = ["DATABASE_URL", "REDIS_URL"]   # place this ABOVE [global.environment]
 
@@ -198,9 +209,11 @@ name = "my-app"
 
 # Per-env secrets are resolved from {secret_arn_prefix}:{name}/stage.
 # They merge with global secrets; per-env values take precedence.
+# External references (inline tables) are also supported per-env:
 #
 # [stage.secrets]
-# STRIPE_KEY = "stripe_key"
+# STRIPE_KEY     = "stripe_key"
+# CLAUDE_API_KEY = { secret = "anthropic/stage", key = "CLAUDE_API_KEY" }
 #
 # List form: secrets = ["STRIPE_KEY"]   # place ABOVE [stage.environment]
 
