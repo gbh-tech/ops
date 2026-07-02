@@ -53,7 +53,7 @@ func init() {
 	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
 	Command.PersistentFlags().StringP("app", "a", "", appUsage)
 	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
-	Command.PersistentFlags().String("app-config", "", "Override path to app config file")
+	Command.PersistentFlags().StringP("app-config", "c", "", "Override app config file (basename, subpath under deploy/, or full relative path)")
 	_ = Command.MarkPersistentFlagRequired("env")
 
 	// Subcommand-specific flags.
@@ -168,7 +168,10 @@ func resolveTag(tag, env string) string {
 
 // loadApp loads and merges an app's config for the given environment.
 func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig, pkgecs.Names) {
-	path := ec.cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+	path, err := ec.cfg.ResolveAppConfigPath(app, appConfigOverride)
+	if err != nil {
+		log.Fatal("Failed to resolve app config", "err", err)
+	}
 	appCfg, err := pkgecs.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
@@ -189,7 +192,10 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pk
 	ensureEcsOnAws(cfg)
 	requireAppInMonoRepo(cfg, app)
 
-	path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+	path, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
+	if err != nil {
+		log.Fatal("Failed to resolve app config", "err", err)
+	}
 	appCfg, err := pkgecs.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
@@ -336,7 +342,10 @@ var ecsRenderCmd = &cobra.Command{
 		requireAppInMonoRepo(cfg, app)
 		base := buildBaseConfig(cfg)
 
-		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		path, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
+		if err != nil {
+			log.Fatal("Failed to resolve app config", "err", err)
+		}
 		appCfg, err := pkgecs.LoadAppConfig(path)
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
@@ -623,7 +632,10 @@ With --format dotenv, use --output/-o to control the destination:
 		ensureEcsOnAws(cfg)
 		requireAppInMonoRepo(cfg, app)
 
-		path := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		path, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
+		if err != nil {
+			log.Fatal("Failed to resolve app config", "err", err)
+		}
 		appCfg, err := pkgecs.LoadAppConfig(path)
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)

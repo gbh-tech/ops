@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,6 +121,58 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 		return filepath.Join(c.AppsDirPath(), app, defaultSubpath)
 	}
 	return defaultSubpath
+}
+
+// supportedAppConfigExts lists the app config formats supported by
+// LoadAppConfig. They are checked in this order when resolving a bare name.
+var supportedAppConfigExts = []string{".toml", ".yaml", ".yml"}
+
+// hasAppConfigExt reports whether path already ends with a supported
+// app config extension.
+func hasAppConfigExt(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, e := range supportedAppConfigExts {
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolveAppConfigPath resolves the path to an app config file. In
+// mono-repo mode it is scoped under {apps_dir}/{app}/. If override is empty
+// it returns the default deploy/config.toml. If override already has a
+// supported extension it is used directly. Otherwise it is treated as a
+// basename or subpath under deploy/ and the first existing file with a
+// supported extension is returned. If multiple candidates exist the caller
+// is asked to pick one explicitly.
+func (c *OpsConfig) ResolveAppConfigPath(app, override string) (string, error) {
+	if override == "" {
+		return c.ResolveAppFilePath(app, "", "deploy/config.toml"), nil
+	}
+
+	if hasAppConfigExt(override) {
+		return c.ResolveAppFilePath(app, override, "deploy/config.toml"), nil
+	}
+
+	override = strings.TrimSuffix(override, ".")
+	var found []string
+	for _, ext := range supportedAppConfigExts {
+		candidate := c.ResolveAppFilePath(app, filepath.Join("deploy", override)+ext, "deploy/config.toml")
+		if _, err := os.Stat(candidate); err == nil {
+			found = append(found, candidate)
+		}
+	}
+
+	switch len(found) {
+	case 0:
+		base := c.ResolveAppFilePath(app, filepath.Join("deploy", override), "deploy/config.toml")
+		return "", fmt.Errorf("no config file found for %q (looked for %s under %s)", override, strings.Join(supportedAppConfigExts, ", "), base)
+	case 1:
+		return found[0], nil
+	default:
+		return "", fmt.Errorf("two conflicting files with different extensions exist. Pick one: %s", strings.Join(found, ", "))
+	}
 }
 
 var config OpsConfig
