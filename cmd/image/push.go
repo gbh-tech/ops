@@ -48,7 +48,10 @@ points directly to an app config that defines the image name.`,
 			log.Fatal("--app is required in mono-repo mode (repo_mode: mono)")
 		}
 
-		appConfigPath := cfg.ResolveAppFilePath(app, appConfigOverride, "deploy/config.toml")
+		appConfigPath, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
+		if err != nil {
+			log.Fatal("Failed to resolve app config", "err", err)
+		}
 		appCfg, err := pkgapp.LoadAppConfig(appConfigPath)
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", appConfigPath, "err", err)
@@ -80,6 +83,6 @@ func init() {
 	PushCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
 	PushCommand.Flags().StringP("env", "e", "", "Target environment (required)")
 	PushCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
-	PushCommand.Flags().String("app-config", "", "Override path to app config file")
+	PushCommand.Flags().StringP("app-config", "c", "", "Override app config file (basename, subpath under deploy/, or full relative path)")
 	_ = PushCommand.MarkFlagRequired("env")
 }
