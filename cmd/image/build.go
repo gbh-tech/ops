@@ -238,7 +238,6 @@ func init() {
 	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
 	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
 	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
-	BuildCommand.Flags().StringP("app-config", "c", "", "Override app config file (basename, subpath under deploy/, or full relative path)")
 	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
 	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
 	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")

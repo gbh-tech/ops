@@ -53,7 +53,6 @@ func init() {
 	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
 	Command.PersistentFlags().StringP("app", "a", "", appUsage)
 	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
-	Command.PersistentFlags().StringP("app-config", "c", "", "Override app config file (basename, subpath under deploy/, or full relative path)")
 	_ = Command.MarkPersistentFlagRequired("env")
 
 	// Subcommand-specific flags.
