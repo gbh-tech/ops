@@ -14,10 +14,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-// RegisterGlobalFlags wires the persistent --provider and --deployment
-// flags onto the given (root) command and binds them to the matching
-// top-level viper keys. When supplied at invocation time they override
-// `provider:` / `deployment:` from .ops/config.yaml.
+// RegisterGlobalFlags wires the persistent --provider, --deployment, and
+// --app-config flags onto the given (root) command and binds provider /
+// deployment to the matching top-level viper keys. When supplied at
+// invocation time they override `provider:` / `deployment:` from
+// .ops/config.yaml.
 //
 // Kept as an exported function so the root command (and tests) can attach
 // the flags without depending on this package's command tree wiring.
@@ -31,6 +32,12 @@ func RegisterGlobalFlags(cmd *cobra.Command) {
 		"deployment",
 		"",
 		"Active deployment tool (ecs|werf|ansible); overrides deployment in config",
+	)
+	cmd.PersistentFlags().StringP(
+		"app-config",
+		"c",
+		"",
+		"Override app config file (basename, subpath under deploy/, or full relative path)",
 	)
 	_ = viper.BindPFlag("provider", cmd.PersistentFlags().Lookup("provider"))
 	_ = viper.BindPFlag("deployment", cmd.PersistentFlags().Lookup("deployment"))

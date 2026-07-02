@@ -83,6 +83,5 @@ func init() {
 	PushCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
 	PushCommand.Flags().StringP("env", "e", "", "Target environment (required)")
 	PushCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
-	PushCommand.Flags().StringP("app-config", "c", "", "Override app config file (basename, subpath under deploy/, or full relative path)")
 	_ = PushCommand.MarkFlagRequired("env")
 }
