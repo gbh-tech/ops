@@ -55,6 +55,24 @@ func TestNoShorthandFlagConflicts(t *testing.T) {
 
 		check(cmd.LocalNonPersistentFlags())
 		check(cmd.PersistentFlags())
+
+		ownPersistent := make(map[string]string)
+		cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Shorthand != "" {
+				ownPersistent[f.Shorthand] = f.Name
+			}
+		})
+		cmd.LocalNonPersistentFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Shorthand == "" {
+				return
+			}
+			if persistentFlagName, ok := ownPersistent[f.Shorthand]; ok {
+				conflicts = append(conflicts, fmt.Sprintf(
+					"  %s: local -%s (--%s) conflicts with own persistent --%s",
+					cmd.CommandPath(), f.Shorthand, f.Name, persistentFlagName,
+				))
+			}
+		})
 	})
 
 	if len(conflicts) > 0 {
