@@ -14,27 +14,37 @@ import (
 )
 
 var ecsPortForwardCmd = &cobra.Command{
-	Use:     "port-forward",
-	Aliases: []string{"db-proxy"},
-	Short:   "Port-forward a port from a running ECS task to localhost via SSM",
+	Use:   "port-forward",
+	Short: "Port-forward a port from a running ECS task to localhost via SSM",
 	Long: `Forward a remote port from the first RUNNING task of an ECS service to a local port using
 AWS Systems Manager (AWS-StartPortForwardingSession).
 
 Requires aws CLI and session-manager-plugin on PATH.
 
-When invoked as 'ops ecs port-forward', provide --app and --port; the ECS service name is
-"{app}-{env}".
+Provide --app and --port; the ECS service name is "{app}-{env}".`,
+	Run: runPortForward,
+}
 
-When invoked as 'ops ecs db-proxy', services whose names contain "db-proxy" are listed; if more
-than one exists you pick interactively. The remote port is inferred from the service name
+var ecsDbProxyCmd = &cobra.Command{
+	Use:   "db-proxy",
+	Short: "Port-forward a db-proxy ECS service to localhost via SSM",
+	Long: `Discover and forward a db-proxy ECS service port to localhost using
+AWS Systems Manager (AWS-StartPortForwardingSession).
+
+Requires aws CLI and session-manager-plugin on PATH.
+
+Services whose names contain "db-proxy" are listed; if more than one exists you pick
+interactively. The remote port is inferred from the service name
 (postgres→5432, mysql→3306, redis→6379) unless --port is set.`,
 	Run: runPortForward,
 }
 
 func initPortForwardFlags() {
-	ecsPortForwardCmd.Flags().IntP("port", "p", 0, "Remote container port to forward (required for port-forward; optional for db-proxy when inferable)")
-	ecsPortForwardCmd.Flags().IntP("local-port", "l", 0, "Local port (defaults to the remote port)")
-	ecsPortForwardCmd.Flags().StringP("container", "c", "", "ECS container name (defaults to the first container in the task)")
+	for _, cmd := range []*cobra.Command{ecsPortForwardCmd, ecsDbProxyCmd} {
+		cmd.Flags().IntP("port", "p", 0, "Remote container port to forward (required for port-forward; optional for db-proxy when inferable)")
+		cmd.Flags().IntP("local-port", "l", 0, "Local port (defaults to the remote port)")
+		cmd.Flags().StringP("container", "c", "", "ECS container name (defaults to the first container in the task)")
+	}
 }
 
 func runPortForward(cmd *cobra.Command, args []string) {
