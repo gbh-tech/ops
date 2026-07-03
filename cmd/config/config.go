@@ -35,7 +35,7 @@ func RegisterGlobalFlags(cmd *cobra.Command) {
 	)
 	cmd.PersistentFlags().StringP(
 		"app-config",
-		"c",
+		"g",
 		"",
 		"Override app config file (basename, subpath under deploy/, or full relative path)",
 	)

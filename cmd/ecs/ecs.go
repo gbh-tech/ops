@@ -46,6 +46,7 @@ func init() {
 	Command.AddCommand(ecsVarsCmd)
 	Command.AddCommand(ecsSecretsCmd)
 	Command.AddCommand(ecsPortForwardCmd)
+	Command.AddCommand(ecsDbProxyCmd)
 	initPortForwardFlags()
 
 	// Persistent flags are inherited by every subcommand.
