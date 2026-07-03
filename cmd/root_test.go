@@ -28,18 +28,6 @@ func ancestorPersistentShorthands(cmd *cobra.Command) map[string]string {
 	return out
 }
 
-func findCommand(start *cobra.Command, names ...string) *cobra.Command {
-	cur := start
-	for _, name := range names {
-		found, _, _ := cur.Find([]string{name})
-		if found == nil || found == cur {
-			return nil
-		}
-		cur = found
-	}
-	return cur
-}
-
 func TestNoShorthandFlagConflicts(t *testing.T) {
 	t.Parallel()
 
