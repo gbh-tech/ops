@@ -69,7 +69,7 @@ func init() {
 	ecsRunCmd.Flags().StringP("command", "c", "", "Command to execute inside the container (required unless invoking as 'ops ecs shell')")
 	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
 
-	ecsVarsCmd.Flags().String("format", "table", "Output format: table | dotenv")
+	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
 	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env, or .env in single-repo mode)`)
 }
 
