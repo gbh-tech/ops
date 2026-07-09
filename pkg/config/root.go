@@ -215,9 +215,9 @@ func LoadConfig() *OpsConfig {
 				log.Fatal("Failed to set AWS_REGION", "err", err)
 			}
 		}
-		CheckAWSConfig(&config.AWS)
+		CheckAWSConfig(config.AWS)
 	case "azure":
-		CheckAzureConfig(&config.Azure)
+		CheckAzureConfig(config.Azure)
 	}
 
 	return &config

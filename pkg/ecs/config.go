@@ -26,17 +26,6 @@ func validateGlobalVolumes(volumes []app.VolumeConfig) error {
 	return nil
 }
 
-// Re-export provider-agnostic types so existing callers of pkg/ecs that use
-// AppConfig / AppSection / HealthCheckConfig / LoadFile / LoadAppConfig don't
-// need to change their imports.
-type AppSection = app.AppSection
-type AppConfig = app.AppConfig
-type HealthCheckConfig = app.HealthCheckConfig
-type ScheduledTaskConfig = app.ScheduledTaskConfig
-
-var LoadFile = app.LoadFile
-var LoadAppConfig = app.LoadAppConfig
-
 // BaseAWS holds AWS-level settings from base.toml.
 type BaseAWS struct {
 	AccountID string `toml:"account_id" yaml:"account_id"`
@@ -72,7 +61,7 @@ type BaseConfig struct {
 
 // MergedConfig is the result of merging base defaults + app global + app env.
 type MergedConfig struct {
-	AppSection
+	app.AppSection
 	SecretsName string
 }
 
@@ -97,13 +86,13 @@ type ECSSecret struct {
 // Secrets are excluded here; use ResolveSecrets separately.
 // An error is returned when the global section contains volume types that are
 // not safe for concurrent multi-host access (host, docker).
-func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig, error) {
+func ResolveConfig(base *BaseConfig, appCfg app.AppConfig, env string) (MergedConfig, error) {
 	if err := validateGlobalVolumes(appCfg["global"].Volumes); err != nil {
 		return MergedConfig{}, err
 	}
 
 	defaultReplicas := base.Defaults.Replicas
-	merged := AppSection{
+	merged := app.AppSection{
 		CPU:         base.Defaults.CPU,
 		Memory:      base.Defaults.Memory,
 		Replicas:    &defaultReplicas,
@@ -140,7 +129,7 @@ func ResolveConfig(base *BaseConfig, appCfg AppConfig, env string) (MergedConfig
 }
 
 // applySection overlays non-zero fields from src onto dst.
-func applySection(dst *AppSection, src AppSection) {
+func applySection(dst *app.AppSection, src app.AppSection) {
 	if src.Name != "" {
 		dst.Name = src.Name
 	}
@@ -226,7 +215,7 @@ func applySection(dst *AppSection, src AppSection) {
 	}
 }
 
-func isNonEmptyHealthCheckConfig(hc HealthCheckConfig) bool {
+func isNonEmptyHealthCheckConfig(hc app.HealthCheckConfig) bool {
 	hasInterval := hc.Interval != 0
 	hasTimeout := hc.Timeout != 0
 	hasRetries := hc.Retries != 0
@@ -235,7 +224,7 @@ func isNonEmptyHealthCheckConfig(hc HealthCheckConfig) bool {
 	return hasInterval || hasTimeout || hasRetries || hasStartPeriod || hasCommand
 }
 
-func validateHealthCheckCommand(hc HealthCheckConfig) error {
+func validateHealthCheckCommand(hc app.HealthCheckConfig) error {
 	if len(hc.Command) == 0 {
 		return nil
 	}
@@ -260,7 +249,7 @@ func validateHealthCheckCommand(hc HealthCheckConfig) error {
 	}
 }
 
-func validatePorts(config AppSection) error {
+func validatePorts(config app.AppSection) error {
 	for _, port := range append([]int{config.Port}, config.Ports...) {
 		if port == 0 {
 			continue
@@ -271,9 +260,6 @@ func validatePorts(config AppSection) error {
 	}
 	return nil
 }
-
-// NormalizeSecrets is re-exported from pkg/app for callers that import pkg/ecs.
-var NormalizeSecrets = app.NormalizeSecrets
 
 // secretValueFrom builds the ECS ValueFrom string for a single secret ref.
 // arnPrefix is the cluster-level prefix (e.g. "arn:aws:secretsmanager:us-east-1:123456789012:secret").
@@ -300,7 +286,7 @@ func secretValueFrom(arnPrefix, implicitBase string, ref app.SecretRef) string {
 //
 // Both global and env secrets support external Secrets Manager references via
 // inline-table entries: { secret = "other/secret", key = "JSON_KEY" }.
-func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECSSecret, error) {
+func ResolveSecrets(appCfg app.AppConfig, env, serviceName, arnPrefix string) ([]ECSSecret, error) {
 	globalMap, err := app.NormalizeSecretRefs(appCfg["global"].Secrets)
 	if err != nil {
 		return nil, fmt.Errorf("global.secrets: %w", err)
@@ -334,14 +320,6 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECS
 
 	return secrets, nil
 }
-
-// BuildSecretSpec, ResolveBuildSecretSpecs, and ResolveBuildArgs are re-exported
-// from pkg/app. They are provider-agnostic and live there to keep pkg/ecs focused
-// on ECS task definitions.
-type BuildSecretSpec = app.BuildSecretSpec
-
-var ResolveBuildSecretSpecs = app.ResolveBuildSecretSpecs
-var ResolveBuildArgs = app.ResolveBuildArgs
 
 // AppendsEnvironment reports whether ECS service operations target the legacy
 // "{name}-{env}" service name instead of the default bare "name".

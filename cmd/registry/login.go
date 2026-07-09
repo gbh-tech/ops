@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type LoginCommandOptions struct {
+type loginCommandOptions struct {
 	URL string
 }
 
@@ -55,10 +55,10 @@ var LoginCommand = &cobra.Command{
 	},
 }
 
-func loginCommandFlags(cmd *cobra.Command) LoginCommandOptions {
+func loginCommandFlags(cmd *cobra.Command) loginCommandOptions {
 	url, _ := cmd.Flags().GetString("url")
 
-	return LoginCommandOptions{
+	return loginCommandOptions{
 		URL: url,
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type CommandOptions struct {
+type commandOptions struct {
 	Env string
 }
 
@@ -25,14 +25,14 @@ func init() {
 	Command.Flags().StringP("env", "e", "", "Environment to display (defaults to env in config)")
 }
 
-func flags(cmd *cobra.Command) CommandOptions {
+func flags(cmd *cobra.Command) commandOptions {
 	envi, _ := cmd.Flags().GetString("env")
 
 	if envi == "" {
 		envi = config.LoadConfig().Env
 	}
 
-	return CommandOptions{
+	return commandOptions{
 		Env: envi,
 	}
 }

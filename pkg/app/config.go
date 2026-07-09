@@ -189,7 +189,7 @@ type AppConfig map[string]AppSection
 // LoadFile reads path and unmarshals it into out. The file extension
 // determines the parser: .toml uses BurntSushi/toml, .yaml/.yml uses
 // gopkg.in/yaml.v3. Any other extension returns an error.
-func LoadFile(path string, out any) error {
+func LoadFile[T any](path string, out *T) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading %q: %w", path, err)

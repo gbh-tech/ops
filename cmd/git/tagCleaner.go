@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type TagCleanerCommandOptions struct {
+type tagCleanerCommandOptions struct {
 	Owner    string
 	Repo     string
 	Quantity int
@@ -50,12 +50,12 @@ var TagCleanerCommand = &cobra.Command{
 	},
 }
 
-func tagCleanerCommandFlags(cmd *cobra.Command) TagCleanerCommandOptions {
+func tagCleanerCommandFlags(cmd *cobra.Command) tagCleanerCommandOptions {
 	owner, _ := cmd.Flags().GetString("owner")
 	repo, _ := cmd.Flags().GetString("repo")
 	qty, _ := cmd.Flags().GetInt("quantity")
 
-	return TagCleanerCommandOptions{
+	return tagCleanerCommandOptions{
 		Owner:    owner,
 		Repo:     repo,
 		Quantity: qty,

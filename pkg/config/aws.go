@@ -11,7 +11,7 @@ type AWSConfig struct {
 	Profile   string `mapstructure:"profile"` // optional; omit to use env vars, IAM role, or instance profile
 }
 
-func CheckAWSConfig(config *AWSConfig) {
+func CheckAWSConfig(config AWSConfig) {
 	regionRegex := `^([a-z]{2}-[a-z]+-\d{1})$`
 	if matched, _ := regexp.MatchString(regionRegex, config.Region); !matched {
 		log.Fatal(

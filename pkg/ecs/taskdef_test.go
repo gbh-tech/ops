@@ -5,13 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"ops/pkg/app"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
 func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "gbh-odoo",
 			Port:   8069,
 			Ports:  []int{8069, 8072},
@@ -38,7 +40,7 @@ func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 
 func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:            "api",
 			Ports:           []int{8080, 9090},
 			CPU:             256,
@@ -75,11 +77,11 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandWithoutPort(t *testing.T
 	// health check is via a custom command. This was the silent-discard bug.
 	customCmd := []string{"CMD", "/bin/healthcheck"}
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "worker",
 			CPU:    256,
 			Memory: 512,
-			ContainerHC: HealthCheckConfig{
+			ContainerHC: app.HealthCheckConfig{
 				Command: customCmd,
 			},
 		},
@@ -107,13 +109,13 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing
 	// Even when health_check_path and port are set, an explicit command wins.
 	customCmd := []string{"CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"}
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:            "api",
 			Port:            8080,
 			CPU:             256,
 			Memory:          512,
 			HealthCheckPath: "/health",
-			ContainerHC: HealthCheckConfig{
+			ContainerHC: app.HealthCheckConfig{
 				Command: customCmd,
 			},
 		},
@@ -139,7 +141,7 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing
 
 func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:       "worker",
 			CPU:        256,
 			Memory:     512,
@@ -168,11 +170,11 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 
 func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProvider(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "worker",
 			CPU:    1024,
 			Memory: 2048,
-			ScheduledTasks: []ScheduledTaskConfig{
+			ScheduledTasks: []app.ScheduledTaskConfig{
 				{
 					Name:             "sync",
 					Command:          []string{"sync"},

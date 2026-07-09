@@ -3,6 +3,7 @@ package ecs
 import (
 	"context"
 	"fmt"
+	pkgapp "ops/pkg/app"
 	"ops/pkg/aws"
 	"ops/pkg/config"
 	pkgecs "ops/pkg/ecs"
@@ -168,12 +169,12 @@ func resolveTag(tag, env string) string {
 }
 
 // loadApp loads and merges an app's config for the given environment.
-func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig, pkgecs.Names) {
+func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgapp.AppConfig, pkgecs.MergedConfig, pkgecs.Names) {
 	path, err := ec.cfg.ResolveAppConfigPath(app, appConfigOverride)
 	if err != nil {
 		log.Fatal("Failed to resolve app config", "err", err)
 	}
-	appCfg, err := pkgecs.LoadAppConfig(path)
+	appCfg, err := pkgapp.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
@@ -188,7 +189,7 @@ func loadApp(ec *ecsCtx, app, env, appConfigOverride string) (pkgecs.AppConfig, 
 // loadAppForInspect loads and merges an app config without requiring AWS
 // clients or a running cluster. Used by read-only inspection commands
 // (vars, secrets, render) that work purely from local config files.
-func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pkgecs.MergedConfig) {
+func loadAppForInspect(app, env, appConfigOverride string) (pkgapp.AppConfig, pkgecs.MergedConfig) {
 	cfg := config.LoadConfig()
 	ensureEcsOnAws(cfg)
 	requireAppInMonoRepo(cfg, app)
@@ -197,7 +198,7 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgecs.AppConfig, pk
 	if err != nil {
 		log.Fatal("Failed to resolve app config", "err", err)
 	}
-	appCfg, err := pkgecs.LoadAppConfig(path)
+	appCfg, err := pkgapp.LoadAppConfig(path)
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
@@ -385,7 +386,7 @@ var ecsRenderCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Failed to resolve app config", "err", err)
 		}
-		appCfg, err := pkgecs.LoadAppConfig(path)
+		appCfg, err := pkgapp.LoadAppConfig(path)
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
@@ -692,7 +693,7 @@ With --format dotenv, use --output/-o to control the destination:
 		if err != nil {
 			log.Fatal("Failed to resolve app config", "err", err)
 		}
-		appCfg, err := pkgecs.LoadAppConfig(path)
+		appCfg, err := pkgapp.LoadAppConfig(path)
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
@@ -828,7 +829,7 @@ Example:
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
-		var found *pkgecs.ScheduledTaskConfig
+		var found *pkgapp.ScheduledTaskConfig
 		for i := range merged.ScheduledTasks {
 			if merged.ScheduledTasks[i].Name == taskName {
 				found = &merged.ScheduledTasks[i]
@@ -895,7 +896,7 @@ Example:
 // reconcileAppSchedulesOptions bundles the inputs for reconcileAppSchedules.
 type reconcileAppSchedulesOptions struct {
 	EC         *ecsCtx
-	Tasks      []pkgecs.ScheduledTaskConfig
+	Tasks      []pkgapp.ScheduledTaskConfig
 	Names      pkgecs.Names
 	AppName    string
 	Env        string
