@@ -154,7 +154,11 @@ type AppSection struct {
 	TaskRole           string            `toml:"task_role"           yaml:"task_role"`
 	EntryPoint         []string          `toml:"entrypoint"          yaml:"entrypoint"`
 	Command            []string          `toml:"command"             yaml:"command"`
-	Environment        map[string]string `toml:"environment"         yaml:"environment"`
+	// GPU is the number of GPUs to reserve for the container via ECS
+	// resourceRequirements. Requires an EC2 GPU capacity provider / AMI.
+	// Use 0 (default) for non-GPU workloads.
+	GPU         int               `toml:"gpu"         yaml:"gpu"`
+	Environment map[string]string `toml:"environment" yaml:"environment"`
 
 	// Secrets is intentionally interface{} to handle both list and map forms.
 	// Use NormalizeSecrets() to get a canonical map[string]string.

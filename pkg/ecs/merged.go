@@ -67,6 +67,9 @@ func ResolveConfig(base *BaseConfig, appCfg app.AppConfig, env string) (MergedCo
 	if err := validateHealthCheckCommand(merged.ContainerHC); err != nil {
 		return MergedConfig{}, err
 	}
+	if err := validateGPU(merged); err != nil {
+		return MergedConfig{}, err
+	}
 
 	secretsName := merged.SecretsName
 	if secretsName == "" {

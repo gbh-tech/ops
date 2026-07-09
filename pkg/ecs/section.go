@@ -48,6 +48,9 @@ func applySection(dst *app.AppSection, src app.AppSection) {
 	if src.Memory != 0 {
 		dst.Memory = src.Memory
 	}
+	if src.GPU != 0 {
+		dst.GPU = src.GPU
+	}
 	if src.Replicas != nil {
 		dst.Replicas = src.Replicas
 	}
@@ -154,6 +157,13 @@ func validatePorts(config app.AppSection) error {
 		if port < 1 || port > 65535 {
 			return fmt.Errorf("port %d is outside the valid TCP port range 1-65535", port)
 		}
+	}
+	return nil
+}
+
+func validateGPU(config app.AppSection) error {
+	if config.GPU < 0 {
+		return fmt.Errorf("gpu must be >= 0, got %d", config.GPU)
 	}
 	return nil
 }

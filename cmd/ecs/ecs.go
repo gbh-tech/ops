@@ -584,6 +584,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},
 			{"Replicas", strconv.Itoa(*merged.Replicas)},
+			{"GPU", strconv.Itoa(merged.GPU)},
 			{"Ports", formatPortMappings(ctr.PortMappings)},
 			{"Env vars", strconv.Itoa(len(ctr.Environment))},
 			{"Secrets", strconv.Itoa(len(ctr.Secrets))},

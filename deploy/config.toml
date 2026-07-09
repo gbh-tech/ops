@@ -67,6 +67,10 @@ name = "my-app"
 # Memory in MiB. Overrides ecs.defaults.memory.
 # memory = 1024
 
+# Number of GPUs to reserve for the container (ECS resourceRequirements type=GPU).
+# Requires an EC2 GPU AMI and a GPU capacity provider. Omit or set 0 for CPU-only.
+# gpu = 1
+
 # Number of running task replicas. Overrides ecs.defaults.replicas.
 # replicas = 1
 # desired_count = 1  # deprecated alias for replicas

@@ -249,6 +249,20 @@ func TestLoadAppConfigDesiredCountPromotedToReplicas(t *testing.T) {
 	}
 }
 
+func TestLoadAppConfigGPU(t *testing.T) {
+	t.Parallel()
+	cfg, err := app.LoadAppConfig("testdata/gpu.toml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg["production"].GPU != 1 {
+		t.Fatalf("production.gpu = %d, want 1", cfg["production"].GPU)
+	}
+	if cfg["global"].GPU != 0 {
+		t.Fatalf("global.gpu = %d, want 0", cfg["global"].GPU)
+	}
+}
+
 func TestLoadAppConfigUnknownKeyError(t *testing.T) {
 	t.Parallel()
 	_, err := app.LoadAppConfig("testdata/unknown_key.toml")

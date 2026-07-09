@@ -203,6 +203,32 @@ func TestResolveConfig(t *testing.T) {
 			t.Fatal("expected error for invalid health check command, got nil")
 		}
 	})
+
+	t.Run("env gpu overrides global", func(t *testing.T) {
+		t.Parallel()
+		cfg := app.AppConfig{
+			"global":     app.AppSection{Name: "vllm", GPU: 1},
+			"production": app.AppSection{GPU: 2},
+		}
+		merged, err := ResolveConfig(base, cfg, "production")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if merged.GPU != 2 {
+			t.Fatalf("gpu = %d, want 2", merged.GPU)
+		}
+	})
+
+	t.Run("negative gpu returns error", func(t *testing.T) {
+		t.Parallel()
+		cfg := app.AppConfig{
+			"global": app.AppSection{Name: "vllm", GPU: -1},
+		}
+		_, err := ResolveConfig(base, cfg, "production")
+		if err == nil {
+			t.Fatal("expected error for negative gpu, got nil")
+		}
+	})
 }
 
 func TestResolveSecrets(t *testing.T) {
