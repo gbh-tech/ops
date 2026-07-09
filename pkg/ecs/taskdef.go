@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"ops/pkg/app"
@@ -11,66 +12,103 @@ import (
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
+// BuildTaskDefinitionOptions bundles the inputs for BuildTaskDefinition and
+// BuildScheduledTaskDefinition.
+type BuildTaskDefinitionOptions struct {
+	Base     *BaseConfig
+	Merged   MergedConfig
+	Names    Names
+	Env      string
+	ImageTag string
+	Secrets  []ECSSecret
+}
+
 // BuildTaskDefinition assembles an ECS RegisterTaskDefinitionInput from the
 // already-merged config and resolved secrets. No AWS calls are made here.
-func BuildTaskDefinition(
-	base *BaseConfig,
-	merged MergedConfig,
-	names Names,
-	env, imageTag string,
-	secrets []ECSSecret,
-) awsecs.RegisterTaskDefinitionInput {
-	return buildTaskDefinitionInput(base, merged, names, names.Family, env, imageTag, secrets, true)
+func BuildTaskDefinition(opts BuildTaskDefinitionOptions) awsecs.RegisterTaskDefinitionInput {
+	return buildTaskDefinitionInput(buildTaskDefinitionInputOptions{
+		Base:            opts.Base,
+		Merged:          opts.Merged,
+		Names:           opts.Names,
+		Family:          opts.Names.Family,
+		Env:             opts.Env,
+		ImageTag:        opts.ImageTag,
+		Secrets:         opts.Secrets,
+		WithHealthCheck: true,
+	})
 }
 
 // BuildScheduledTaskDefinition is like BuildTaskDefinition but registers under
 // names.ScheduledFamily and strips port mappings and health checks. Used for
 // EventBridge Scheduler scheduled tasks and ad-hoc schedule-run invocations.
-func BuildScheduledTaskDefinition(
-	base *BaseConfig,
-	merged MergedConfig,
-	names Names,
-	env, imageTag string,
-	secrets []ECSSecret,
-) awsecs.RegisterTaskDefinitionInput {
-	input := buildTaskDefinitionInput(base, merged, names, names.ScheduledFamily, env, imageTag, secrets, false)
+func BuildScheduledTaskDefinition(opts BuildTaskDefinitionOptions) awsecs.RegisterTaskDefinitionInput {
+	input := buildTaskDefinitionInput(buildTaskDefinitionInputOptions{
+		Base:            opts.Base,
+		Merged:          opts.Merged,
+		Names:           opts.Names,
+		Family:          opts.Names.ScheduledFamily,
+		Env:             opts.Env,
+		ImageTag:        opts.ImageTag,
+		Secrets:         opts.Secrets,
+		WithHealthCheck: false,
+	})
 	input.RequiresCompatibilities = addFargateCompatibilityForScheduledTasks(
 		input.RequiresCompatibilities,
-		base.ECS.CapacityProvider,
-		merged.ScheduledTasks,
+		opts.Base.ECS.CapacityProvider,
+		opts.Merged.ScheduledTasks,
 	)
 	return input
+}
+
+// buildTaskDefinitionInputOptions bundles the inputs for buildTaskDefinitionInput.
+type buildTaskDefinitionInputOptions struct {
+	Base            *BaseConfig
+	Merged          MergedConfig
+	Names           Names
+	Family          string
+	Env             string
+	ImageTag        string
+	Secrets         []ECSSecret
+	WithHealthCheck bool
 }
 
 // buildTaskDefinitionInput is the shared implementation for BuildTaskDefinition
 // and BuildScheduledTaskDefinition. withHealthCheck controls whether port
 // mappings and the container health check are included.
-func buildTaskDefinitionInput(
-	base *BaseConfig,
-	merged MergedConfig,
-	names Names,
-	family, env, imageTag string,
-	secrets []ECSSecret,
-	withHealthCheck bool,
-) awsecs.RegisterTaskDefinitionInput {
-	appName := merged.Name
-	image := resolveImage(base.AWS.ECRUrl, env, merged.Image, appName, imageTag)
+func buildTaskDefinitionInput(opts buildTaskDefinitionInputOptions) awsecs.RegisterTaskDefinitionInput {
+	appName := opts.Merged.Name
+	image := resolveImage(resolveImageOptions{
+		ECRURL:     opts.Base.AWS.ECRUrl,
+		Env:        opts.Env,
+		ImageField: opts.Merged.Image,
+		AppName:    appName,
+		ImageTag:   opts.ImageTag,
+	})
 
-	taskVolumes, mountPoints := buildVolumes(merged.Volumes)
-	container := buildContainer(appName, image, merged, names, base.AWS.Region, secrets, mountPoints, withHealthCheck)
+	taskVolumes, mountPoints := buildVolumes(opts.Merged.Volumes)
+	container := buildContainer(buildContainerOptions{
+		AppName:         appName,
+		Image:           image,
+		Merged:          opts.Merged,
+		Names:           opts.Names,
+		Region:          opts.Base.AWS.Region,
+		Secrets:         opts.Secrets,
+		MountPoints:     mountPoints,
+		WithHealthCheck: opts.WithHealthCheck,
+	})
 
-	executionRole := ExpandTemplate(coalesce(merged.ExecutionRole, base.ECS.ExecutionRole), appName, env)
-	taskRole := ExpandTemplate(coalesce(merged.TaskRole, base.ECS.TaskRole), appName, env)
+	executionRole := ExpandTemplate(coalesce(opts.Merged.ExecutionRole, opts.Base.ECS.ExecutionRole), appName, opts.Env)
+	taskRole := ExpandTemplate(coalesce(opts.Merged.TaskRole, opts.Base.ECS.TaskRole), appName, opts.Env)
 
-	networkMode := coalesce(merged.NetworkMode, "awsvpc")
-	launchType := coalesce(merged.LaunchType, "EC2")
+	networkMode := coalesce(opts.Merged.NetworkMode, "awsvpc")
+	launchType := coalesce(opts.Merged.LaunchType, "EC2")
 
 	input := awsecs.RegisterTaskDefinitionInput{
-		Family:                  aws.String(family),
+		Family:                  aws.String(opts.Family),
 		NetworkMode:             ecstypes.NetworkMode(strings.ToLower(networkMode)),
 		RequiresCompatibilities: []ecstypes.Compatibility{ecstypes.Compatibility(launchType)},
-		Cpu:                     aws.String(fmt.Sprintf("%d", merged.CPU)),
-		Memory:                  aws.String(fmt.Sprintf("%d", merged.Memory)),
+		Cpu:                     aws.String(strconv.Itoa(opts.Merged.CPU)),
+		Memory:                  aws.String(strconv.Itoa(opts.Merged.Memory)),
 		ContainerDefinitions:    []ecstypes.ContainerDefinition{container},
 	}
 
@@ -218,51 +256,64 @@ func ExpandSchedulerTemplate(s, cluster, env string) string {
 	return s
 }
 
+// resolveImageOptions bundles the inputs for resolveImage.
+type resolveImageOptions struct {
+	ECRURL     string
+	Env        string
+	ImageField string
+	AppName    string
+	ImageTag   string
+}
+
 // resolveImage derives the full image URI following the Python renderer logic:
 //   - External images (containing '/') are used as-is if already tagged, else
 //     the imageTag is appended.
 //   - ECR images are prefixed with the ECR URL and env path.
-func resolveImage(ecrURL, env, imageField, appName, imageTag string) string {
-	repo := imageField
+func resolveImage(opts resolveImageOptions) string {
+	repo := opts.ImageField
 	if repo == "" {
-		repo = appName
+		repo = opts.AppName
 	}
 	if strings.Contains(repo, "/") {
 		basename := repo[strings.LastIndex(repo, "/")+1:]
 		if strings.Contains(basename, ":") {
 			return repo
 		}
-		return repo + ":" + imageTag
+		return repo + ":" + opts.ImageTag
 	}
-	return fmt.Sprintf("%s/%s/%s:%s", ecrURL, env, repo, imageTag)
+	return fmt.Sprintf("%s/%s/%s:%s", opts.ECRURL, opts.Env, repo, opts.ImageTag)
 }
 
-func buildContainer(
-	appName, image string,
-	merged MergedConfig,
-	names Names,
-	region string,
-	secrets []ECSSecret,
-	mountPoints []ecstypes.MountPoint,
-	withHealthCheck bool,
-) ecstypes.ContainerDefinition {
+// buildContainerOptions bundles the inputs for buildContainer.
+type buildContainerOptions struct {
+	AppName         string
+	Image           string
+	Merged          MergedConfig
+	Names           Names
+	Region          string
+	Secrets         []ECSSecret
+	MountPoints     []ecstypes.MountPoint
+	WithHealthCheck bool
+}
+
+func buildContainer(opts buildContainerOptions) ecstypes.ContainerDefinition {
 	c := ecstypes.ContainerDefinition{
-		Name:      aws.String(appName),
-		Image:     aws.String(image),
+		Name:      aws.String(opts.AppName),
+		Image:     aws.String(opts.Image),
 		Essential: aws.Bool(true),
 	}
 
-	if len(mountPoints) > 0 {
-		c.MountPoints = mountPoints
+	if len(opts.MountPoints) > 0 {
+		c.MountPoints = opts.MountPoints
 	}
 
-	if withHealthCheck {
-		c.PortMappings = buildPortMappings(containerPorts(merged))
+	if opts.WithHealthCheck {
+		c.PortMappings = buildPortMappings(containerPorts(opts.Merged))
 	}
 
-	if len(merged.Environment) > 0 {
-		c.Environment = make([]ecstypes.KeyValuePair, 0, len(merged.Environment))
-		for k, v := range merged.Environment {
+	if len(opts.Merged.Environment) > 0 {
+		c.Environment = make([]ecstypes.KeyValuePair, 0, len(opts.Merged.Environment))
+		for k, v := range opts.Merged.Environment {
 			c.Environment = append(c.Environment, ecstypes.KeyValuePair{
 				Name:  aws.String(k),
 				Value: aws.String(v),
@@ -270,16 +321,16 @@ func buildContainer(
 		}
 	}
 
-	if len(merged.Command) > 0 {
-		c.Command = merged.Command
+	if len(opts.Merged.Command) > 0 {
+		c.Command = opts.Merged.Command
 	}
-	if len(merged.EntryPoint) > 0 {
-		c.EntryPoint = merged.EntryPoint
+	if len(opts.Merged.EntryPoint) > 0 {
+		c.EntryPoint = opts.Merged.EntryPoint
 	}
 
-	if len(secrets) > 0 {
-		c.Secrets = make([]ecstypes.Secret, len(secrets))
-		for i, s := range secrets {
+	if len(opts.Secrets) > 0 {
+		c.Secrets = make([]ecstypes.Secret, len(opts.Secrets))
+		for i, s := range opts.Secrets {
 			c.Secrets[i] = ecstypes.Secret{
 				Name:      aws.String(s.Name),
 				ValueFrom: aws.String(s.ValueFrom),
@@ -287,19 +338,20 @@ func buildContainer(
 		}
 	}
 
-	hasCustomCommand := len(merged.ContainerHC.Command) > 0
-	hasCurlCheck := merged.HealthCheckPath != "" && primaryContainerPort(merged) != 0
-	if withHealthCheck && (hasCustomCommand || hasCurlCheck) {
-		c.HealthCheck = buildHealthCheck(merged)
+	hasCustomCommand := len(opts.Merged.ContainerHC.Command) > 0
+	hasCurlCheck := opts.Merged.HealthCheckPath != "" && primaryContainerPort(opts.Merged) != 0
+	needsHealthCheck := opts.WithHealthCheck && (hasCustomCommand || hasCurlCheck)
+	if needsHealthCheck {
+		c.HealthCheck = buildHealthCheck(opts.Merged)
 	}
 
-	logDriver := coalesce(merged.LogDriver, "awslogs")
+	logDriver := coalesce(opts.Merged.LogDriver, "awslogs")
 	c.LogConfiguration = &ecstypes.LogConfiguration{
 		LogDriver: ecstypes.LogDriver(logDriver),
 		Options: map[string]string{
-			"awslogs-group":         names.LogGroup,
-			"awslogs-region":        region,
-			"awslogs-stream-prefix": appName,
+			"awslogs-group":         opts.Names.LogGroup,
+			"awslogs-region":        opts.Region,
+			"awslogs-stream-prefix": opts.AppName,
 		},
 	}
 
@@ -376,10 +428,8 @@ func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 		startPeriod = int32(hc.StartPeriod)
 	}
 
-	var command []string
-	if len(hc.Command) > 0 {
-		command = hc.Command
-	} else {
+	command := hc.Command
+	if len(command) == 0 {
 		port := primaryContainerPort(merged)
 		command = []string{
 			"CMD-SHELL",

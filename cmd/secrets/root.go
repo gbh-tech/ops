@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type SecretsCommandOptions struct {
+type secretsCommandOptions struct {
 	Env  string
 	Root bool
 }
@@ -29,11 +29,11 @@ func requireWerfProvider() {
 	}
 }
 
-func secretsCommandFlags(cmd *cobra.Command) SecretsCommandOptions {
+func secretsCommandFlags(cmd *cobra.Command) secretsCommandOptions {
 	envi, _ := cmd.Flags().GetString("env")
 	root, _ := cmd.Flags().GetBool("root")
 
-	return SecretsCommandOptions{
+	return secretsCommandOptions{
 		Env:  envi,
 		Root: root,
 	}

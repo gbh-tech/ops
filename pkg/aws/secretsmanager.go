@@ -25,16 +25,16 @@ func FetchSecretKeys(ctx context.Context, client *secretsmanager.Client, secretA
 		SecretId: aws.String(secretARN),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("fetching secret %s: %w", secretARN, err)
+		return nil, fmt.Errorf("fetching secret %q: %w", secretARN, err)
 	}
 
 	if out.SecretString == nil {
-		return nil, fmt.Errorf("secret %s has no string value (binary secrets are not supported)", secretARN)
+		return nil, fmt.Errorf("secret %q has no string value (binary secrets are not supported)", secretARN)
 	}
 
-	var blob map[string]any
+	blob := map[string]any{}
 	if err := json.Unmarshal([]byte(*out.SecretString), &blob); err != nil {
-		return nil, fmt.Errorf("secret %s is not a JSON object: %w", secretARN, err)
+		return nil, fmt.Errorf("secret %q is not a JSON object: %w", secretARN, err)
 	}
 
 	result := make(map[string]string, len(keys))

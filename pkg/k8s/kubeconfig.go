@@ -15,7 +15,7 @@ func GetCurrentContext() string {
 
 func GetContexts() []string {
 	config := GetConfig()
-	var contexts []string
+	contexts := []string{}
 
 	for cluster := range config.Contexts {
 		contexts = append(contexts, cluster)

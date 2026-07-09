@@ -78,11 +78,17 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		utils.CheckBinary("docker")
 
 		// Resolve build_secrets and build_args from the app config.
-		var secretArgs []string
-		var buildArgArgs []string
+		secretArgs := []string{}
+		buildArgArgs := []string{}
 		if appCfg != nil {
 			var cleanup func()
-			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(cmd.Context(), cfg, appCfg, app, env)
+			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(resolveBuildConfigOptions{
+				Ctx:    cmd.Context(),
+				Cfg:    cfg,
+				AppCfg: appCfg,
+				App:    app,
+				Env:    env,
+			})
 			defer cleanup()
 		}
 
@@ -114,33 +120,55 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 	},
 }
 
+func init() {
+	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
+	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
+	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
+	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
+	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
+	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")
+	BuildCommand.Flags().Bool("no-cache", false, "Do not use cache when building the image")
+	BuildCommand.Flags().StringArray("secret", nil, "Additional Docker BuildKit secret (id=<name>,src=<file> or env=<var>); appended after config build_secrets")
+	BuildCommand.Flags().StringArray("build-arg", nil, "Additional Docker build argument (KEY=VALUE); appended after config build_args")
+	_ = BuildCommand.MarkFlagRequired("env")
+}
+
+// resolveBuildConfigOptions bundles the inputs for resolveBuildConfig.
+type resolveBuildConfigOptions struct {
+	Ctx    context.Context
+	Cfg    *config.OpsConfig
+	AppCfg pkgapp.AppConfig
+	App    string
+	Env    string
+}
+
 // resolveBuildConfig resolves build_secrets and build_args from an already-loaded
 // AppConfig and returns the corresponding docker CLI argument slices plus a cleanup
 // function that removes any temp files written for secrets. The caller must invoke
 // cleanup() after docker build completes (success or failure).
-func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgapp.AppConfig, app, env string) (secretArgs, buildArgArgs []string, cleanup func()) {
+func resolveBuildConfig(opts resolveBuildConfigOptions) (secretArgs, buildArgArgs []string, cleanup func()) {
 	cleanup = func() {} // no-op default
 
-	serviceName := resolveServiceName(appCfg, app, cfg)
+	serviceName := resolveServiceName(opts.AppCfg, opts.App, opts.Cfg)
 
 	// --- build_secrets ---
-	specs, err := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))
+	specs, err := pkgapp.ResolveBuildSecretSpecs(opts.AppCfg, opts.Env, serviceName, opts.Cfg.ECS.ResolvedSecretArnPrefix(opts.Cfg.AWS))
 	if err != nil {
 		log.Fatal("Invalid build_secrets config", "err", err)
 	}
 	if len(specs) > 0 {
-		secretArgs, cleanup = fetchAndWriteSecrets(ctx, cfg, specs)
+		secretArgs, cleanup = fetchAndWriteSecrets(opts.Ctx, opts.Cfg, specs)
 	}
 
 	// --- build_args ---
-	buildArgs := pkgapp.ResolveBuildArgs(appCfg, env)
+	buildArgs := pkgapp.ResolveBuildArgs(opts.AppCfg, opts.Env)
 	keys := make([]string, 0, len(buildArgs))
 	for k := range buildArgs {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys) // deterministic order
 	for _, k := range keys {
-		buildArgArgs = append(buildArgArgs, "--build-arg", fmt.Sprintf("%s=%s", k, buildArgs[k]))
+		buildArgArgs = append(buildArgArgs, "--build-arg", k+"="+buildArgs[k])
 	}
 
 	return secretArgs, buildArgArgs, cleanup
@@ -232,17 +260,4 @@ func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pk
 		args = append(args, "--secret", fmt.Sprintf("id=%s,src=%s", spec.ID, idToFile[spec.ID]))
 	}
 	return args, cleanup
-}
-
-func init() {
-	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
-	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
-	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
-	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
-	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
-	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")
-	BuildCommand.Flags().Bool("no-cache", false, "Do not use cache when building the image")
-	BuildCommand.Flags().StringArray("secret", nil, "Additional Docker BuildKit secret (id=<name>,src=<file> or env=<var>); appended after config build_secrets")
-	BuildCommand.Flags().StringArray("build-arg", nil, "Additional Docker build argument (KEY=VALUE); appended after config build_args")
-	_ = BuildCommand.MarkFlagRequired("env")
 }

@@ -6,20 +6,20 @@ import (
 	"charm.land/log/v2"
 )
 
-// SupportedProviders lists the cloud providers ops can dispatch to. The
+// supportedProviders lists the cloud providers ops can dispatch to. The
 // active one is inferred from which provider block is defined in the config
 // (`aws:`, `azure:`, …) and disambiguated by the top-level `provider:` key
 // or the persistent --provider flag.
-var SupportedProviders = []string{
+var supportedProviders = []string{
 	"aws",
 	"azure",
 	"gcp",
 }
 
-// SupportedDeployments mirrors SupportedProviders for deployment tools.
+// supportedDeployments mirrors supportedProviders for deployment tools.
 // The active one is inferred from which deployment block is defined
 // (`ecs:`, `werf:`, …) and disambiguated by `deployment:` / --deployment.
-var SupportedDeployments = []string{
+var supportedDeployments = []string{
 	"ecs",
 	"werf",
 	"ansible",
@@ -33,11 +33,11 @@ var SupportedDeployments = []string{
 // the resolved value is not a supported provider.
 func resolveProvider(c *OpsConfig) string {
 	if c.Provider != "" {
-		if !slices.Contains(SupportedProviders, c.Provider) {
+		if !slices.Contains(supportedProviders, c.Provider) {
 			log.Fatal(
 				"provider is not a supported cloud provider",
 				"value", c.Provider,
-				"supported", SupportedProviders,
+				"supported", supportedProviders,
 			)
 		}
 		return c.Provider
@@ -61,11 +61,11 @@ func resolveProvider(c *OpsConfig) string {
 // resolveDeployment mirrors resolveProvider for deployment tools.
 func resolveDeployment(c *OpsConfig) string {
 	if c.Deployment != "" {
-		if !slices.Contains(SupportedDeployments, c.Deployment) {
+		if !slices.Contains(supportedDeployments, c.Deployment) {
 			log.Fatal(
 				"deployment is not a supported deployment tool",
 				"value", c.Deployment,
-				"supported", SupportedDeployments,
+				"supported", supportedDeployments,
 			)
 		}
 		return c.Deployment
@@ -87,7 +87,7 @@ func resolveDeployment(c *OpsConfig) string {
 }
 
 func definedCloudBlocks(c *OpsConfig) []string {
-	var out []string
+	out := []string{}
 	if c.AWS.Region != "" || c.AWS.AccountId != "" {
 		out = append(out, "aws")
 	}
@@ -98,11 +98,12 @@ func definedCloudBlocks(c *OpsConfig) []string {
 }
 
 func definedDeploymentBlocks(c *OpsConfig) []string {
-	var out []string
+	out := []string{}
 	if c.ECS.Cluster != "" {
 		out = append(out, "ecs")
 	}
-	if len(c.Werf.Services) > 0 || len(c.Werf.ValuesPaths) > 0 || len(c.Werf.SecretsPaths) > 0 {
+	werfConfigured := len(c.Werf.Services) > 0 || len(c.Werf.ValuesPaths) > 0 || len(c.Werf.SecretsPaths) > 0
+	if werfConfigured {
 		out = append(out, "werf")
 	}
 	return out

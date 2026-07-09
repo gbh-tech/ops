@@ -41,9 +41,7 @@ func UpdateConfigForAKS(clusterName string, resourceGroup string) {
 	)
 
 	aksCredentials := exec.Command(cmd[0], cmd[1:]...)
-	_, err := aksCredentials.Output()
-
-	if err != nil {
+	if _, err := aksCredentials.Output(); err != nil {
 		var execError *exec.Error
 		if errors.As(err, &execError) {
 			log.Fatal("Command execution failed", "name", execError.Name, "err", execError.Err)

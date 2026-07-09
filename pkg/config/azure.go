@@ -10,7 +10,7 @@ type AzureConfig struct {
 	ResourceGroup string `mapstructure:"resource_group"`
 }
 
-func CheckAzureConfig(config *AzureConfig) {
+func CheckAzureConfig(config AzureConfig) {
 	regionRegex := `^[a-z]+[a-z0-9]*$`
 	if matched, _ := regexp.MatchString(regionRegex, config.Location); !matched {
 		log.Fatal(

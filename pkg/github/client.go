@@ -5,24 +5,24 @@ import (
 	"ops/pkg/utils"
 )
 
-type Config struct {
+type config struct {
 	Organization string
 	Repository   string
 	Token        string
 }
 
 func Client() *github.Client {
-	config := BuildGitHubConfig()
-	client := github.NewClient(nil).WithAuthToken(config.Token)
+	cfg := BuildGitHubConfig()
+	client := github.NewClient(nil).WithAuthToken(cfg.Token)
 	return client
 }
 
-func BuildGitHubConfig() Config {
+func BuildGitHubConfig() config {
 	org := utils.GetEnvironment("GITHUB_OWNER")
 	repo := utils.GetEnvironment("GITHUB_REPO")
 	token := utils.GetEnvironment("GITHUB_TOKEN")
 
-	return Config{
+	return config{
 		Organization: org,
 		Repository:   repo,
 		Token:        token,

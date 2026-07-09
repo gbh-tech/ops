@@ -31,7 +31,7 @@ var decryptCommand = &cobra.Command{
 
 		if opts.Env != "" {
 			log.Info("Decrypting secrets for selected environment.", "env", opts.Env)
-			var secretFile = fmt.Sprintf("%s/%s.yaml", ".helm/secrets", opts.Env)
+			secretFile := fmt.Sprintf("%s/%s.yaml", ".helm/secrets", opts.Env)
 
 			utils.RequiredFileExists(secretFile)
 			werf.CommandWithSecrets(&werf.CommandSecretsOptions{

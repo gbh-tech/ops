@@ -1,17 +1,19 @@
 package ecs
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
+	"ops/pkg/app"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "gbh-odoo",
 			Port:   8069,
 			Ports:  []int{8069, 8072},
@@ -20,18 +22,25 @@ func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "production", "cluster"), "production", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "production", "cluster"),
+		Env:      "production",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	got := containerMappingPorts(input.ContainerDefinitions[0].PortMappings)
 	want := []int{8069, 8072}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("port mappings = %v, want %v", got, want)
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Fatalf("port mappings mismatch (-got +want):\n%s", diff)
 	}
 }
 
 func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:            "api",
 			Ports:           []int{8080, 9090},
 			CPU:             256,
@@ -40,13 +49,20 @@ func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t 
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 	got := containerMappingPorts(container.PortMappings)
 	want := []int{8080, 9090}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("port mappings = %v, want %v", got, want)
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Fatalf("port mappings mismatch (-got +want):\n%s", diff)
 	}
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured")
@@ -61,24 +77,31 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandWithoutPort(t *testing.T
 	// health check is via a custom command. This was the silent-discard bug.
 	customCmd := []string{"CMD", "/bin/healthcheck"}
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "worker",
 			CPU:    256,
 			Memory: 512,
-			ContainerHC: HealthCheckConfig{
+			ContainerHC: app.HealthCheckConfig{
 				Command: customCmd,
 			},
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured; custom command was silently dropped")
 	}
-	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
-		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	if diff := cmp.Diff(container.HealthCheck.Command, customCmd); diff != "" {
+		t.Fatalf("health check command mismatch (-got +want):\n%s", diff)
 	}
 }
 
@@ -86,32 +109,39 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing
 	// Even when health_check_path and port are set, an explicit command wins.
 	customCmd := []string{"CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"}
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:            "api",
 			Port:            8080,
 			CPU:             256,
 			Memory:          512,
 			HealthCheckPath: "/health",
-			ContainerHC: HealthCheckConfig{
+			ContainerHC: app.HealthCheckConfig{
 				Command: customCmd,
 			},
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured")
 	}
-	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
-		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	if diff := cmp.Diff(container.HealthCheck.Command, customCmd); diff != "" {
+		t.Fatalf("health check command mismatch (-got +want):\n%s", diff)
 	}
 }
 
 func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:       "worker",
 			CPU:        256,
 			Memory:     512,
@@ -120,24 +150,31 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
-	if !reflect.DeepEqual(container.EntryPoint, merged.EntryPoint) {
-		t.Fatalf("entrypoint = %v, want %v", container.EntryPoint, merged.EntryPoint)
+	if diff := cmp.Diff(container.EntryPoint, merged.EntryPoint); diff != "" {
+		t.Fatalf("entrypoint mismatch (-got +want):\n%s", diff)
 	}
-	if !reflect.DeepEqual(container.Command, merged.Command) {
-		t.Fatalf("command = %v, want %v", container.Command, merged.Command)
+	if diff := cmp.Diff(container.Command, merged.Command); diff != "" {
+		t.Fatalf("command mismatch (-got +want):\n%s", diff)
 	}
 }
 
 func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProvider(t *testing.T) {
 	merged := MergedConfig{
-		AppSection: AppSection{
+		AppSection: app.AppSection{
 			Name:   "worker",
 			CPU:    1024,
 			Memory: 2048,
-			ScheduledTasks: []ScheduledTaskConfig{
+			ScheduledTasks: []app.ScheduledTaskConfig{
 				{
 					Name:             "sync",
 					Command:          []string{"sync"},
@@ -147,7 +184,14 @@ func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProv
 		},
 	}
 
-	input := BuildScheduledTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildScheduledTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 
 	if !hasCompatibility(input.RequiresCompatibilities, ecstypes.CompatibilityEc2) {
 		t.Fatalf("requiresCompatibilities = %v, want EC2 compatibility preserved", input.RequiresCompatibilities)
