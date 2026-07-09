@@ -38,7 +38,7 @@ func TailLogs(ctx context.Context, client *cwlogs.Client, logGroup, streamPrefix
 
 // PrintMigrationLogsOptions bundles the inputs for PrintMigrationLogs.
 type PrintMigrationLogsOptions struct {
-	Client  *cwlogs.Client
+	Client   *cwlogs.Client
 	LogGroup string
 	AppName  string
 	TaskArn  string
@@ -81,11 +81,11 @@ func PrintMigrationLogs(ctx context.Context, opts PrintMigrationLogsOptions) err
 
 // PrintTaskLogsOptions bundles the inputs for PrintTaskLogs.
 type PrintTaskLogsOptions struct {
-	Client       *cwlogs.Client
-	LogGroup     string
-	StreamPrefix string
+	Client        *cwlogs.Client
+	LogGroup      string
+	StreamPrefix  string
 	ContainerName string
-	TaskArn      string
+	TaskArn       string
 }
 
 // PrintTaskLogs prints all log events for a one-off ECS task after it has
