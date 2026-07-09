@@ -1,9 +1,9 @@
 package app_test
 
 import (
-	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"ops/pkg/app"
 )
 
@@ -64,8 +64,8 @@ func TestNormalizeSecrets(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("NormalizeSecrets() = %v, want %v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Fatalf("NormalizeSecrets() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}
@@ -153,8 +153,8 @@ func TestNormalizeSecretRefs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("NormalizeSecretRefs() = %v, want %v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Fatalf("NormalizeSecretRefs() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}

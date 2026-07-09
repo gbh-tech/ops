@@ -1,13 +1,13 @@
 package ecs
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
 	"ops/pkg/app"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/google/go-cmp/cmp"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
@@ -33,8 +33,8 @@ func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 	got := containerMappingPorts(input.ContainerDefinitions[0].PortMappings)
 	want := []int{8069, 8072}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("port mappings = %v, want %v", got, want)
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Fatalf("port mappings mismatch (-got +want):\n%s", diff)
 	}
 }
 
@@ -61,8 +61,8 @@ func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t 
 	got := containerMappingPorts(container.PortMappings)
 	want := []int{8080, 9090}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("port mappings = %v, want %v", got, want)
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Fatalf("port mappings mismatch (-got +want):\n%s", diff)
 	}
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured")
@@ -100,8 +100,8 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandWithoutPort(t *testing.T
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured; custom command was silently dropped")
 	}
-	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
-		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	if diff := cmp.Diff(container.HealthCheck.Command, customCmd); diff != "" {
+		t.Fatalf("health check command mismatch (-got +want):\n%s", diff)
 	}
 }
 
@@ -134,8 +134,8 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing
 	if container.HealthCheck == nil {
 		t.Fatal("expected health check to be configured")
 	}
-	if !reflect.DeepEqual(container.HealthCheck.Command, customCmd) {
-		t.Fatalf("health check command = %v, want %v", container.HealthCheck.Command, customCmd)
+	if diff := cmp.Diff(container.HealthCheck.Command, customCmd); diff != "" {
+		t.Fatalf("health check command mismatch (-got +want):\n%s", diff)
 	}
 }
 
@@ -160,11 +160,11 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 	})
 	container := input.ContainerDefinitions[0]
 
-	if !reflect.DeepEqual(container.EntryPoint, merged.EntryPoint) {
-		t.Fatalf("entrypoint = %v, want %v", container.EntryPoint, merged.EntryPoint)
+	if diff := cmp.Diff(container.EntryPoint, merged.EntryPoint); diff != "" {
+		t.Fatalf("entrypoint mismatch (-got +want):\n%s", diff)
 	}
-	if !reflect.DeepEqual(container.Command, merged.Command) {
-		t.Fatalf("command = %v, want %v", container.Command, merged.Command)
+	if diff := cmp.Diff(container.Command, merged.Command); diff != "" {
+		t.Fatalf("command mismatch (-got +want):\n%s", diff)
 	}
 }
 

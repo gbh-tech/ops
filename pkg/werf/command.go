@@ -2,26 +2,12 @@ package werf
 
 import (
 	"ops/pkg/config"
-	"ops/pkg/utils"
-	"os"
-	"os/exec"
 
 	"charm.land/log/v2"
 )
 
-type CommandOptions struct {
-	Command, Env, Repo string
-}
-
-type CommandNoRepoOptions struct {
-	Command, Env string
-}
-
-type CommandSecretsOptions struct {
-	Command  string
-	FilePath string
-}
-
+// Command runs a werf command that requires a repo (--repo, --env, --dev, plus
+// any configured extra values and secret values files/paths).
 func Command(werfConfig config.WerfConfig, options *CommandOptions) {
 	cmd := []string{
 		"werf",
@@ -49,6 +35,9 @@ func Command(werfConfig config.WerfConfig, options *CommandOptions) {
 	execWerfCommand(cmd)
 }
 
+// CommandWithoutRepo runs a werf command without --repo (e.g. render or
+// cleanup) but still applies --env, --dev, and configured extra values/secret
+// values files and paths.
 func CommandWithoutRepo(werfConfig config.WerfConfig, options *CommandNoRepoOptions) {
 	cmd := []string{
 		"werf",
@@ -72,41 +61,4 @@ func CommandWithoutRepo(werfConfig config.WerfConfig, options *CommandNoRepoOpti
 
 	log.Info("Werf command", "cmd", cmd)
 	execWerfCommand(cmd)
-}
-
-func CommandWithSecrets(options *CommandSecretsOptions) {
-	utils.RequiredFileExists(DefaultSecretKey)
-	cmd := []string{
-		"werf",
-		"helm",
-		"secret",
-		"values",
-		options.Command,
-		options.FilePath,
-		"-o",
-		options.FilePath,
-	}
-
-	log.Info("Werf command", "cmd", cmd)
-	execWerfCommand(cmd)
-
-	if options.Command == "decrypt" {
-		log.Info("Secret file(s) successfully decrypted!", "file", options.FilePath)
-	}
-
-	if options.Command == "encrypt" {
-		log.Info("Secret file(s) successfully encrypted!", "file", options.FilePath)
-	}
-}
-
-func execWerfCommand(args []string) {
-	cmd := exec.Command(args[0], args[1:]...)
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-
-	if err != nil {
-		log.Fatal("Failed to execute Werf command", "err", err)
-	}
 }

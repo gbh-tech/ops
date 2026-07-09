@@ -28,53 +28,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Command is the "ops ecs" parent command.
-var Command = &cobra.Command{
-	Use:   "ecs",
-	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, shell, port-forward, db-proxy, cleanup, logs, vars, secrets)",
-}
-
-func init() {
-	Command.AddCommand(ecsDeployCmd)
-	Command.AddCommand(ecsRenderCmd)
-	Command.AddCommand(ecsStatusCmd)
-	Command.AddCommand(ecsWaitCmd)
-	Command.AddCommand(ecsRollbackCmd)
-	Command.AddCommand(ecsDbMigrateCmd)
-	Command.AddCommand(ecsScheduleRunCmd)
-	Command.AddCommand(ecsRunCmd)
-	Command.AddCommand(ecsCleanupCmd)
-	Command.AddCommand(ecsLogsCmd)
-	Command.AddCommand(ecsVarsCmd)
-	Command.AddCommand(ecsSecretsCmd)
-	Command.AddCommand(ecsPortForwardCmd)
-	Command.AddCommand(ecsDbProxyCmd)
-	initPortForwardFlags()
-
-	// Persistent flags are inherited by every subcommand.
-	// --app is validated at runtime (required in mono-repo mode, optional in single-repo mode).
-	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
-	Command.PersistentFlags().StringP("app", "a", "", appUsage)
-	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
-	_ = Command.MarkPersistentFlagRequired("env")
-
-	// Subcommand-specific flags.
-	ecsDeployCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
-	ecsDeployCmd.Flags().Bool("skip-migrations", false, "Skip configured database migrations before updating the ECS service")
-
-	ecsRenderCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
-
-	ecsCleanupCmd.Flags().Int("keep", 0, "Number of task definition revisions to keep (overrides ecs.cleanup_keep; defaults to 5)")
-
-	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
-
-	ecsRunCmd.Flags().StringP("command", "c", "", "Command to execute inside the container (required unless invoking as 'ops ecs shell')")
-	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
-
-	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
-	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env, or .env in single-repo mode)`)
-}
-
 // ecsCtx bundles the resolved config and AWS clients used by all ECS subcommands.
 type ecsCtx struct {
 	cfg         *config.OpsConfig
@@ -82,6 +35,26 @@ type ecsCtx struct {
 	ecsClient   *awsecs.Client
 	cwClient    *cwlogs.Client
 	schedClient *scheduler.Client
+}
+
+// reconcileAppSchedulesOptions bundles the inputs for reconcileAppSchedules.
+type reconcileAppSchedulesOptions struct {
+	EC         *ecsCtx
+	Tasks      []pkgapp.ScheduledTaskConfig
+	Names      pkgecs.Names
+	AppName    string
+	Env        string
+	TaskDefArn string
+}
+
+// execECSCommandOptions bundles the inputs for execECSCommand.
+type execECSCommandOptions struct {
+	EC                *ecsCtx
+	App               string
+	Env               string
+	AppConfigOverride string
+	Command           string
+	Interactive       bool
 }
 
 // ecsDefaultReplicas returns the effective replica count from ECSDefaults,
@@ -226,6 +199,198 @@ func renderKeyValueTable(header1, header2 string, rows [][]string) {
 	if _, err := lipgloss.Println(t); err != nil {
 		log.Fatal("Failed to render table", "err", err)
 	}
+}
+
+// defaultDotenvPath returns the default .env output path for the given app.
+// In mono-repo mode it resolves to {apps_dir}/{app}/.env; in single-repo mode
+// it falls back to ".env" at the working directory root.
+func defaultDotenvPath(cfg *config.OpsConfig, app string) string {
+	if cfg.IsMonoRepo() && app != "" {
+		return filepath.Join(cfg.AppsDirPath(), app, ".env")
+	}
+	return ".env"
+}
+
+// writeDotenvFile ensures parent directories exist, then writes content to
+// path (overwriting any existing file, making the operation idempotent).
+func writeDotenvFile(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create parent directories: %w", err)
+	}
+	return os.WriteFile(path, []byte(content+"\n"), 0o644)
+}
+
+// wrapWords wraps s onto multiple lines, breaking on whitespace, so that no
+// line exceeds width characters. Words longer than width are kept whole on
+// their own line. Returns s unchanged when it already fits.
+func wrapWords(s string, width int) string {
+	if len(s) <= width || width <= 0 {
+		return s
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+	lines := []string{}
+	var current strings.Builder
+	for _, w := range words {
+		switch {
+		case current.Len() == 0:
+			current.WriteString(w)
+		case current.Len()+1+len(w) > width:
+			lines = append(lines, current.String())
+			current.Reset()
+			current.WriteString(w)
+		default:
+			current.WriteByte(' ')
+			current.WriteString(w)
+		}
+	}
+	if current.Len() > 0 {
+		lines = append(lines, current.String())
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatPortMappings(mappings []ecstypes.PortMapping) string {
+	if len(mappings) == 0 {
+		return "-"
+	}
+
+	ports := make([]string, 0, len(mappings))
+	for _, mapping := range mappings {
+		ports = append(ports, fmt.Sprintf("%d/%s", awssdk.ToInt32(mapping.ContainerPort), mapping.Protocol))
+	}
+	return strings.Join(ports, ", ")
+}
+
+// reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
+// to EventBridge Scheduler. It is a no-op when no scheduler is configured and
+// no tasks are declared.
+func reconcileAppSchedules(ctx context.Context, opts reconcileAppSchedulesOptions) error {
+	ec := opts.EC
+	tasks := opts.Tasks
+	names := opts.Names
+	appName := opts.AppName
+	env := opts.Env
+	taskDefArn := opts.TaskDefArn
+	sched := ec.cfg.ECS.Scheduler
+
+	if len(tasks) == 0 && sched.GroupName == "" {
+		return nil
+	}
+	if len(tasks) == 0 {
+		// Scheduler is configured but this app has no tasks — nothing to do.
+		return nil
+	}
+
+	if sched.GroupName == "" || sched.RoleArn == "" {
+		log.Fatal(
+			"app declares scheduled_tasks but ecs.scheduler.{group_name,role_arn} are not set in .ops/config.yaml",
+			"app", names.Service,
+		)
+	}
+
+	groupName := pkgecs.ExpandSchedulerTemplate(sched.GroupName, ec.base.ECS.Cluster, env)
+	roleArn := pkgecs.ExpandSchedulerTemplate(sched.RoleArn, ec.base.ECS.Cluster, env)
+
+	// Fetch the service's network config once, so all schedules share the
+	// same subnets/security groups as the running service.
+	netCfg, err := pkgecs.FetchServiceNetworkConfig(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service)
+	if err != nil {
+		log.Warn("Could not fetch service network config for scheduled tasks (proceeding without)", "err", err)
+		netCfg = nil
+	}
+
+	cfg := pkgecs.ReconcileConfig{
+		GroupName:        groupName,
+		RoleArn:          roleArn,
+		Cluster:          ec.base.ECS.Cluster,
+		Region:           ec.base.AWS.Region,
+		AccountID:        ec.base.AWS.AccountID,
+		AppName:          appName,
+		Env:              env,
+		CapacityProvider: ec.base.ECS.CapacityProvider,
+		LaunchType:       ec.base.Defaults.LaunchType,
+		NetworkConfig:    netCfg,
+	}
+
+	log.Info("Reconciling scheduled tasks", "app", appName, "env", env, "count", len(tasks))
+	created, updated, deleted, err := pkgecs.ReconcileSchedules(ctx, pkgecs.ReconcileSchedulesOptions{
+		Client:     ec.schedClient,
+		Cfg:        cfg,
+		TaskDefArn: taskDefArn,
+		Desired:    tasks,
+	})
+	if err != nil {
+		return err
+	}
+	log.Info("Scheduled tasks reconciled",
+		"created", len(created),
+		"updated", len(updated),
+		"deleted", len(deleted),
+	)
+	return nil
+}
+
+// execECSCommand resolves the first running task for the given service and executes the supplied command via ECS Exec.
+func execECSCommand(opts execECSCommandOptions) {
+	ec := opts.EC
+	app := opts.App
+	env := opts.Env
+	appConfigOverride := opts.AppConfigOverride
+	command := opts.Command
+	interactive := opts.Interactive
+
+	utils.CheckBinary("aws")
+	utils.CheckBinary("session-manager-plugin")
+
+	requireAppInMonoRepo(ec.cfg, app)
+	_, merged, names := loadApp(ec, app, env, appConfigOverride)
+
+	ctx := context.Background()
+	out, err := ec.ecsClient.ListTasks(ctx, &awsecs.ListTasksInput{
+		Cluster:       awssdk.String(ec.base.ECS.Cluster),
+		ServiceName:   awssdk.String(names.Service),
+		DesiredStatus: ecstypes.DesiredStatusRunning,
+	})
+	if err != nil {
+		log.Fatal("Failed to list running tasks", "err", err)
+	}
+	if len(out.TaskArns) == 0 {
+		log.Fatal("No running tasks found for service", "service", names.Service, "cluster", ec.base.ECS.Cluster)
+	}
+
+	taskArn := out.TaskArns[0]
+	appName := merged.Name
+	log.Info("Starting ECS Exec", "task", taskArn, "container", appName, "command", command, "interactive", interactive)
+
+	execArgs := []string{"ecs", "execute-command",
+		"--cluster", ec.base.ECS.Cluster,
+		"--task", taskArn,
+		"--container", appName,
+		"--command", command,
+		"--region", ec.cfg.AWS.Region,
+		"--interactive",
+	}
+	if ec.cfg.AWS.Profile != "" {
+		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
+	}
+	execCmd := exec.Command("aws", execArgs...)
+	if interactive {
+		execCmd.Stdin = os.Stdin
+	}
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+	if err := execCmd.Run(); err != nil {
+		log.Fatal("ECS Exec ended with error", "err", err)
+	}
+}
+
+// Command is the "ops ecs" parent command.
+var Command = &cobra.Command{
+	Use:   "ecs",
+	Short: "ECS deployment subcommands (deploy, render, status, wait, rollback, db-migrate, schedule-run, run, shell, port-forward, db-proxy, cleanup, logs, vars, secrets)",
 }
 
 var ecsDeployCmd = &cobra.Command{
@@ -617,7 +782,7 @@ var ecsCleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Remove old ECS task definition revisions, keeping the latest N",
 	Long: `Remove old ECS task definition revisions, keeping the latest N for both
-the service family ("{app}-{env}") and the scheduled family ("{app}-{env}-scheduled").
+ the service family ("{app}-{env}") and the scheduled family ("{app}-{env}-scheduled").
 
 The number kept defaults to ecs.cleanup_keep from .ops/config.yaml (or 5 when
 unset). Pass --keep to override for a single invocation.`,
@@ -751,25 +916,6 @@ With --format dotenv, use --output/-o to control the destination:
 	},
 }
 
-// defaultDotenvPath returns the default .env output path for the given app.
-// In mono-repo mode it resolves to {apps_dir}/{app}/.env; in single-repo mode
-// it falls back to ".env" at the working directory root.
-func defaultDotenvPath(cfg *config.OpsConfig, app string) string {
-	if cfg.IsMonoRepo() && app != "" {
-		return filepath.Join(cfg.AppsDirPath(), app, ".env")
-	}
-	return ".env"
-}
-
-// writeDotenvFile ensures parent directories exist, then writes content to
-// path (overwriting any existing file, making the operation idempotent).
-func writeDotenvFile(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create parent directories: %w", err)
-	}
-	return os.WriteFile(path, []byte(content+"\n"), 0o644)
-}
-
 var ecsSecretsCmd = &cobra.Command{
 	Use:   "secrets",
 	Short: "Pretty-print the resolved secrets and their Secrets Manager ARN references for an app and environment",
@@ -893,85 +1039,6 @@ Example:
 	},
 }
 
-// reconcileAppSchedulesOptions bundles the inputs for reconcileAppSchedules.
-type reconcileAppSchedulesOptions struct {
-	EC         *ecsCtx
-	Tasks      []pkgapp.ScheduledTaskConfig
-	Names      pkgecs.Names
-	AppName    string
-	Env        string
-	TaskDefArn string
-}
-
-// reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
-// to EventBridge Scheduler. It is a no-op when no scheduler is configured and
-// no tasks are declared.
-func reconcileAppSchedules(ctx context.Context, opts reconcileAppSchedulesOptions) error {
-	ec := opts.EC
-	tasks := opts.Tasks
-	names := opts.Names
-	appName := opts.AppName
-	env := opts.Env
-	taskDefArn := opts.TaskDefArn
-	sched := ec.cfg.ECS.Scheduler
-
-	if len(tasks) == 0 && sched.GroupName == "" {
-		return nil
-	}
-	if len(tasks) == 0 {
-		// Scheduler is configured but this app has no tasks — nothing to do.
-		return nil
-	}
-
-	if sched.GroupName == "" || sched.RoleArn == "" {
-		log.Fatal(
-			"app declares scheduled_tasks but ecs.scheduler.{group_name,role_arn} are not set in .ops/config.yaml",
-			"app", names.Service,
-		)
-	}
-
-	groupName := pkgecs.ExpandSchedulerTemplate(sched.GroupName, ec.base.ECS.Cluster, env)
-	roleArn := pkgecs.ExpandSchedulerTemplate(sched.RoleArn, ec.base.ECS.Cluster, env)
-
-	// Fetch the service's network config once, so all schedules share the
-	// same subnets/security groups as the running service.
-	netCfg, err := pkgecs.FetchServiceNetworkConfig(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service)
-	if err != nil {
-		log.Warn("Could not fetch service network config for scheduled tasks (proceeding without)", "err", err)
-		netCfg = nil
-	}
-
-	cfg := pkgecs.ReconcileConfig{
-		GroupName:        groupName,
-		RoleArn:          roleArn,
-		Cluster:          ec.base.ECS.Cluster,
-		Region:           ec.base.AWS.Region,
-		AccountID:        ec.base.AWS.AccountID,
-		AppName:          appName,
-		Env:              env,
-		CapacityProvider: ec.base.ECS.CapacityProvider,
-		LaunchType:       ec.base.Defaults.LaunchType,
-		NetworkConfig:    netCfg,
-	}
-
-	log.Info("Reconciling scheduled tasks", "app", appName, "env", env, "count", len(tasks))
-	created, updated, deleted, err := pkgecs.ReconcileSchedules(ctx, pkgecs.ReconcileSchedulesOptions{
-		Client:     ec.schedClient,
-		Cfg:        cfg,
-		TaskDefArn: taskDefArn,
-		Desired:    tasks,
-	})
-	if err != nil {
-		return err
-	}
-	log.Info("Scheduled tasks reconciled",
-		"created", len(created),
-		"updated", len(updated),
-		"deleted", len(deleted),
-	)
-	return nil
-}
-
 var ecsRunCmd = &cobra.Command{
 	Use:     "run",
 	Aliases: []string{"shell"},
@@ -1013,110 +1080,43 @@ Example:
 	},
 }
 
-// execECSCommandOptions bundles the inputs for execECSCommand.
-type execECSCommandOptions struct {
-	EC                *ecsCtx
-	App               string
-	Env               string
-	AppConfigOverride string
-	Command           string
-	Interactive       bool
-}
+func init() {
+	Command.AddCommand(ecsDeployCmd)
+	Command.AddCommand(ecsRenderCmd)
+	Command.AddCommand(ecsStatusCmd)
+	Command.AddCommand(ecsWaitCmd)
+	Command.AddCommand(ecsRollbackCmd)
+	Command.AddCommand(ecsDbMigrateCmd)
+	Command.AddCommand(ecsScheduleRunCmd)
+	Command.AddCommand(ecsRunCmd)
+	Command.AddCommand(ecsCleanupCmd)
+	Command.AddCommand(ecsLogsCmd)
+	Command.AddCommand(ecsVarsCmd)
+	Command.AddCommand(ecsSecretsCmd)
+	Command.AddCommand(ecsPortForwardCmd)
+	Command.AddCommand(ecsDbProxyCmd)
+	initPortForwardFlags()
 
-// execECSCommand resolves the first running task for the given service and executes the supplied command via ECS Exec.
-func execECSCommand(opts execECSCommandOptions) {
-	ec := opts.EC
-	app := opts.App
-	env := opts.Env
-	appConfigOverride := opts.AppConfigOverride
-	command := opts.Command
-	interactive := opts.Interactive
+	// Persistent flags are inherited by every subcommand.
+	// --app is validated at runtime (required in mono-repo mode, optional in single-repo mode).
+	appUsage := "App name: subdirectory in mono-repo (apps/{app}/), or ECS name override in single-repo"
+	Command.PersistentFlags().StringP("app", "a", "", appUsage)
+	Command.PersistentFlags().StringP("env", "e", "", "Target environment")
+	_ = Command.MarkPersistentFlagRequired("env")
 
-	utils.CheckBinary("aws")
-	utils.CheckBinary("session-manager-plugin")
+	// Subcommand-specific flags.
+	ecsDeployCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
+	ecsDeployCmd.Flags().Bool("skip-migrations", false, "Skip configured database migrations before updating the ECS service")
 
-	requireAppInMonoRepo(ec.cfg, app)
-	_, merged, names := loadApp(ec, app, env, appConfigOverride)
+	ecsRenderCmd.Flags().StringP("tag", "t", "", "Container image tag (defaults to the env name, e.g. \"stage\")")
 
-	ctx := context.Background()
-	out, err := ec.ecsClient.ListTasks(ctx, &awsecs.ListTasksInput{
-		Cluster:       awssdk.String(ec.base.ECS.Cluster),
-		ServiceName:   awssdk.String(names.Service),
-		DesiredStatus: ecstypes.DesiredStatusRunning,
-	})
-	if err != nil {
-		log.Fatal("Failed to list running tasks", "err", err)
-	}
-	if len(out.TaskArns) == 0 {
-		log.Fatal("No running tasks found for service", "service", names.Service, "cluster", ec.base.ECS.Cluster)
-	}
+	ecsCleanupCmd.Flags().Int("keep", 0, "Number of task definition revisions to keep (overrides ecs.cleanup_keep; defaults to 5)")
 
-	taskArn := out.TaskArns[0]
-	appName := merged.Name
-	log.Info("Starting ECS Exec", "task", taskArn, "container", appName, "command", command, "interactive", interactive)
+	ecsLogsCmd.Flags().Duration("since", 10*time.Minute, "Show logs since this duration ago")
 
-	execArgs := []string{"ecs", "execute-command",
-		"--cluster", ec.base.ECS.Cluster,
-		"--task", taskArn,
-		"--container", appName,
-		"--command", command,
-		"--region", ec.cfg.AWS.Region,
-		"--interactive",
-	}
-	if ec.cfg.AWS.Profile != "" {
-		execArgs = append(execArgs, "--profile", ec.cfg.AWS.Profile)
-	}
-	execCmd := exec.Command("aws", execArgs...)
-	if interactive {
-		execCmd.Stdin = os.Stdin
-	}
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-	if err := execCmd.Run(); err != nil {
-		log.Fatal("ECS Exec ended with error", "err", err)
-	}
-}
+	ecsRunCmd.Flags().StringP("command", "c", "", "Command to execute inside the container (required unless invoking as 'ops ecs shell')")
+	ecsRunCmd.Flags().StringP("shell", "s", "/bin/sh", "Shell binary to open inside the container when invoking as 'ops ecs shell' (e.g. /bin/bash)")
 
-// wrapWords wraps s onto multiple lines, breaking on whitespace, so that no
-// line exceeds width characters. Words longer than width are kept whole on
-// their own line. Returns s unchanged when it already fits.
-func wrapWords(s string, width int) string {
-	if len(s) <= width || width <= 0 {
-		return s
-	}
-	words := strings.Fields(s)
-	if len(words) == 0 {
-		return s
-	}
-	lines := []string{}
-	var current strings.Builder
-	for _, w := range words {
-		switch {
-		case current.Len() == 0:
-			current.WriteString(w)
-		case current.Len()+1+len(w) > width:
-			lines = append(lines, current.String())
-			current.Reset()
-			current.WriteString(w)
-		default:
-			current.WriteByte(' ')
-			current.WriteString(w)
-		}
-	}
-	if current.Len() > 0 {
-		lines = append(lines, current.String())
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatPortMappings(mappings []ecstypes.PortMapping) string {
-	if len(mappings) == 0 {
-		return "-"
-	}
-
-	ports := make([]string, 0, len(mappings))
-	for _, mapping := range mappings {
-		ports = append(ports, fmt.Sprintf("%d/%s", awssdk.ToInt32(mapping.ContainerPort), mapping.Protocol))
-	}
-	return strings.Join(ports, ", ")
+	ecsVarsCmd.Flags().StringP("format", "f", "table", "Output format: table | dotenv")
+	ecsVarsCmd.Flags().StringP("output", "o", "", `Output destination for dotenv format: file path, or "-" to write to stdout (default: {apps_dir}/{app}/.env, or .env in single-repo mode)`)
 }

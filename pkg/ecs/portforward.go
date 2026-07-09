@@ -161,11 +161,6 @@ type PortForwardSessionOpts struct {
 	LocalPort  int
 }
 
-// ECSExecTarget builds the SSM target string for ECS Exec / port forwarding.
-func ECSExecTarget(cluster, taskID, runtimeID string) string {
-	return "ecs:" + cluster + "_" + taskID + "_" + runtimeID
-}
-
 // RunPortForwardSession shells out to `aws ssm start-session` with AWS-StartPortForwardingSession.
 func RunPortForwardSession(ctx context.Context, opts PortForwardSessionOpts) error {
 	if opts.RemotePort <= 0 || opts.RemotePort > 65535 {
@@ -205,4 +200,9 @@ func RunPortForwardSession(ctx context.Context, opts PortForwardSessionOpts) err
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// ECSExecTarget builds the SSM target string for ECS Exec / port forwarding.
+func ECSExecTarget(cluster, taskID, runtimeID string) string {
+	return "ecs:" + cluster + "_" + taskID + "_" + runtimeID
 }

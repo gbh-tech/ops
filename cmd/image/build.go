@@ -120,6 +120,19 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 	},
 }
 
+func init() {
+	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
+	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
+	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
+	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
+	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
+	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")
+	BuildCommand.Flags().Bool("no-cache", false, "Do not use cache when building the image")
+	BuildCommand.Flags().StringArray("secret", nil, "Additional Docker BuildKit secret (id=<name>,src=<file> or env=<var>); appended after config build_secrets")
+	BuildCommand.Flags().StringArray("build-arg", nil, "Additional Docker build argument (KEY=VALUE); appended after config build_args")
+	_ = BuildCommand.MarkFlagRequired("env")
+}
+
 // resolveBuildConfigOptions bundles the inputs for resolveBuildConfig.
 type resolveBuildConfigOptions struct {
 	Ctx    context.Context
@@ -247,17 +260,4 @@ func fetchAndWriteSecrets(ctx context.Context, cfg *config.OpsConfig, specs []pk
 		args = append(args, "--secret", fmt.Sprintf("id=%s,src=%s", spec.ID, idToFile[spec.ID]))
 	}
 	return args, cleanup
-}
-
-func init() {
-	BuildCommand.Flags().StringP("app", "a", "", "App name (required in mono-repo mode)")
-	BuildCommand.Flags().StringP("env", "e", "", "Target environment (required)")
-	BuildCommand.Flags().StringP("tag", "t", "", "Image tag (defaults to the env name, e.g. \"stage\")")
-	BuildCommand.Flags().String("dockerfile", "", "Path to Dockerfile (defaults to {apps_dir}/{app}/Dockerfile in mono-repo, Dockerfile otherwise)")
-	BuildCommand.Flags().String("context", "", "Docker build context (defaults to {apps_dir}/{app}/ in mono-repo, \".\" otherwise)")
-	BuildCommand.Flags().String("platform", "linux/amd64", "Target platform for the build (passed to docker --platform)")
-	BuildCommand.Flags().Bool("no-cache", false, "Do not use cache when building the image")
-	BuildCommand.Flags().StringArray("secret", nil, "Additional Docker BuildKit secret (id=<name>,src=<file> or env=<var>); appended after config build_secrets")
-	BuildCommand.Flags().StringArray("build-arg", nil, "Additional Docker build argument (KEY=VALUE); appended after config build_args")
-	_ = BuildCommand.MarkFlagRequired("env")
 }

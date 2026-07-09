@@ -22,8 +22,8 @@ type OpsConfig struct {
 	Provider string `mapstructure:"provider"`
 
 	// Deployment is the active deployment tool tie-breaker. Optional; only
-	// required when more than one deployment block is defined. Can also be
-	// supplied via the persistent --deployment flag.
+	// required when more than one deployment block is defined. Can also
+	// be supplied via the persistent --deployment flag.
 	Deployment string `mapstructure:"deployment"`
 
 	// RepoMode controls how app config file paths are resolved across all providers.
@@ -54,9 +54,54 @@ type OpsConfig struct {
 	Registry RegistryConfig `mapstructure:"registry"`
 }
 
-// GitConfig is split out only to keep the root struct readable.
-type GitConfig struct {
-	DefaultBranch string `mapstructure:"default_branch"`
+var config OpsConfig
+
+// LoadConfig reads .ops/config.yaml into the package-level config singleton,
+// resolves the active cloud/deployment providers, and validates the active
+// cloud block. Callers receive a pointer to the populated config.
+func LoadConfig() *OpsConfig {
+	viper.SetConfigType("yaml")
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".ops")
+	viper.SetEnvPrefix("ops")
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			log.Fatal("Ops config file not found")
+		}
+		log.Fatal("Failed to read Ops config file", "err", err)
+	}
+
+	if err := viper.Unmarshal(&config); err != nil {
+		log.Fatal("Unable to parse Ops config file", "err", err)
+	}
+
+	// Resolve the active providers before running per-block validators so
+	// downstream code can rely on CloudProvider()/DeploymentProvider().
+	config.Provider = resolveProvider(&config)
+	config.Deployment = resolveDeployment(&config)
+
+	// Only validate the cloud block we actually care about.
+	switch config.Provider {
+	case "aws":
+		if config.AWS.Profile != "" {
+			if err := os.Setenv("AWS_PROFILE", config.AWS.Profile); err != nil {
+				log.Fatal("Failed to set AWS_PROFILE", "err", err)
+			}
+		}
+		if config.AWS.Region != "" {
+			if err := os.Setenv("AWS_REGION", config.AWS.Region); err != nil {
+				log.Fatal("Failed to set AWS_REGION", "err", err)
+			}
+		}
+		CheckAWSConfig(config.AWS)
+	case "azure":
+		CheckAzureConfig(config.Azure)
+	}
+
+	return &config
 }
 
 // IsMonoRepo returns true when repo_mode is "mono" or unset (default).
@@ -124,22 +169,6 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 	return defaultSubpath
 }
 
-// supportedAppConfigExts lists the app config formats supported by
-// LoadAppConfig. They are checked in this order when resolving a bare name.
-var supportedAppConfigExts = []string{".toml", ".yaml", ".yml"}
-
-// hasAppConfigExt reports whether path already ends with a supported
-// app config extension.
-func hasAppConfigExt(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	for _, e := range supportedAppConfigExts {
-		if ext == e {
-			return true
-		}
-	}
-	return false
-}
-
 // ResolveAppConfigPath resolves the path to an app config file. In
 // mono-repo mode it is scoped under {apps_dir}/{app}/. If override is empty
 // it returns the default deploy/config.toml. If override already has a
@@ -176,49 +205,18 @@ func (c *OpsConfig) ResolveAppConfigPath(app, override string) (string, error) {
 	}
 }
 
-var config OpsConfig
+// supportedAppConfigExts lists the app config formats supported by
+// LoadAppConfig. They are checked in this order when resolving a bare name.
+var supportedAppConfigExts = []string{".toml", ".yaml", ".yml"}
 
-func LoadConfig() *OpsConfig {
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".ops")
-	viper.SetEnvPrefix("ops")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			log.Fatal("Ops config file not found")
+// hasAppConfigExt reports whether path already ends with a supported
+// app config extension.
+func hasAppConfigExt(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, e := range supportedAppConfigExts {
+		if ext == e {
+			return true
 		}
-		log.Fatal("Failed to read Ops config file", "err", err)
 	}
-
-	if err := viper.Unmarshal(&config); err != nil {
-		log.Fatal("Unable to parse Ops config file", "err", err)
-	}
-
-	// Resolve the active providers before running per-block validators so
-	// downstream code can rely on CloudProvider()/DeploymentProvider().
-	config.Provider = resolveProvider(&config)
-	config.Deployment = resolveDeployment(&config)
-
-	// Only validate the cloud block we actually care about.
-	switch config.Provider {
-	case "aws":
-		if config.AWS.Profile != "" {
-			if err := os.Setenv("AWS_PROFILE", config.AWS.Profile); err != nil {
-				log.Fatal("Failed to set AWS_PROFILE", "err", err)
-			}
-		}
-		if config.AWS.Region != "" {
-			if err := os.Setenv("AWS_REGION", config.AWS.Region); err != nil {
-				log.Fatal("Failed to set AWS_REGION", "err", err)
-			}
-		}
-		CheckAWSConfig(config.AWS)
-	case "azure":
-		CheckAzureConfig(config.Azure)
-	}
-
-	return &config
+	return false
 }
