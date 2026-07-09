@@ -276,15 +276,15 @@ func reconcileAppSchedules(ctx context.Context, opts reconcileAppSchedulesOption
 	taskDefArn := opts.TaskDefArn
 	sched := ec.cfg.ECS.Scheduler
 
-	if len(tasks) == 0 {
-		// No scheduled tasks declared — nothing to reconcile (whether or not
-		// a scheduler group is configured).
+	if sched.GroupName == "" {
+		// No scheduler group configured; nothing to reconcile (whether or not
+		// scheduled_tasks are declared).
 		return nil
 	}
 
-	if sched.GroupName == "" || sched.RoleArn == "" {
+	if len(tasks) > 0 && sched.RoleArn == "" {
 		log.Fatal(
-			"app declares scheduled_tasks but ecs.scheduler.{group_name,role_arn} are not set in .ops/config.yaml",
+			"app declares scheduled_tasks but ecs.scheduler.role_arn is not set in .ops/config.yaml",
 			"app", names.Service,
 		)
 	}
