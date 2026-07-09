@@ -87,7 +87,7 @@ func resolveDeployment(c *OpsConfig) string {
 }
 
 func definedCloudBlocks(c *OpsConfig) []string {
-	var out []string
+	out := []string{}
 	if c.AWS.Region != "" || c.AWS.AccountId != "" {
 		out = append(out, "aws")
 	}
@@ -98,7 +98,7 @@ func definedCloudBlocks(c *OpsConfig) []string {
 }
 
 func definedDeploymentBlocks(c *OpsConfig) []string {
-	var out []string
+	out := []string{}
 	if c.ECS.Cluster != "" {
 		out = append(out, "ecs")
 	}

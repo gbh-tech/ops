@@ -44,14 +44,13 @@ func RegisterTaskDefinition(ctx context.Context, client *awsecs.Client, input aw
 // UpdateService points a service at a new task definition and triggers a
 // force-new-deployment.
 func UpdateService(ctx context.Context, client *awsecs.Client, cluster, service, taskDefArn string, desiredCount int32) error {
-	_, err := client.UpdateService(ctx, &awsecs.UpdateServiceInput{
+	if _, err := client.UpdateService(ctx, &awsecs.UpdateServiceInput{
 		Cluster:            aws.String(cluster),
 		Service:            aws.String(service),
 		TaskDefinition:     aws.String(taskDefArn),
 		DesiredCount:       aws.Int32(desiredCount),
 		ForceNewDeployment: true,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("update service %s: %w", service, err)
 	}
 	return nil
@@ -69,7 +68,7 @@ func RunMigrationTask(ctx context.Context, client *awsecs.Client, opts Migration
 		return "", fmt.Errorf("describe service %s: %w", opts.Service, err)
 	}
 	if len(svcOut.Services) == 0 {
-		return "", fmt.Errorf("service %s not found in cluster %s", opts.Service, opts.Cluster)
+		return "", fmt.Errorf("service %q not found in cluster %q", opts.Service, opts.Cluster)
 	}
 
 	runInput := &awsecs.RunTaskInput{
@@ -206,7 +205,7 @@ func Rollback(ctx context.Context, client *awsecs.Client, cluster, service, fami
 	parts := strings.Split(currentArn, ":")
 	var revision int
 	if _, err := fmt.Sscanf(parts[len(parts)-1], "%d", &revision); err != nil {
-		return fmt.Errorf("could not parse revision from ARN %s: %w", currentArn, err)
+		return fmt.Errorf("could not parse revision from ARN %q: %w", currentArn, err)
 	}
 	if revision <= 1 {
 		return fmt.Errorf("no previous revision to roll back to (current: %d)", revision)
@@ -230,7 +229,7 @@ func Rollback(ctx context.Context, client *awsecs.Client, cluster, service, fami
 // CleanupTaskDefinitions deregisters and deletes old task definition revisions
 // for a family, keeping the latest `keep` revisions.
 func CleanupTaskDefinitions(ctx context.Context, client *awsecs.Client, family string, keep int) error {
-	var arns []string
+	arns := []string{}
 	paginator := awsecs.NewListTaskDefinitionsPaginator(client, &awsecs.ListTaskDefinitionsInput{
 		FamilyPrefix: aws.String(family),
 		Status:       ecstypes.TaskDefinitionStatusActive,

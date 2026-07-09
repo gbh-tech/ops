@@ -1,8 +1,9 @@
 package config
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestDefinedCloudBlocks(t *testing.T) {
@@ -33,15 +34,15 @@ func TestDefinedCloudBlocks(t *testing.T) {
 		{
 			name: "none",
 			cfg:  OpsConfig{},
-			want: nil,
+			want: []string{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := definedCloudBlocks(&tt.cfg)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("definedCloudBlocks() = %v, want %v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Fatalf("definedCloudBlocks() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}
@@ -67,15 +68,15 @@ func TestDefinedDeploymentBlocks(t *testing.T) {
 		{
 			name: "none",
 			cfg:  OpsConfig{},
-			want: nil,
+			want: []string{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := definedDeploymentBlocks(&tt.cfg)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("definedDeploymentBlocks() = %v, want %v", got, tt.want)
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Fatalf("definedDeploymentBlocks() mismatch (-got +want):\n%s", diff)
 			}
 		})
 	}

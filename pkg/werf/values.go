@@ -9,7 +9,7 @@ import (
 )
 
 func GetValuesFiles(werfConfig config.WerfConfig) []string {
-	var valuesFiles []string
+	valuesFiles := []string{}
 	for _, file := range werfConfig.ValuesFiles {
 		if _, err := os.Stat(file); err != nil {
 			log.Fatal(
@@ -27,7 +27,7 @@ func GetValuesFiles(werfConfig config.WerfConfig) []string {
 }
 
 func GetSecretValuesFiles(werfConfig config.WerfConfig) []string {
-	var valuesFiles []string
+	valuesFiles := []string{}
 	for _, file := range werfConfig.SecretsFiles {
 
 		if _, err := os.Stat(file); err != nil {
@@ -46,7 +46,7 @@ func GetSecretValuesFiles(werfConfig config.WerfConfig) []string {
 }
 
 func GetValuesPaths(werfConfig config.WerfConfig) []string {
-	var valuesPaths []string
+	valuesPaths := []string{}
 	for _, path := range werfConfig.ValuesPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -75,7 +75,7 @@ func GetValuesPaths(werfConfig config.WerfConfig) []string {
 }
 
 func GetSecretValuesPaths(werfConfig config.WerfConfig) []string {
-	var valuesPaths []string
+	valuesPaths := []string{}
 	for _, path := range werfConfig.SecretsPaths {
 		err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {

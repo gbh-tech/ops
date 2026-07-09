@@ -156,7 +156,7 @@ func (c *OpsConfig) ResolveAppConfigPath(app, override string) (string, error) {
 	}
 
 	override = strings.TrimSuffix(override, ".")
-	var found []string
+	found := []string{}
 	for _, ext := range supportedAppConfigExts {
 		candidate := c.ResolveAppFilePath(app, filepath.Join("deploy", override)+ext, "deploy/config.toml")
 		if _, err := os.Stat(candidate); err == nil {
@@ -188,9 +188,8 @@ func LoadConfig() *OpsConfig {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
 			log.Fatal("Ops config file not found")
-		} else {
-			log.Fatal("Failed to read Ops config file", "err", err)
 		}
+		log.Fatal("Failed to read Ops config file", "err", err)
 	}
 
 	if err := viper.Unmarshal(&config); err != nil {

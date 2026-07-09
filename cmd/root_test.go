@@ -31,7 +31,7 @@ func ancestorPersistentShorthands(cmd *cobra.Command) map[string]string {
 func TestNoShorthandFlagConflicts(t *testing.T) {
 	t.Parallel()
 
-	var conflicts []string
+	conflicts := []string{}
 
 	walkCommands(rootCmd, func(cmd *cobra.Command) {
 		inherited := ancestorPersistentShorthands(cmd)

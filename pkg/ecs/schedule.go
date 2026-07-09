@@ -73,7 +73,7 @@ func FetchServiceNetworkConfig(ctx context.Context, ecsClient *awsecs.Client, cl
 		return nil, fmt.Errorf("describe service %s: %w", service, err)
 	}
 	if len(out.Services) == 0 {
-		return nil, fmt.Errorf("service %s not found in cluster %s", service, cluster)
+		return nil, fmt.Errorf("service %q not found in cluster %q", service, cluster)
 	}
 	return out.Services[0].NetworkConfiguration, nil
 }
@@ -392,7 +392,7 @@ func ResolveScheduledTaskCapacityProvider(t app.ScheduledTaskConfig, defaultProv
 // scheduleName returns the full EventBridge Scheduler name for a task within
 // an app/env. Passing an empty taskName produces the list prefix.
 func scheduleName(appName, env, taskName string) string {
-	return fmt.Sprintf("%s-%s-%s", appName, env, taskName)
+	return appName + "-" + env + "-" + taskName
 }
 
 // containerRunInput is the JSON payload placed in Target.Input to instruct

@@ -281,10 +281,10 @@ func secretValueFrom(arnPrefix, implicitBase string, ref app.SecretRef) string {
 		if strings.HasPrefix(ref.Secret, "arn:") {
 			base = ref.Secret
 		} else {
-			base = fmt.Sprintf("%s:%s", arnPrefix, ref.Secret)
+			base = arnPrefix + ":" + ref.Secret
 		}
 	}
-	return fmt.Sprintf("%s:%s::", base, ref.Key)
+	return base + ":" + ref.Key + "::"
 }
 
 // ResolveSecrets builds the ECS secrets list from the consolidated Secrets
@@ -305,10 +305,10 @@ func ResolveSecrets(appCfg AppConfig, env, serviceName, arnPrefix string) ([]ECS
 		return nil, fmt.Errorf("%s.secrets: %w", env, err)
 	}
 
-	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
-	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
+	sharedARN := arnPrefix + ":" + serviceName + "/shared"
+	envARN := arnPrefix + ":" + serviceName + "/" + env
 
-	var secrets []ECSSecret
+	secrets := []ECSSecret{}
 
 	// Global secrets not overridden by env come from the shared secret.
 	for envVar, ref := range globalMap {
@@ -347,7 +347,7 @@ func (config MergedConfig) AppendsEnvironment() bool {
 // ComputeNames derives the ECS family name, service name, CloudWatch log
 // group, and scheduled task family from the merged config.
 func ComputeNames(config MergedConfig, env, cluster string) Names {
-	family := fmt.Sprintf("%s-%s", config.Name, env)
+	family := config.Name + "-" + env
 	service := config.Name
 	if config.AppendsEnvironment() {
 		service = family

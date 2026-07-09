@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -369,17 +370,17 @@ var ecsRenderCmd = &cobra.Command{
 			{"Env", env},
 			{"Family", names.Family},
 			{"Service", names.Service},
-			{"Append environment", fmt.Sprintf("%v", merged.AppendsEnvironment())},
+			{"Append environment", strconv.FormatBool(merged.AppendsEnvironment())},
 			{"Image", *ctr.Image},
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},
-			{"Replicas", fmt.Sprintf("%d", *merged.Replicas)},
+			{"Replicas", strconv.Itoa(*merged.Replicas)},
 			{"Ports", formatPortMappings(ctr.PortMappings)},
-			{"Env vars", fmt.Sprintf("%d", len(ctr.Environment))},
-			{"Secrets", fmt.Sprintf("%d", len(ctr.Secrets))},
-			{"Migrations", fmt.Sprintf("%v", merged.DatabaseMigrations)},
-			{"Volumes", fmt.Sprintf("%d", len(input.Volumes))},
-			{"Scheduled tasks", fmt.Sprintf("%d", len(merged.ScheduledTasks))},
+			{"Env vars", strconv.Itoa(len(ctr.Environment))},
+			{"Secrets", strconv.Itoa(len(ctr.Secrets))},
+			{"Migrations", strconv.FormatBool(merged.DatabaseMigrations)},
+			{"Volumes", strconv.Itoa(len(input.Volumes))},
+			{"Scheduled tasks", strconv.Itoa(len(merged.ScheduledTasks))},
 		}
 		if len(merged.ScheduledTasks) > 0 {
 			rows = append(rows, []string{"Scheduled family", names.ScheduledFamily})
@@ -391,7 +392,7 @@ var ecsRenderCmd = &cobra.Command{
 			volType := "host"
 			switch {
 			case v.EFS != nil:
-				volType = fmt.Sprintf("efs:%s", v.EFS.FileSystemId)
+				volType = "efs:" + v.EFS.FileSystemId
 			case v.Docker != nil:
 				volType = "docker"
 			}
@@ -400,8 +401,8 @@ var ecsRenderCmd = &cobra.Command{
 				readOnly = " (ro)"
 			}
 			rows = append(rows, []string{
-				fmt.Sprintf("  Volume: %s", v.Name),
-				fmt.Sprintf("%s → %s%s", volType, v.ContainerPath, readOnly),
+				"  Volume: " + v.Name,
+				volType + " → " + v.ContainerPath + readOnly,
 			})
 		}
 		for _, st := range merged.ScheduledTasks {
@@ -411,7 +412,7 @@ var ecsRenderCmd = &cobra.Command{
 			}
 			capacityProvider := pkgecs.ResolveScheduledTaskCapacityProvider(st, base.ECS.CapacityProvider, merged.Name, env)
 			rows = append(rows,
-				[]string{fmt.Sprintf("  Schedule: %s", st.Name), ""},
+				[]string{"  Schedule: " + st.Name, ""},
 				[]string{"    enabled", enabled},
 				[]string{"    schedule", st.Schedule},
 				[]string{"    capacity provider", utils.OrDash(capacityProvider)},
@@ -979,7 +980,7 @@ func wrapWords(s string, width int) string {
 	if len(words) == 0 {
 		return s
 	}
-	var lines []string
+	lines := []string{}
 	var current strings.Builder
 	for _, w := range words {
 		switch {

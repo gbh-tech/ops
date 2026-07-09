@@ -13,7 +13,7 @@ import (
 // AWS_PROFILE and AWS_REGION are already seeded by ops' LoadConfig, so
 // calling this with empty strings is valid and uses those env values.
 func NewAWSConfig(ctx context.Context, region, profile string) aws.Config {
-	var opts []func(*config.LoadOptions) error
+	opts := make([]func(*config.LoadOptions) error, 0, 2)
 
 	if region != "" {
 		opts = append(opts, config.WithRegion(region))

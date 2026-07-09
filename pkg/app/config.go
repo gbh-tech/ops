@@ -192,7 +192,7 @@ type AppConfig map[string]AppSection
 func LoadFile(path string, out any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", path, err)
+		return fmt.Errorf("reading %q: %w", path, err)
 	}
 
 	ext := strings.ToLower(filepath.Ext(path))
@@ -200,11 +200,11 @@ func LoadFile(path string, out any) error {
 	case ".toml":
 		md, err := toml.Decode(string(data), out)
 		if err != nil {
-			return fmt.Errorf("parsing TOML %s: %w", path, err)
+			return fmt.Errorf("parsing TOML %q: %w", path, err)
 		}
 		if extras := unknownTOMLKeys(md); len(extras) > 0 {
 			return fmt.Errorf(
-				"unknown keys in %s: %s\n"+
+				"unknown keys in %q: %q\n"+
 					"hint: in TOML, every bare key/value after a [subtable] header "+
 					"belongs to that subtable, not the parent — move scalars above "+
 					"subtable headers or use the [section.key] map form",
@@ -215,7 +215,7 @@ func LoadFile(path string, out any) error {
 		dec := yaml.NewDecoder(bytes.NewReader(data))
 		dec.KnownFields(true)
 		if err := dec.Decode(out); err != nil {
-			return fmt.Errorf("parsing YAML %s: %w", path, err)
+			return fmt.Errorf("parsing YAML %q: %w", path, err)
 		}
 	default:
 		return fmt.Errorf("unsupported config format %q (use .toml or .yaml)", ext)
@@ -231,7 +231,7 @@ func LoadFile(path string, out any) error {
 // appears at index 1 of the key path (i.e. directly under a section like
 // "global" or "production", not nested inside another field).
 func unknownTOMLKeys(md toml.MetaData) []string {
-	var unknown []string
+	unknown := []string{}
 	for _, k := range md.Undecoded() {
 		// k[0] = section name ("global", "stage", …)
 		// k[1] = AppSection field name
@@ -390,10 +390,10 @@ func ResolveBuildSecretSpecs(appCfg AppConfig, env, serviceName, arnPrefix strin
 		return nil, fmt.Errorf("%s.build_secrets: %w", env, err)
 	}
 
-	sharedARN := fmt.Sprintf("%s:%s/shared", arnPrefix, serviceName)
-	envARN := fmt.Sprintf("%s:%s/%s", arnPrefix, serviceName, env)
+	sharedARN := arnPrefix + ":" + serviceName + "/shared"
+	envARN := arnPrefix + ":" + serviceName + "/" + env
 
-	var specs []BuildSecretSpec
+	specs := []BuildSecretSpec{}
 
 	for id, jsonKey := range globalMap {
 		if _, overridden := envMap[id]; !overridden {

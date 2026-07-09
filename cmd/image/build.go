@@ -78,8 +78,8 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		utils.CheckBinary("docker")
 
 		// Resolve build_secrets and build_args from the app config.
-		var secretArgs []string
-		var buildArgArgs []string
+		secretArgs := []string{}
+		buildArgArgs := []string{}
 		if appCfg != nil {
 			var cleanup func()
 			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(cmd.Context(), cfg, appCfg, app, env)
@@ -140,7 +140,7 @@ func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgap
 	}
 	sort.Strings(keys) // deterministic order
 	for _, k := range keys {
-		buildArgArgs = append(buildArgArgs, "--build-arg", fmt.Sprintf("%s=%s", k, buildArgs[k]))
+		buildArgArgs = append(buildArgArgs, "--build-arg", k+"="+buildArgs[k])
 	}
 
 	return secretArgs, buildArgArgs, cleanup

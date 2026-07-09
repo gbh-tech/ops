@@ -131,14 +131,13 @@ func runPortForward(cmd *cobra.Command, args []string) {
 		service = names.Service
 	}
 
+	localPort = remotePort
 	if cmd.Flags().Changed("local-port") {
 		var err error
 		localPort, err = cmd.Flags().GetInt("local-port")
 		if err != nil || localPort <= 0 {
 			log.Fatal("Invalid --local-port value (must be a positive integer)", "err", err)
 		}
-	} else {
-		localPort = remotePort
 	}
 
 	taskArn, err := pkgecs.FindFirstRunningTaskArn(ctx, ec.ecsClient, ec.base.ECS.Cluster, service)

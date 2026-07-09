@@ -27,9 +27,7 @@ func SetAccountSubscription(subscriptionId string) {
 	cmd := []string{"az", "account", "set", "--subscription", subscriptionId}
 
 	accountSubscription := exec.Command(cmd[0], cmd[1:]...)
-	_, err := accountSubscription.Output()
-
-	if err != nil {
+	if _, err := accountSubscription.Output(); err != nil {
 		log.Fatal("Failed to set Azure account subscription", "err", err)
 	}
 

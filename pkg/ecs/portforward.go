@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
@@ -59,7 +60,7 @@ func ServiceNameFromARN(arn string) string {
 // ListDBProxyServices lists all service ARNs in the cluster and returns short names
 // that match FilterDBProxyServiceNames.
 func ListDBProxyServices(ctx context.Context, client *awsecs.Client, cluster string) ([]string, error) {
-	var names []string
+	names := []string{}
 	var next *string
 	for {
 		out, err := client.ListServices(ctx, &awsecs.ListServicesInput{
@@ -114,8 +115,9 @@ func ResolveContainerRuntimeID(task *ecstypes.Task, containerName string) (resol
 	if len(containers) == 0 {
 		return "", "", errors.New("task has no containers")
 	}
-	var c *ecstypes.Container
+	c := &containers[0]
 	if containerName != "" {
+		c = nil
 		for i := range containers {
 			if awssdk.ToString(containers[i].Name) == containerName {
 				c = &containers[i]
@@ -125,8 +127,6 @@ func ResolveContainerRuntimeID(task *ecstypes.Task, containerName string) (resol
 		if c == nil {
 			return "", "", fmt.Errorf("container %q not found on task", containerName)
 		}
-	} else {
-		c = &containers[0]
 	}
 	rid := awssdk.ToString(c.RuntimeId)
 	if rid == "" {
@@ -163,7 +163,7 @@ type PortForwardSessionOpts struct {
 
 // ECSExecTarget builds the SSM target string for ECS Exec / port forwarding.
 func ECSExecTarget(cluster, taskID, runtimeID string) string {
-	return fmt.Sprintf("ecs:%s_%s_%s", cluster, taskID, runtimeID)
+	return "ecs:" + cluster + "_" + taskID + "_" + runtimeID
 }
 
 // RunPortForwardSession shells out to `aws ssm start-session` with AWS-StartPortForwardingSession.
@@ -180,8 +180,8 @@ func RunPortForwardSession(ctx context.Context, opts PortForwardSessionOpts) err
 	}
 
 	params := map[string][]string{
-		"portNumber":      {fmt.Sprintf("%d", opts.RemotePort)},
-		"localPortNumber": {fmt.Sprintf("%d", opts.LocalPort)},
+		"portNumber":      {strconv.Itoa(opts.RemotePort)},
+		"localPortNumber": {strconv.Itoa(opts.LocalPort)},
 	}
 	paramJSON, err := json.Marshal(params)
 	if err != nil {

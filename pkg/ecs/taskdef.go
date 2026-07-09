@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"ops/pkg/app"
@@ -69,8 +70,8 @@ func buildTaskDefinitionInput(
 		Family:                  aws.String(family),
 		NetworkMode:             ecstypes.NetworkMode(strings.ToLower(networkMode)),
 		RequiresCompatibilities: []ecstypes.Compatibility{ecstypes.Compatibility(launchType)},
-		Cpu:                     aws.String(fmt.Sprintf("%d", merged.CPU)),
-		Memory:                  aws.String(fmt.Sprintf("%d", merged.Memory)),
+		Cpu:                     aws.String(strconv.Itoa(merged.CPU)),
+		Memory:                  aws.String(strconv.Itoa(merged.Memory)),
 		ContainerDefinitions:    []ecstypes.ContainerDefinition{container},
 	}
 
@@ -376,10 +377,8 @@ func buildHealthCheck(merged MergedConfig) *ecstypes.HealthCheck {
 		startPeriod = int32(hc.StartPeriod)
 	}
 
-	var command []string
-	if len(hc.Command) > 0 {
-		command = hc.Command
-	} else {
+	command := hc.Command
+	if len(command) == 0 {
 		port := primaryContainerPort(merged)
 		command = []string{
 			"CMD-SHELL",
