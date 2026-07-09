@@ -270,7 +270,8 @@ var ecsDeployCmd = &cobra.Command{
 			log.Info("Skipping configured database migrations", "app", merged.Name)
 		}
 
-		if !skipMigrations && merged.DatabaseMigrations && *merged.Replicas > 0 {
+		shouldRunMigrations := !skipMigrations && merged.DatabaseMigrations && *merged.Replicas > 0
+		if shouldRunMigrations {
 			if len(merged.MigrationCommand) == 0 {
 				log.Fatal("database_migrations is true but migration_command is not set")
 			}

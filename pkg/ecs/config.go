@@ -227,7 +227,12 @@ func applySection(dst *AppSection, src AppSection) {
 }
 
 func isNonEmptyHealthCheckConfig(hc HealthCheckConfig) bool {
-	return hc.Interval != 0 || hc.Timeout != 0 || hc.Retries != 0 || hc.StartPeriod != 0 || len(hc.Command) > 0
+	hasInterval := hc.Interval != 0
+	hasTimeout := hc.Timeout != 0
+	hasRetries := hc.Retries != 0
+	hasStartPeriod := hc.StartPeriod != 0
+	hasCommand := len(hc.Command) > 0
+	return hasInterval || hasTimeout || hasRetries || hasStartPeriod || hasCommand
 }
 
 func validateHealthCheckCommand(hc HealthCheckConfig) error {

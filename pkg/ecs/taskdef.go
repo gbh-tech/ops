@@ -290,7 +290,8 @@ func buildContainer(
 
 	hasCustomCommand := len(merged.ContainerHC.Command) > 0
 	hasCurlCheck := merged.HealthCheckPath != "" && primaryContainerPort(merged) != 0
-	if withHealthCheck && (hasCustomCommand || hasCurlCheck) {
+	needsHealthCheck := withHealthCheck && (hasCustomCommand || hasCurlCheck)
+	if needsHealthCheck {
 		c.HealthCheck = buildHealthCheck(merged)
 	}
 

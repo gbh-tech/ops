@@ -133,11 +133,15 @@ func RunMigrationTask(ctx context.Context, client *awsecs.Client, opts Migration
 		return taskArn, fmt.Errorf("describe migration task: %w", err)
 	}
 
-	if len(descOut.Tasks) > 0 {
-		for _, c := range descOut.Tasks[0].Containers {
-			if aws.ToString(c.Name) == opts.AppName && c.ExitCode != nil && *c.ExitCode != 0 {
-				return taskArn, fmt.Errorf("migration task exited with code %d", *c.ExitCode)
-			}
+	if len(descOut.Tasks) == 0 {
+		return taskArn, nil
+	}
+	task := descOut.Tasks[0]
+	for _, c := range task.Containers {
+		isTargetContainer := aws.ToString(c.Name) == opts.AppName
+		exitedNonZero := c.ExitCode != nil && *c.ExitCode != 0
+		if isTargetContainer && exitedNonZero {
+			return taskArn, fmt.Errorf("migration task exited with code %d", *c.ExitCode)
 		}
 	}
 

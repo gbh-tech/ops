@@ -351,28 +351,29 @@ func RunScheduledTask(ctx context.Context, client *awsecs.Client, opts RunSchedu
 	if err != nil {
 		return taskArn, fmt.Errorf("describe task: %w", err)
 	}
-	if len(descOut.Tasks) > 0 {
-		task := descOut.Tasks[0]
-		for _, c := range task.Containers {
-			if aws.ToString(c.Name) == opts.AppName {
-				if reason := aws.ToString(c.Reason); reason != "" {
-					return taskArn, fmt.Errorf("container failed: %s", reason)
-				}
-				if c.ExitCode != nil {
-					if *c.ExitCode != 0 {
-						return taskArn, fmt.Errorf("task exited with code %d", *c.ExitCode)
-					}
-					// ExitCode 0 is definitive success; skip task-level StoppedReason.
-					return taskArn, nil
-				}
-				// No Reason and no ExitCode: not definitive; fall through to StoppedReason.
-				break
+	if len(descOut.Tasks) == 0 {
+		return taskArn, nil
+	}
+	task := descOut.Tasks[0]
+	for _, c := range task.Containers {
+		if aws.ToString(c.Name) == opts.AppName {
+			if reason := aws.ToString(c.Reason); reason != "" {
+				return taskArn, fmt.Errorf("container failed: %s", reason)
 			}
+			if c.ExitCode != nil {
+				if *c.ExitCode != 0 {
+					return taskArn, fmt.Errorf("task exited with code %d", *c.ExitCode)
+				}
+				// ExitCode 0 is definitive success; skip task-level StoppedReason.
+				return taskArn, nil
+			}
+			// No Reason and no ExitCode: not definitive; fall through to StoppedReason.
+			break
 		}
-		// Target container not found or produced no definitive exit status.
-		if stoppedReason := aws.ToString(task.StoppedReason); stoppedReason != "" {
-			return taskArn, fmt.Errorf("task stopped: %s", stoppedReason)
-		}
+	}
+	// Target container not found or produced no definitive exit status.
+	if stoppedReason := aws.ToString(task.StoppedReason); stoppedReason != "" {
+		return taskArn, fmt.Errorf("task stopped: %s", stoppedReason)
 	}
 
 	return taskArn, nil

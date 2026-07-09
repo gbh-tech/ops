@@ -102,7 +102,8 @@ func definedDeploymentBlocks(c *OpsConfig) []string {
 	if c.ECS.Cluster != "" {
 		out = append(out, "ecs")
 	}
-	if len(c.Werf.Services) > 0 || len(c.Werf.ValuesPaths) > 0 || len(c.Werf.SecretsPaths) > 0 {
+	werfConfigured := len(c.Werf.Services) > 0 || len(c.Werf.ValuesPaths) > 0 || len(c.Werf.SecretsPaths) > 0
+	if werfConfigured {
 		out = append(out, "werf")
 	}
 	return out

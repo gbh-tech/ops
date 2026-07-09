@@ -109,7 +109,8 @@ func (c *OpsConfig) RegistryURL() string {
 // If override is empty, defaultSubpath is used (e.g. "deploy/config.toml").
 func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) string {
 	if override != "" {
-		if c.IsMonoRepo() && app != "" && !filepath.IsAbs(override) {
+		needsAppPrefix := c.IsMonoRepo() && app != "" && !filepath.IsAbs(override)
+		if needsAppPrefix {
 			appRoot := filepath.Join(c.AppsDirPath(), app)
 			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
 				return filepath.Join(appRoot, override)

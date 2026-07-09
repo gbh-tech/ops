@@ -235,7 +235,8 @@ func unknownTOMLKeys(md toml.MetaData) []string {
 	for _, k := range md.Undecoded() {
 		// k[0] = section name ("global", "stage", …)
 		// k[1] = AppSection field name
-		if len(k) >= 2 && (k[1] == "secrets" || k[1] == "build_secrets") {
+		isSecretsField := len(k) >= 2 && (k[1] == "secrets" || k[1] == "build_secrets")
+		if isSecretsField {
 			continue
 		}
 		unknown = append(unknown, k.String())
