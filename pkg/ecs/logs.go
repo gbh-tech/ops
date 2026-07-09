@@ -36,19 +36,27 @@ func TailLogs(ctx context.Context, client *cwlogs.Client, logGroup, streamPrefix
 	return nil
 }
 
+// PrintMigrationLogsOptions bundles the inputs for PrintMigrationLogs.
+type PrintMigrationLogsOptions struct {
+	Client  *cwlogs.Client
+	LogGroup string
+	AppName  string
+	TaskArn  string
+}
+
 // PrintMigrationLogs prints logs for a migration task. The CloudWatch log
 // stream follows the convention {appName}/{appName}/{taskID}.
-func PrintMigrationLogs(ctx context.Context, client *cwlogs.Client, logGroup, appName, taskArn string) error {
-	parts := strings.Split(taskArn, "/")
+func PrintMigrationLogs(ctx context.Context, opts PrintMigrationLogsOptions) error {
+	parts := strings.Split(opts.TaskArn, "/")
 	taskID := parts[len(parts)-1]
 
-	logStream := fmt.Sprintf("%s/%s/%s", appName, appName, taskID)
+	logStream := fmt.Sprintf("%s/%s/%s", opts.AppName, opts.AppName, taskID)
 	log.Info("Fetching migration logs", "stream", logStream)
 
 	var nextToken *string
 	for {
-		out, err := client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
-			LogGroupName:  aws.String(logGroup),
+		out, err := opts.Client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
+			LogGroupName:  aws.String(opts.LogGroup),
 			LogStreamName: aws.String(logStream),
 			StartFromHead: aws.Bool(true),
 			NextToken:     nextToken,
@@ -71,21 +79,30 @@ func PrintMigrationLogs(ctx context.Context, client *cwlogs.Client, logGroup, ap
 	return nil
 }
 
+// PrintTaskLogsOptions bundles the inputs for PrintTaskLogs.
+type PrintTaskLogsOptions struct {
+	Client       *cwlogs.Client
+	LogGroup     string
+	StreamPrefix string
+	ContainerName string
+	TaskArn      string
+}
+
 // PrintTaskLogs prints all log events for a one-off ECS task after it has
 // stopped. The CloudWatch log stream follows the awslogs convention:
 // {streamPrefix}/{containerName}/{taskID}.
 // It paginates through all events so no output is truncated.
-func PrintTaskLogs(ctx context.Context, client *cwlogs.Client, logGroup, streamPrefix, containerName, taskArn string) error {
-	parts := strings.Split(taskArn, "/")
+func PrintTaskLogs(ctx context.Context, opts PrintTaskLogsOptions) error {
+	parts := strings.Split(opts.TaskArn, "/")
 	taskID := parts[len(parts)-1]
-	logStream := fmt.Sprintf("%s/%s/%s", streamPrefix, containerName, taskID)
+	logStream := fmt.Sprintf("%s/%s/%s", opts.StreamPrefix, opts.ContainerName, taskID)
 
 	log.Info("Fetching task logs", "stream", logStream)
 
 	var nextToken *string
 	for {
-		out, err := client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
-			LogGroupName:  aws.String(logGroup),
+		out, err := opts.Client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
+			LogGroupName:  aws.String(opts.LogGroup),
 			LogStreamName: aws.String(logStream),
 			StartFromHead: aws.Bool(true),
 			NextToken:     nextToken,

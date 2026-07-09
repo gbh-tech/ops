@@ -61,77 +61,89 @@ func runPortForward(cmd *cobra.Command, args []string) {
 	container, _ := cmd.Flags().GetString("container")
 	appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-	var service string
-	var remotePort int
-	var localPort int
+	service, remotePort := resolveServiceAndPort(ctx, ec, cmd, dbProxyMode, app, env, appConfigOverride)
+	localPort := resolveLocalPort(cmd, remotePort)
 
+	startPortForwardSession(ctx, ec, service, container, remotePort, localPort, dbProxyMode)
+}
+
+func resolveServiceAndPort(ctx context.Context, ec *ecsCtx, cmd *cobra.Command, dbProxyMode bool, app, env, appConfigOverride string) (string, int) {
 	if dbProxyMode {
-		proxies, err := pkgecs.ListDBProxyServices(ctx, ec.ecsClient, ec.base.ECS.Cluster)
-		if err != nil {
-			log.Fatal("Failed to list db-proxy services", "err", err)
-		}
-		if len(proxies) == 0 {
-			log.Fatal("No ECS services matching \"db-proxy\" found in cluster",
-				"cluster", ec.base.ECS.Cluster)
-		}
-		sort.Strings(proxies)
+		return resolveDBProxyServiceAndPort(ctx, ec, cmd)
+	}
+	return resolveAppServiceAndPort(ec, cmd, app, env, appConfigOverride)
+}
 
-		var selected string
-		switch len(proxies) {
-		case 1:
-			selected = proxies[0]
-		default:
-			opts := make([]huh.Option[string], len(proxies))
-			for i, p := range proxies {
-				opts[i] = huh.NewOption(p, p)
-			}
-			sel := huh.NewSelect[string]().
-				Title("Select db-proxy service").
-				Options(opts...).
-				Value(&selected)
-			form := huh.NewForm(huh.NewGroup(sel))
-			if err := form.Run(); err != nil {
-				log.Fatal("Selection cancelled", "err", err)
-			}
-		}
-		service = selected
-		_ = app // explicitly ignored in db-proxy mode per plan
+func resolveDBProxyServiceAndPort(ctx context.Context, ec *ecsCtx, cmd *cobra.Command) (string, int) {
+	proxies, err := pkgecs.ListDBProxyServices(ctx, ec.ecsClient, ec.base.ECS.Cluster)
+	if err != nil {
+		log.Fatal("Failed to list db-proxy services", "err", err)
+	}
+	if len(proxies) == 0 {
+		log.Fatal("No ECS services matching \"db-proxy\" found in cluster",
+			"cluster", ec.base.ECS.Cluster)
+	}
+	sort.Strings(proxies)
 
-		if cmd.Flags().Changed("port") {
-			var err error
-			remotePort, err = cmd.Flags().GetInt("port")
-			if err != nil || remotePort <= 0 {
-				log.Fatal("Invalid --port value", "err", err)
-			}
-		} else {
-			var err error
-			remotePort, err = pkgecs.InferDBPort(service)
-			if err != nil {
-				if errors.Is(err, pkgecs.ErrUnknownDBPort) {
-					log.Fatal("Could not infer remote port from service name; pass --port explicitly",
-						"service", service)
-				}
-				log.Fatal("Infer remote port", "err", err)
-			}
-		}
-	} else {
-		requireAppInMonoRepo(ec.cfg, app)
-		if app == "" {
-			log.Fatal("--app is required for ops ecs port-forward")
-		}
-		if !cmd.Flags().Changed("port") {
-			log.Fatal("--port is required for ops ecs port-forward")
-		}
-		var err error
-		remotePort, err = cmd.Flags().GetInt("port")
+	selected := pickDBProxyService(proxies)
+
+	if cmd.Flags().Changed("port") {
+		remotePort, err := cmd.Flags().GetInt("port")
 		if err != nil || remotePort <= 0 {
-			log.Fatal("Invalid --port value (must be a positive integer)", "err", err)
+			log.Fatal("Invalid --port value", "err", err)
 		}
-		_, _, names := loadApp(ec, app, env, appConfigOverride)
-		service = names.Service
+		return selected, remotePort
 	}
 
-	localPort = remotePort
+	remotePort, err := pkgecs.InferDBPort(selected)
+	if err != nil {
+		if errors.Is(err, pkgecs.ErrUnknownDBPort) {
+			log.Fatal("Could not infer remote port from service name; pass --port explicitly",
+				"service", selected)
+		}
+		log.Fatal("Infer remote port", "err", err)
+	}
+	return selected, remotePort
+}
+
+func pickDBProxyService(proxies []string) string {
+	if len(proxies) == 1 {
+		return proxies[0]
+	}
+	opts := make([]huh.Option[string], len(proxies))
+	for i, p := range proxies {
+		opts[i] = huh.NewOption(p, p)
+	}
+	var selected string
+	sel := huh.NewSelect[string]().
+		Title("Select db-proxy service").
+		Options(opts...).
+		Value(&selected)
+	form := huh.NewForm(huh.NewGroup(sel))
+	if err := form.Run(); err != nil {
+		log.Fatal("Selection cancelled", "err", err)
+	}
+	return selected
+}
+
+func resolveAppServiceAndPort(ec *ecsCtx, cmd *cobra.Command, app, env, appConfigOverride string) (string, int) {
+	requireAppInMonoRepo(ec.cfg, app)
+	if app == "" {
+		log.Fatal("--app is required for ops ecs port-forward")
+	}
+	if !cmd.Flags().Changed("port") {
+		log.Fatal("--port is required for ops ecs port-forward")
+	}
+	remotePort, err := cmd.Flags().GetInt("port")
+	if err != nil || remotePort <= 0 {
+		log.Fatal("Invalid --port value (must be a positive integer)", "err", err)
+	}
+	_, _, names := loadApp(ec, app, env, appConfigOverride)
+	return names.Service, remotePort
+}
+
+func resolveLocalPort(cmd *cobra.Command, remotePort int) int {
+	localPort := remotePort
 	if cmd.Flags().Changed("local-port") {
 		var err error
 		localPort, err = cmd.Flags().GetInt("local-port")
@@ -139,7 +151,10 @@ func runPortForward(cmd *cobra.Command, args []string) {
 			log.Fatal("Invalid --local-port value (must be a positive integer)", "err", err)
 		}
 	}
+	return localPort
+}
 
+func startPortForwardSession(ctx context.Context, ec *ecsCtx, service, container string, remotePort, localPort int, dbProxyMode bool) {
 	taskArn, err := pkgecs.FindFirstRunningTaskArn(ctx, ec.ecsClient, ec.base.ECS.Cluster, service)
 	if err != nil {
 		log.Fatal("Could not find running task", "service", service, "err", err)

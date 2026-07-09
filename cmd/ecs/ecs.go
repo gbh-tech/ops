@@ -247,7 +247,14 @@ var ecsDeployCmd = &cobra.Command{
 
 		log.Info("Deploying", "app", merged.Name, "env", env, "tag", tag, "family", names.Family)
 
-		input := pkgecs.BuildTaskDefinition(ec.base, merged, names, env, tag, secrets)
+		input := pkgecs.BuildTaskDefinition(pkgecs.BuildTaskDefinitionOptions{
+			Base:     ec.base,
+			Merged:   merged,
+			Names:    names,
+			Env:      env,
+			ImageTag: tag,
+			Secrets:  secrets,
+		})
 		ctx := context.Background()
 
 		taskDefArn, err := pkgecs.RegisterTaskDefinition(ctx, ec.ecsClient, input)
@@ -258,7 +265,14 @@ var ecsDeployCmd = &cobra.Command{
 
 		var scheduledTaskDefArn string
 		if len(merged.ScheduledTasks) > 0 {
-			scheduledInput := pkgecs.BuildScheduledTaskDefinition(ec.base, merged, names, env, tag, secrets)
+			scheduledInput := pkgecs.BuildScheduledTaskDefinition(pkgecs.BuildTaskDefinitionOptions{
+				Base:     ec.base,
+				Merged:   merged,
+				Names:    names,
+				Env:      env,
+				ImageTag: tag,
+				Secrets:  secrets,
+			})
 			scheduledTaskDefArn, err = pkgecs.RegisterTaskDefinition(ctx, ec.ecsClient, scheduledInput)
 			if err != nil {
 				log.Fatal("Failed to register scheduled task definition", "err", err)
@@ -286,20 +300,36 @@ var ecsDeployCmd = &cobra.Command{
 			})
 			if err != nil {
 				if taskArn != "" {
-					if logErr := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); logErr != nil {
+					if logErr := pkgecs.PrintMigrationLogs(ctx, pkgecs.PrintMigrationLogsOptions{
+						Client:   ec.cwClient,
+						LogGroup: names.LogGroup,
+						AppName:  merged.Name,
+						TaskArn:  taskArn,
+					}); logErr != nil {
 						log.Warn("Could not fetch migration logs", "err", logErr)
 					}
 				}
 				log.Fatal("Migration failed", "err", err)
 			}
 			log.Info("Migration complete, fetching logs...")
-			if err := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); err != nil {
+			if err := pkgecs.PrintMigrationLogs(ctx, pkgecs.PrintMigrationLogsOptions{
+				Client:   ec.cwClient,
+				LogGroup: names.LogGroup,
+				AppName:  merged.Name,
+				TaskArn:  taskArn,
+			}); err != nil {
 				log.Warn("Could not fetch migration logs", "err", err)
 			}
 		}
 
 		log.Info("Updating service", "service", names.Service)
-		if err := pkgecs.UpdateService(ctx, ec.ecsClient, ec.base.ECS.Cluster, names.Service, taskDefArn, int32(*merged.Replicas)); err != nil {
+		if err := pkgecs.UpdateService(ctx, pkgecs.UpdateServiceOptions{
+			Client:       ec.ecsClient,
+			Cluster:      ec.base.ECS.Cluster,
+			Service:      names.Service,
+			TaskDefArn:   taskDefArn,
+			DesiredCount: int32(*merged.Replicas),
+		}); err != nil {
 			log.Fatal("Failed to update service", "err", err)
 		}
 
@@ -313,7 +343,14 @@ var ecsDeployCmd = &cobra.Command{
 			}
 		}
 
-		if err := reconcileAppSchedules(ctx, ec, merged.ScheduledTasks, names, merged.Name, env, scheduledTaskDefArn); err != nil {
+		if err := reconcileAppSchedules(ctx, reconcileAppSchedulesOptions{
+			EC:         ec,
+			Tasks:      merged.ScheduledTasks,
+			Names:      names,
+			AppName:    merged.Name,
+			Env:        env,
+			TaskDefArn: scheduledTaskDefArn,
+		}); err != nil {
 			log.Fatal("Failed to reconcile scheduled tasks", "err", err)
 		}
 
@@ -361,7 +398,14 @@ var ecsRenderCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Invalid secrets config", "err", err)
 		}
-		input := pkgecs.BuildTaskDefinition(base, merged, names, env, tag, secrets)
+		input := pkgecs.BuildTaskDefinition(pkgecs.BuildTaskDefinitionOptions{
+			Base:     base,
+			Merged:   merged,
+			Names:    names,
+			Env:      env,
+			ImageTag: tag,
+			Secrets:  secrets,
+		})
 
 		ctr := input.ContainerDefinitions[0]
 
@@ -545,14 +589,24 @@ var ecsDbMigrateCmd = &cobra.Command{
 		})
 		if err != nil {
 			if taskArn != "" {
-				if logErr := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); logErr != nil {
+				if logErr := pkgecs.PrintMigrationLogs(ctx, pkgecs.PrintMigrationLogsOptions{
+					Client:   ec.cwClient,
+					LogGroup: names.LogGroup,
+					AppName:  merged.Name,
+					TaskArn:  taskArn,
+				}); logErr != nil {
 					log.Warn("Could not fetch migration logs", "err", logErr)
 				}
 			}
 			log.Fatal("Migration failed", "err", err)
 		}
 		log.Info("Migration complete, fetching logs...")
-		if err := pkgecs.PrintMigrationLogs(ctx, ec.cwClient, names.LogGroup, merged.Name, taskArn); err != nil {
+		if err := pkgecs.PrintMigrationLogs(ctx, pkgecs.PrintMigrationLogsOptions{
+			Client:   ec.cwClient,
+			LogGroup: names.LogGroup,
+			AppName:  merged.Name,
+			TaskArn:  taskArn,
+		}); err != nil {
 			log.Warn("Could not fetch migration logs", "err", err)
 		}
 	},
@@ -813,29 +867,51 @@ Example:
 		})
 		if err != nil {
 			if taskArn != "" {
-				if logErr := pkgecs.PrintTaskLogs(ctx, ec.cwClient, names.LogGroup, appName, appName, taskArn); logErr != nil {
+				if logErr := pkgecs.PrintTaskLogs(ctx, pkgecs.PrintTaskLogsOptions{
+					Client:        ec.cwClient,
+					LogGroup:      names.LogGroup,
+					StreamPrefix:  appName,
+					ContainerName: appName,
+					TaskArn:       taskArn,
+				}); logErr != nil {
 					log.Warn("Could not fetch task logs", "err", logErr)
 				}
 			}
 			log.Fatal("Scheduled task failed", "name", taskName, "err", err)
 		}
 		log.Info("Task complete, fetching logs...")
-		if err := pkgecs.PrintTaskLogs(ctx, ec.cwClient, names.LogGroup, appName, appName, taskArn); err != nil {
+		if err := pkgecs.PrintTaskLogs(ctx, pkgecs.PrintTaskLogsOptions{
+			Client:        ec.cwClient,
+			LogGroup:      names.LogGroup,
+			StreamPrefix:  appName,
+			ContainerName: appName,
+			TaskArn:       taskArn,
+		}); err != nil {
 			log.Warn("Could not fetch task logs", "err", err)
 		}
 	},
 }
 
+// reconcileAppSchedulesOptions bundles the inputs for reconcileAppSchedules.
+type reconcileAppSchedulesOptions struct {
+	EC         *ecsCtx
+	Tasks      []pkgecs.ScheduledTaskConfig
+	Names      pkgecs.Names
+	AppName    string
+	Env        string
+	TaskDefArn string
+}
+
 // reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
 // to EventBridge Scheduler. It is a no-op when no scheduler is configured and
 // no tasks are declared.
-func reconcileAppSchedules(
-	ctx context.Context,
-	ec *ecsCtx,
-	tasks []pkgecs.ScheduledTaskConfig,
-	names pkgecs.Names,
-	appName, env, taskDefArn string,
-) error {
+func reconcileAppSchedules(ctx context.Context, opts reconcileAppSchedulesOptions) error {
+	ec := opts.EC
+	tasks := opts.Tasks
+	names := opts.Names
+	appName := opts.AppName
+	env := opts.Env
+	taskDefArn := opts.TaskDefArn
 	sched := ec.cfg.ECS.Scheduler
 
 	if len(tasks) == 0 && sched.GroupName == "" {
@@ -878,7 +954,12 @@ func reconcileAppSchedules(
 	}
 
 	log.Info("Reconciling scheduled tasks", "app", appName, "env", env, "count", len(tasks))
-	created, updated, deleted, err := pkgecs.ReconcileSchedules(ctx, ec.schedClient, cfg, taskDefArn, tasks)
+	created, updated, deleted, err := pkgecs.ReconcileSchedules(ctx, pkgecs.ReconcileSchedulesOptions{
+		Client:     ec.schedClient,
+		Cfg:        cfg,
+		TaskDefArn: taskDefArn,
+		Desired:    tasks,
+	})
 	if err != nil {
 		return err
 	}
@@ -919,12 +1000,37 @@ Example:
 			log.Fatal("--command is required unless invoking as 'ops ecs shell'")
 		}
 
-		execECSCommand(loadECSCtx(), app, env, appConfigOverride, command, interactive)
+		ec := loadECSCtx()
+		execECSCommand(execECSCommandOptions{
+			EC:                ec,
+			App:               app,
+			Env:               env,
+			AppConfigOverride: appConfigOverride,
+			Command:           command,
+			Interactive:       interactive,
+		})
 	},
 }
 
+// execECSCommandOptions bundles the inputs for execECSCommand.
+type execECSCommandOptions struct {
+	EC                *ecsCtx
+	App               string
+	Env               string
+	AppConfigOverride string
+	Command           string
+	Interactive       bool
+}
+
 // execECSCommand resolves the first running task for the given service and executes the supplied command via ECS Exec.
-func execECSCommand(ec *ecsCtx, app, env, appConfigOverride, command string, interactive bool) {
+func execECSCommand(opts execECSCommandOptions) {
+	ec := opts.EC
+	app := opts.App
+	env := opts.Env
+	appConfigOverride := opts.AppConfigOverride
+	command := opts.Command
+	interactive := opts.Interactive
+
 	utils.CheckBinary("aws")
 	utils.CheckBinary("session-manager-plugin")
 

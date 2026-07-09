@@ -20,7 +20,14 @@ func TestBuildTaskDefinitionIncludesPrimaryAndAdditionalPorts(t *testing.T) {
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "production", "cluster"), "production", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "production", "cluster"),
+		Env:      "production",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	got := containerMappingPorts(input.ContainerDefinitions[0].PortMappings)
 	want := []int{8069, 8072}
 
@@ -40,7 +47,14 @@ func TestBuildTaskDefinitionUsesFirstPortForHealthCheckWhenPrimaryPortOmitted(t 
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 	got := containerMappingPorts(container.PortMappings)
 	want := []int{8080, 9090}
@@ -71,7 +85,14 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandWithoutPort(t *testing.T
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
 	if container.HealthCheck == nil {
@@ -98,7 +119,14 @@ func TestBuildTaskDefinitionUsesCustomHealthCheckCommandOverridesCurl(t *testing
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
 	if container.HealthCheck == nil {
@@ -120,7 +148,14 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 		},
 	}
 
-	input := BuildTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 	container := input.ContainerDefinitions[0]
 
 	if !reflect.DeepEqual(container.EntryPoint, merged.EntryPoint) {
@@ -147,7 +182,14 @@ func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProv
 		},
 	}
 
-	input := BuildScheduledTaskDefinition(testBaseConfig(), merged, ComputeNames(merged, "stage", "cluster"), "stage", "sha", nil)
+	input := BuildScheduledTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
 
 	if !hasCompatibility(input.RequiresCompatibilities, ecstypes.CompatibilityEc2) {
 		t.Fatalf("requiresCompatibilities = %v, want EC2 compatibility preserved", input.RequiresCompatibilities)

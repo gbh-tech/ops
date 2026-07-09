@@ -82,7 +82,13 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 		buildArgArgs := []string{}
 		if appCfg != nil {
 			var cleanup func()
-			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(cmd.Context(), cfg, appCfg, app, env)
+			secretArgs, buildArgArgs, cleanup = resolveBuildConfig(resolveBuildConfigOptions{
+				Ctx:    cmd.Context(),
+				Cfg:    cfg,
+				AppCfg: appCfg,
+				App:    app,
+				Env:    env,
+			})
 			defer cleanup()
 		}
 
@@ -114,26 +120,35 @@ applied. Use --secret and --build-arg for additional values (e.g. local dev).`,
 	},
 }
 
+// resolveBuildConfigOptions bundles the inputs for resolveBuildConfig.
+type resolveBuildConfigOptions struct {
+	Ctx    context.Context
+	Cfg    *config.OpsConfig
+	AppCfg pkgapp.AppConfig
+	App    string
+	Env    string
+}
+
 // resolveBuildConfig resolves build_secrets and build_args from an already-loaded
 // AppConfig and returns the corresponding docker CLI argument slices plus a cleanup
 // function that removes any temp files written for secrets. The caller must invoke
 // cleanup() after docker build completes (success or failure).
-func resolveBuildConfig(ctx context.Context, cfg *config.OpsConfig, appCfg pkgapp.AppConfig, app, env string) (secretArgs, buildArgArgs []string, cleanup func()) {
+func resolveBuildConfig(opts resolveBuildConfigOptions) (secretArgs, buildArgArgs []string, cleanup func()) {
 	cleanup = func() {} // no-op default
 
-	serviceName := resolveServiceName(appCfg, app, cfg)
+	serviceName := resolveServiceName(opts.AppCfg, opts.App, opts.Cfg)
 
 	// --- build_secrets ---
-	specs, err := pkgapp.ResolveBuildSecretSpecs(appCfg, env, serviceName, cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS))
+	specs, err := pkgapp.ResolveBuildSecretSpecs(opts.AppCfg, opts.Env, serviceName, opts.Cfg.ECS.ResolvedSecretArnPrefix(opts.Cfg.AWS))
 	if err != nil {
 		log.Fatal("Invalid build_secrets config", "err", err)
 	}
 	if len(specs) > 0 {
-		secretArgs, cleanup = fetchAndWriteSecrets(ctx, cfg, specs)
+		secretArgs, cleanup = fetchAndWriteSecrets(opts.Ctx, opts.Cfg, specs)
 	}
 
 	// --- build_args ---
-	buildArgs := pkgapp.ResolveBuildArgs(appCfg, env)
+	buildArgs := pkgapp.ResolveBuildArgs(opts.AppCfg, opts.Env)
 	keys := make([]string, 0, len(buildArgs))
 	for k := range buildArgs {
 		keys = append(keys, k)

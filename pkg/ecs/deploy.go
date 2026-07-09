@@ -41,17 +41,26 @@ func RegisterTaskDefinition(ctx context.Context, client *awsecs.Client, input aw
 	return aws.ToString(out.TaskDefinition.TaskDefinitionArn), nil
 }
 
+// UpdateServiceOptions bundles the inputs for UpdateService.
+type UpdateServiceOptions struct {
+	Client       *awsecs.Client
+	Cluster      string
+	Service      string
+	TaskDefArn   string
+	DesiredCount int32
+}
+
 // UpdateService points a service at a new task definition and triggers a
 // force-new-deployment.
-func UpdateService(ctx context.Context, client *awsecs.Client, cluster, service, taskDefArn string, desiredCount int32) error {
-	if _, err := client.UpdateService(ctx, &awsecs.UpdateServiceInput{
-		Cluster:            aws.String(cluster),
-		Service:            aws.String(service),
-		TaskDefinition:     aws.String(taskDefArn),
-		DesiredCount:       aws.Int32(desiredCount),
+func UpdateService(ctx context.Context, opts UpdateServiceOptions) error {
+	if _, err := opts.Client.UpdateService(ctx, &awsecs.UpdateServiceInput{
+		Cluster:            aws.String(opts.Cluster),
+		Service:            aws.String(opts.Service),
+		TaskDefinition:     aws.String(opts.TaskDefArn),
+		DesiredCount:       aws.Int32(opts.DesiredCount),
 		ForceNewDeployment: true,
 	}); err != nil {
-		return fmt.Errorf("update service %s: %w", service, err)
+		return fmt.Errorf("update service %s: %w", opts.Service, err)
 	}
 	return nil
 }
