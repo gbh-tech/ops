@@ -185,7 +185,7 @@ func startPortForwardSession(ctx context.Context, ec *ecsCtx, service, container
 		"local", strconv.Itoa(localPort),
 	)
 
-	err = pkgecs.RunPortForwardSession(context.Background(), pkgecs.PortForwardSessionOpts{
+	err = pkgecs.RunPortForwardSession(ctx, pkgecs.PortForwardSessionOpts{
 		Cluster:    ec.base.ECS.Cluster,
 		TaskID:     taskID,
 		RuntimeID:  runtimeID,

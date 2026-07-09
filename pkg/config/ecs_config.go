@@ -57,7 +57,7 @@ func (c ECSConfig) EffectiveCleanupKeep() int {
 // ResolvedSecretArnPrefix returns the explicit prefix when set, otherwise
 // derives one from the AWS account and region. Returns an empty string when
 // neither is available.
-func (e *ECSConfig) ResolvedSecretArnPrefix(aws AWSConfig) string {
+func (e ECSConfig) ResolvedSecretArnPrefix(aws AWSConfig) string {
 	if e.SecretArnPrefix != "" {
 		return e.SecretArnPrefix
 	}
@@ -69,13 +69,13 @@ func (e *ECSConfig) ResolvedSecretArnPrefix(aws AWSConfig) string {
 
 // ResolvedExecutionRole returns the execution role with the IAM ARN prefix
 // added when the configured value is a bare role name.
-func (e *ECSConfig) ResolvedExecutionRole(aws AWSConfig) string {
+func (e ECSConfig) ResolvedExecutionRole(aws AWSConfig) string {
 	return ensureIAMRoleARN(e.ExecutionRole, aws.AccountId)
 }
 
 // ResolvedTaskRole returns the task role with the IAM ARN prefix added when
 // the configured value is a bare role name.
-func (e *ECSConfig) ResolvedTaskRole(aws AWSConfig) string {
+func (e ECSConfig) ResolvedTaskRole(aws AWSConfig) string {
 	return ensureIAMRoleARN(e.TaskRole, aws.AccountId)
 }
 

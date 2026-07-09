@@ -276,11 +276,9 @@ func reconcileAppSchedules(ctx context.Context, opts reconcileAppSchedulesOption
 	taskDefArn := opts.TaskDefArn
 	sched := ec.cfg.ECS.Scheduler
 
-	if len(tasks) == 0 && sched.GroupName == "" {
-		return nil
-	}
 	if len(tasks) == 0 {
-		// Scheduler is configured but this app has no tasks — nothing to do.
+		// No scheduled tasks declared — nothing to reconcile (whether or not
+		// a scheduler group is configured).
 		return nil
 	}
 
