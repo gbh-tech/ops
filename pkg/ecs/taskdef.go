@@ -338,6 +338,15 @@ func buildContainer(opts buildContainerOptions) ecstypes.ContainerDefinition {
 		}
 	}
 
+	if opts.Merged.GPU != nil && *opts.Merged.GPU > 0 {
+		c.ResourceRequirements = []ecstypes.ResourceRequirement{
+			{
+				Type:  ecstypes.ResourceTypeGpu,
+				Value: aws.String(fmt.Sprintf("%d", *opts.Merged.GPU)),
+			},
+		}
+	}
+
 	hasCustomCommand := len(opts.Merged.ContainerHC.Command) > 0
 	hasCurlCheck := opts.Merged.HealthCheckPath != "" && primaryContainerPort(opts.Merged) != 0
 	needsHealthCheck := opts.WithHealthCheck && (hasCustomCommand || hasCurlCheck)

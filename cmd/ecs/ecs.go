@@ -264,6 +264,13 @@ func formatPortMappings(mappings []ecstypes.PortMapping) string {
 	return strings.Join(ports, ", ")
 }
 
+func gpuCount(gpu *int) int {
+	if gpu == nil {
+		return 0
+	}
+	return *gpu
+}
+
 // reconcileAppSchedules syncs the app's scheduled_tasks from the merged config
 // to EventBridge Scheduler. It is a no-op when no scheduler is configured and
 // no tasks are declared.
@@ -584,6 +591,7 @@ var ecsRenderCmd = &cobra.Command{
 			{"CPU", *input.Cpu},
 			{"Memory", *input.Memory},
 			{"Replicas", strconv.Itoa(*merged.Replicas)},
+			{"GPU", strconv.Itoa(gpuCount(merged.GPU))},
 			{"Ports", formatPortMappings(ctr.PortMappings)},
 			{"Env vars", strconv.Itoa(len(ctr.Environment))},
 			{"Secrets", strconv.Itoa(len(ctr.Secrets))},

@@ -154,7 +154,10 @@ type AppSection struct {
 	TaskRole           string            `toml:"task_role"           yaml:"task_role"`
 	EntryPoint         []string          `toml:"entrypoint"          yaml:"entrypoint"`
 	Command            []string          `toml:"command"             yaml:"command"`
-	Environment        map[string]string `toml:"environment"         yaml:"environment"`
+	// GPU reserves GPUs via ECS resourceRequirements (EC2 GPU only).
+	// Pointer so gpu = 0 can override a non-zero global value.
+	GPU         *int              `toml:"gpu"         yaml:"gpu"`
+	Environment map[string]string `toml:"environment" yaml:"environment"`
 
 	// Secrets is intentionally interface{} to handle both list and map forms.
 	// Use NormalizeSecrets() to get a canonical map[string]string.

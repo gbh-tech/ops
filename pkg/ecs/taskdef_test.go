@@ -168,6 +168,59 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 	}
 }
 
+func TestBuildTaskDefinitionIncludesGPUResourceRequirement(t *testing.T) {
+	gpu := 1
+	merged := MergedConfig{
+		AppSection: app.AppSection{
+			Name:   "vllm",
+			CPU:    4096,
+			Memory: 14336,
+			GPU:    &gpu,
+		},
+	}
+
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "production", "cluster"),
+		Env:      "production",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
+	reqs := input.ContainerDefinitions[0].ResourceRequirements
+	if len(reqs) != 1 {
+		t.Fatalf("resourceRequirements len = %d, want 1", len(reqs))
+	}
+	if reqs[0].Type != ecstypes.ResourceTypeGpu {
+		t.Fatalf("resourceRequirements[0].Type = %v, want GPU", reqs[0].Type)
+	}
+	if aws.ToString(reqs[0].Value) != "1" {
+		t.Fatalf("resourceRequirements[0].Value = %q, want 1", aws.ToString(reqs[0].Value))
+	}
+}
+
+func TestBuildTaskDefinitionOmitsGPUResourceRequirementWhenZero(t *testing.T) {
+	merged := MergedConfig{
+		AppSection: app.AppSection{
+			Name:   "api",
+			CPU:    256,
+			Memory: 512,
+		},
+	}
+
+	input := BuildTaskDefinition(BuildTaskDefinitionOptions{
+		Base:     testBaseConfig(),
+		Merged:   merged,
+		Names:    ComputeNames(merged, "stage", "cluster"),
+		Env:      "stage",
+		ImageTag: "sha",
+		Secrets:  nil,
+	})
+	if len(input.ContainerDefinitions[0].ResourceRequirements) != 0 {
+		t.Fatalf("resourceRequirements = %v, want empty", input.ContainerDefinitions[0].ResourceRequirements)
+	}
+}
+
 func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProvider(t *testing.T) {
 	merged := MergedConfig{
 		AppSection: app.AppSection{

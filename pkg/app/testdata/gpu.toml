@@ -1,0 +1,8 @@
+[global]
+name = "vllm"
+port = 8000
+cpu = 4096
+memory = 14336
+
+[production]
+gpu = 1
