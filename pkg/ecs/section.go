@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"fmt"
+	"strings"
 
 	"ops/pkg/app"
 )
@@ -48,7 +49,7 @@ func applySection(dst *app.AppSection, src app.AppSection) {
 	if src.Memory != 0 {
 		dst.Memory = src.Memory
 	}
-	if src.GPU != 0 {
+	if src.GPU != nil {
 		dst.GPU = src.GPU
 	}
 	if src.Replicas != nil {
@@ -162,8 +163,14 @@ func validatePorts(config app.AppSection) error {
 }
 
 func validateGPU(config app.AppSection) error {
-	if config.GPU < 0 {
-		return fmt.Errorf("gpu must be >= 0, got %d", config.GPU)
+	if config.GPU == nil {
+		return nil
+	}
+	if *config.GPU < 0 {
+		return fmt.Errorf("gpu must be >= 0, got %d", *config.GPU)
+	}
+	if *config.GPU > 0 && strings.EqualFold(config.LaunchType, "FARGATE") {
+		return fmt.Errorf("gpu is not supported with launch_type FARGATE")
 	}
 	return nil
 }

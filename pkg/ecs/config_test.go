@@ -7,6 +7,10 @@ import (
 	"ops/pkg/app"
 )
 
+func intPtr(v int) *int {
+	return &v
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }
@@ -207,26 +211,52 @@ func TestResolveConfig(t *testing.T) {
 	t.Run("env gpu overrides global", func(t *testing.T) {
 		t.Parallel()
 		cfg := app.AppConfig{
-			"global":     app.AppSection{Name: "vllm", GPU: 1},
-			"production": app.AppSection{GPU: 2},
+			"global":     app.AppSection{Name: "vllm", GPU: intPtr(1)},
+			"production": app.AppSection{GPU: intPtr(2)},
 		}
 		merged, err := ResolveConfig(base, cfg, "production")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if merged.GPU != 2 {
-			t.Fatalf("gpu = %d, want 2", merged.GPU)
+		if merged.GPU == nil || *merged.GPU != 2 {
+			t.Fatalf("gpu = %v, want 2", merged.GPU)
+		}
+	})
+
+	t.Run("env gpu zero clears global", func(t *testing.T) {
+		t.Parallel()
+		cfg := app.AppConfig{
+			"global":     app.AppSection{Name: "vllm", GPU: intPtr(1)},
+			"production": app.AppSection{GPU: intPtr(0)},
+		}
+		merged, err := ResolveConfig(base, cfg, "production")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if merged.GPU == nil || *merged.GPU != 0 {
+			t.Fatalf("gpu = %v, want 0", merged.GPU)
 		}
 	})
 
 	t.Run("negative gpu returns error", func(t *testing.T) {
 		t.Parallel()
 		cfg := app.AppConfig{
-			"global": app.AppSection{Name: "vllm", GPU: -1},
+			"global": app.AppSection{Name: "vllm", GPU: intPtr(-1)},
 		}
 		_, err := ResolveConfig(base, cfg, "production")
 		if err == nil {
 			t.Fatal("expected error for negative gpu, got nil")
+		}
+	})
+
+	t.Run("gpu with fargate returns error", func(t *testing.T) {
+		t.Parallel()
+		cfg := app.AppConfig{
+			"global": app.AppSection{Name: "vllm", LaunchType: "FARGATE", GPU: intPtr(1)},
+		}
+		_, err := ResolveConfig(base, cfg, "production")
+		if err == nil {
+			t.Fatal("expected error for gpu with FARGATE, got nil")
 		}
 	})
 }

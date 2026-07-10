@@ -338,11 +338,11 @@ func buildContainer(opts buildContainerOptions) ecstypes.ContainerDefinition {
 		}
 	}
 
-	if opts.Merged.GPU > 0 {
+	if opts.Merged.GPU != nil && *opts.Merged.GPU > 0 {
 		c.ResourceRequirements = []ecstypes.ResourceRequirement{
 			{
 				Type:  ecstypes.ResourceTypeGpu,
-				Value: aws.String(fmt.Sprintf("%d", opts.Merged.GPU)),
+				Value: aws.String(fmt.Sprintf("%d", *opts.Merged.GPU)),
 			},
 		}
 	}

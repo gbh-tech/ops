@@ -169,12 +169,13 @@ func TestBuildTaskDefinitionIncludesEntrypointOverride(t *testing.T) {
 }
 
 func TestBuildTaskDefinitionIncludesGPUResourceRequirement(t *testing.T) {
+	gpu := 1
 	merged := MergedConfig{
 		AppSection: app.AppSection{
 			Name:   "vllm",
 			CPU:    4096,
 			Memory: 14336,
-			GPU:    1,
+			GPU:    &gpu,
 		},
 	}
 
