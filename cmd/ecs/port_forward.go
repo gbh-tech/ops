@@ -53,13 +53,13 @@ func runPortForward(cmd *cobra.Command, args []string) {
 	utils.CheckBinary("aws")
 	utils.CheckBinary("session-manager-plugin")
 
-	ec := loadECSCtx()
-	ctx := context.Background()
-
 	app, _ := cmd.Flags().GetString("app")
 	env, _ := cmd.Flags().GetString("env")
 	container, _ := cmd.Flags().GetString("container")
 	appConfigOverride, _ := cmd.Flags().GetString("app-config")
+
+	ec := loadECSCtx(env)
+	ctx := context.Background()
 
 	service, remotePort := resolveServiceAndPort(ctx, ec, cmd, dbProxyMode, app, env, appConfigOverride)
 	localPort := resolveLocalPort(cmd, remotePort)

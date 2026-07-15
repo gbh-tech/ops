@@ -69,7 +69,7 @@ func ecsDefaultReplicas(d config.ECSDefaults) int {
 // buildBaseConfig assembles a pkgecs.BaseConfig from the ops config. This is
 // the single place that maps OpsConfig fields to BaseConfig fields; both
 // loadECSCtx and loadAppForInspect call it so additions only need one edit.
-func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
+func buildBaseConfig(cfg *config.OpsConfig, env string) *pkgecs.BaseConfig {
 	return &pkgecs.BaseConfig{
 		AWS: pkgecs.BaseAWS{
 			AccountID: cfg.AWS.AccountId,
@@ -77,7 +77,7 @@ func buildBaseConfig(cfg *config.OpsConfig) *pkgecs.BaseConfig {
 			ECRUrl:    cfg.RegistryURL(),
 		},
 		ECS: pkgecs.BaseECS{
-			Cluster:          cfg.ECS.Cluster,
+			Cluster:          cfg.ECS.ResolvedCluster(env),
 			SecretArnPrefix:  cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS),
 			ExecutionRole:    cfg.ECS.ResolvedExecutionRole(cfg.AWS),
 			TaskRole:         cfg.ECS.ResolvedTaskRole(cfg.AWS),
@@ -108,7 +108,7 @@ func ensureEcsOnAws(cfg *config.OpsConfig) {
 	)
 }
 
-func loadECSCtx() *ecsCtx {
+func loadECSCtx(env string) *ecsCtx {
 	cfg := config.LoadConfig()
 	ensureEcsOnAws(cfg)
 
@@ -117,7 +117,7 @@ func loadECSCtx() *ecsCtx {
 
 	return &ecsCtx{
 		cfg:         cfg,
-		base:        buildBaseConfig(cfg),
+		base:        buildBaseConfig(cfg, env),
 		ecsClient:   awsecs.NewFromConfig(awsCfg),
 		cwClient:    cwlogs.NewFromConfig(awsCfg),
 		schedClient: scheduler.NewFromConfig(awsCfg),
@@ -175,7 +175,7 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgapp.AppConfig, pk
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+	merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg, env), appCfg, env)
 	if err != nil {
 		log.Fatal("Invalid app config", "path", path, "err", err)
 	}
@@ -408,7 +408,7 @@ var ecsDeployCmd = &cobra.Command{
 		skipMigrations, _ := cmd.Flags().GetBool("skip-migrations")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		appCfg, merged, names := loadApp(ec, app, env, appConfigOverride)
 		secrets, err := pkgecs.ResolveSecrets(appCfg, env, merged.SecretsName, ec.base.ECS.SecretArnPrefix)
@@ -550,7 +550,7 @@ var ecsRenderCmd = &cobra.Command{
 		cfg := config.LoadConfig()
 		ensureEcsOnAws(cfg)
 		requireAppInMonoRepo(cfg, app)
-		base := buildBaseConfig(cfg)
+		base := buildBaseConfig(cfg, env)
 
 		path, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
 		if err != nil {
@@ -662,7 +662,7 @@ var ecsStatusCmd = &cobra.Command{
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -690,7 +690,7 @@ var ecsWaitCmd = &cobra.Command{
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -713,7 +713,7 @@ var ecsRollbackCmd = &cobra.Command{
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -733,7 +733,7 @@ var ecsDbMigrateCmd = &cobra.Command{
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -797,7 +797,7 @@ unset). Pass --keep to override for a single invocation.`,
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, _, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -825,7 +825,7 @@ var ecsLogsCmd = &cobra.Command{
 		since, _ := cmd.Flags().GetDuration("since")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 		sinceTime := time.Now().Add(-since)
@@ -868,7 +868,7 @@ With --format dotenv, use --output/-o to control the destination:
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
-		merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg), appCfg, env)
+		merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg, env), appCfg, env)
 		if err != nil {
 			log.Fatal("Invalid app config", "path", path, "err", err)
 		}
@@ -977,7 +977,7 @@ Example:
 		env, _ := cmd.Flags().GetString("env")
 		appConfigOverride, _ := cmd.Flags().GetString("app-config")
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
@@ -1074,7 +1074,7 @@ Example:
 			log.Fatal("--command is required unless invoking as 'ops ecs shell'")
 		}
 
-		ec := loadECSCtx()
+		ec := loadECSCtx(env)
 		execECSCommand(execECSCommandOptions{
 			EC:                ec,
 			App:               app,

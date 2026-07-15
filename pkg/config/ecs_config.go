@@ -17,6 +17,7 @@ type ECSConfig struct {
 	// Top-level `apps_dir` wins over this when both are set.
 	AppsDir string `mapstructure:"apps_dir"`
 
+	// Cluster is the ECS cluster name. Supports {env} template placeholders.
 	Cluster          string `mapstructure:"cluster"`
 	CapacityProvider string `mapstructure:"capacity_provider"`
 
@@ -52,6 +53,15 @@ func (c ECSConfig) EffectiveCleanupKeep() int {
 		return 5
 	}
 	return c.CleanupKeep
+}
+
+// ResolvedCluster expands {env} placeholders in the cluster name. When env is
+// empty, it returns the configured cluster as-is.
+func (e ECSConfig) ResolvedCluster(env string) string {
+	if env == "" || e.Cluster == "" {
+		return e.Cluster
+	}
+	return strings.ReplaceAll(e.Cluster, "{env}", env)
 }
 
 // ResolvedSecretArnPrefix returns the explicit prefix when set, otherwise
