@@ -240,6 +240,9 @@ ops deploy werf --env staging --set image.tag=v1.2.3
 Manages deployments, migrations, and operations for ECS-based services.
 The `--app` flag is optional in single-repo mode and required in mono-repo mode
 (`repo_mode: mono` in `.ops/config.yaml`).
+Cluster names in `.ops/config.yaml` can include `{env}` placeholders (for example
+`ecs.cluster: lighthouse-platform-{env}`), which are resolved per `--env` for ECS
+API calls.
 
 ```bash
 # Deploy an app: register task definition, run migrations, update service

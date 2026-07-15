@@ -59,7 +59,8 @@ werf:
 # Per-app deployment config lives in deploy/config.toml (mono-repo: apps/{app}/deploy/config.toml).
 # See deploy/config.toml in this repo for a fully-annotated example of all supported directives.
 ecs:
-  cluster: "lighthouse-platform"
+  # Supports {env} template placeholders.
+  cluster: "lighthouse-platform-{env}"
   secret_arn_prefix: "arn:aws:secretsmanager:us-east-1:091791791455:secret"
   execution_role: "arn:aws:iam::091791791455:role/{service}-{env}-task-exec"
   task_role: "arn:aws:iam::091791791455:role/{service}-{env}-tasks"
