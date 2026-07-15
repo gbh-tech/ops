@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.0
+
+### Minor Changes
+
+- 4ec9791: Allow `ecs.cluster` to include `{env}` placeholders for per-environment ECS cluster names.
+
 ## 1.15.0
 
 ### Minor Changes
