@@ -60,7 +60,7 @@ werf:
 # See deploy/config.toml in this repo for a fully-annotated example of all supported directives.
 ecs:
   # Supports {env} template placeholders.
-  cluster: "lighthouse-platform"
+  cluster: "lighthouse-platform-{env}"
   secret_arn_prefix: "arn:aws:secretsmanager:us-east-1:091791791455:secret"
   execution_role: "arn:aws:iam::091791791455:role/{service}-{env}-task-exec"
   task_role: "arn:aws:iam::091791791455:role/{service}-{env}-tasks"
