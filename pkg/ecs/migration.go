@@ -99,18 +99,73 @@ func RunMigrationTask(ctx context.Context, client *awsecs.Client, opts Migration
 	if err != nil {
 		return taskArn, fmt.Errorf("describe migration task: %w", err)
 	}
-
-	if len(descOut.Tasks) == 0 {
-		return taskArn, nil
-	}
-	task := descOut.Tasks[0]
-	for _, c := range task.Containers {
-		isTargetContainer := aws.ToString(c.Name) == opts.AppName
-		exitedNonZero := c.ExitCode != nil && *c.ExitCode != 0
-		if isTargetContainer && exitedNonZero {
-			return taskArn, fmt.Errorf("migration task exited with code %d", *c.ExitCode)
-		}
+	if err := evaluateMigrationTaskResult(descOut, opts.AppName); err != nil {
+		return taskArn, err
 	}
 
 	return taskArn, nil
+}
+
+// evaluateMigrationTaskResult verifies that ECS reported a successful exit for
+// the migration container. Other containers in the task do not affect the result.
+func evaluateMigrationTaskResult(out *awsecs.DescribeTasksOutput, appName string) error {
+	if len(out.Failures) > 0 {
+		failures := make([]string, len(out.Failures))
+		for i, failure := range out.Failures {
+			parts := make([]string, 0, 3)
+			if arn := aws.ToString(failure.Arn); arn != "" {
+				parts = append(parts, arn)
+			}
+			if reason := aws.ToString(failure.Reason); reason != "" {
+				parts = append(parts, reason)
+			}
+			if detail := aws.ToString(failure.Detail); detail != "" {
+				parts = append(parts, detail)
+			}
+			if len(parts) == 0 {
+				parts = append(parts, "unknown failure")
+			}
+			failures[i] = strings.Join(parts, ": ")
+		}
+		return fmt.Errorf("describe migration task failed: %s", strings.Join(failures, "; "))
+	}
+	if len(out.Tasks) == 0 {
+		return fmt.Errorf("no migration task returned from DescribeTasks")
+	}
+
+	task := out.Tasks[0]
+	stoppedReason := aws.ToString(task.StoppedReason)
+	for _, container := range task.Containers {
+		if aws.ToString(container.Name) != appName {
+			continue
+		}
+
+		containerReason := aws.ToString(container.Reason)
+		if containerReason != "" {
+			return fmt.Errorf("migration container %q failed%s", appName, migrationReasonSuffix(containerReason, stoppedReason))
+		}
+		if container.ExitCode == nil {
+			return fmt.Errorf("migration container %q has no exit code%s", appName, migrationReasonSuffix("", stoppedReason))
+		}
+		if *container.ExitCode != 0 {
+			return fmt.Errorf("migration container %q exited with code %d%s", appName, *container.ExitCode, migrationReasonSuffix("", stoppedReason))
+		}
+		return nil
+	}
+
+	return fmt.Errorf("migration container %q not found in stopped task%s", appName, migrationReasonSuffix("", stoppedReason))
+}
+
+func migrationReasonSuffix(containerReason, stoppedReason string) string {
+	reasons := make([]string, 0, 2)
+	if containerReason != "" {
+		reasons = append(reasons, "container reason: "+containerReason)
+	}
+	if stoppedReason != "" {
+		reasons = append(reasons, "task stopped reason: "+stoppedReason)
+	}
+	if len(reasons) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(reasons, "; ") + ")"
 }
