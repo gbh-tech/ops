@@ -57,13 +57,20 @@ type execECSCommandOptions struct {
 	Interactive       bool
 }
 
+// migrationInvocation identifies whether a migration was requested by deploy
+// automation or explicitly through db-migrate.
 type migrationInvocation int
 
 const (
+	// deployMigration runs as part of deploy and is gated by the replica count.
 	deployMigration migrationInvocation = iota
+	// explicitMigration runs on direct request regardless of the replica count.
 	explicitMigration
 )
 
+// migrationExecutionPolicy validates migration configuration and decides
+// whether to run it. Replicas gate deploy-time migrations because a zero-replica
+// deploy should not run them, while explicit db-migrate is an independent task.
 func migrationExecutionPolicy(invocation migrationInvocation, enabled bool, command []string, replicas int) (bool, error) {
 	if !enabled {
 		return false, nil

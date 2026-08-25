@@ -178,9 +178,10 @@ ops ecs db-migrate --app my-app --env stage
 
 Runs `migration_command` as a one-off ECS task using the service's network
 config. Requires `database_migrations = true` and `migration_command` set.
-Runs even when `replicas = 0`, unlike automatic deploy-time migrations. Prefer
-this over `deploy` when migrations must run without a full rollout. Ask for
-explicit confirmation before production.
+Runs even when `replicas = 0`, unlike automatic deploy-time migrations, but the
+ECS service resource must already exist and provide valid network configuration.
+Prefer this over `deploy` when migrations must run without a full rollout. Ask
+for explicit confirmation before production.
 
 ### schedule-run -- ad-hoc scheduled task
 
@@ -251,10 +252,12 @@ Behavior:
   `replicas > 0`.
 - Use `--skip-migrations` on deploy to bypass (logs a skip message).
 - Use `ops ecs db-migrate` to run migrations without deploying, including when
-  `replicas = 0`.
+  `replicas = 0`; the ECS service resource must already exist and provide valid
+  network configuration.
 - Migration failures abort deploy and print CloudWatch logs.
 - Apps with `replicas = 0` skip automatic deploy-time migrations, but explicit
-  `db-migrate` commands still run.
+  `db-migrate` commands still run when the ECS service resource exists with
+  valid network configuration.
 
 Follow `database-migration-ops` for preflight, backup, production approval, and
 recovery. Never expose secret values from connection strings.

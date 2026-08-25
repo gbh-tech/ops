@@ -260,7 +260,7 @@ ops ecs wait --env production --app my-app
 # Roll back the service to the previous task definition revision
 ops ecs rollback --env production --app my-app
 
-# Run a standalone database migration task, including for apps with zero replicas
+# Run a standalone migration, including at zero replicas; requires an existing ECS service with valid network configuration
 ops ecs db-migrate --env production --app my-app
 
 # Run a configured scheduled task immediately
@@ -276,7 +276,8 @@ ops ecs logs --env production --app my-app --since 30m
 Automatic migrations during `ops ecs deploy` run only when the app has more
 than zero replicas. The explicit `ops ecs db-migrate` command can run for an app
 with `replicas = 0`; both paths still require `database_migrations = true` and a
-non-empty `migration_command`.
+non-empty `migration_command`, and explicit migration requires an existing ECS
+service resource that provides valid network configuration.
 
 ECS service operations target `name` exactly from the app's `deploy/config.toml`
 by default. This is a breaking change from the legacy `{name}-{env}` service
