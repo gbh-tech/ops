@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.1
+
+### Patch Changes
+
+- 0428a4e: Allow explicit ECS database migrations to run for apps configured with zero replicas.
+- 0327187: Cause the command to fail when ECS migration task results are unsuccessful or indeterminate.
+
 ## 1.16.0
 
 ### Minor Changes
