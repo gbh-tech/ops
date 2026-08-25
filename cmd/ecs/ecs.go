@@ -57,6 +57,33 @@ type execECSCommandOptions struct {
 	Interactive       bool
 }
 
+// migrationInvocation identifies whether a migration was requested by deploy
+// automation or explicitly through db-migrate.
+type migrationInvocation int
+
+const (
+	// deployMigration runs as part of deploy and is gated by the replica count.
+	deployMigration migrationInvocation = iota
+	// explicitMigration runs on direct request regardless of the replica count.
+	explicitMigration
+)
+
+// migrationExecutionPolicy validates migration configuration and decides
+// whether to run it. Replicas gate deploy-time migrations because a zero-replica
+// deploy should not run them, while explicit db-migrate is an independent task.
+func migrationExecutionPolicy(invocation migrationInvocation, enabled bool, command []string, replicas int) (bool, error) {
+	if !enabled {
+		return false, nil
+	}
+	if len(command) == 0 {
+		return false, fmt.Errorf("database_migrations is true but migration_command is not set")
+	}
+	if invocation == deployMigration && replicas == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // ecsDefaultReplicas returns the effective replica count from ECSDefaults,
 // preferring the new replicas key over the deprecated desired_count fallback.
 func ecsDefaultReplicas(d config.ECSDefaults) int {
@@ -455,11 +482,14 @@ var ecsDeployCmd = &cobra.Command{
 			log.Info("Skipping configured database migrations", "app", merged.Name)
 		}
 
-		shouldRunMigrations := !skipMigrations && merged.DatabaseMigrations && *merged.Replicas > 0
-		if shouldRunMigrations {
-			if len(merged.MigrationCommand) == 0 {
-				log.Fatal("database_migrations is true but migration_command is not set")
+		shouldRunMigrations := false
+		if !skipMigrations {
+			shouldRunMigrations, err = migrationExecutionPolicy(deployMigration, merged.DatabaseMigrations, merged.MigrationCommand, *merged.Replicas)
+			if err != nil {
+				log.Fatal(err.Error())
 			}
+		}
+		if shouldRunMigrations {
 			capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, merged.Name, env)
 			taskArn, err := pkgecs.RunMigrationTask(ctx, ec.ecsClient, pkgecs.MigrationOpts{
 				Cluster:          ec.base.ECS.Cluster,
@@ -728,6 +758,11 @@ var ecsRollbackCmd = &cobra.Command{
 var ecsDbMigrateCmd = &cobra.Command{
 	Use:   "db-migrate",
 	Short: "Run a standalone database migration task via ECS",
+	Long: `Run a standalone database migration task via ECS.
+
+Unlike automatic deploy-time migrations, this explicit command runs when the
+app has zero replicas. Database migrations must be enabled and a migration
+command must be configured.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app, _ := cmd.Flags().GetString("app")
 		env, _ := cmd.Flags().GetString("env")
@@ -737,16 +772,13 @@ var ecsDbMigrateCmd = &cobra.Command{
 		requireAppInMonoRepo(ec.cfg, app)
 		_, merged, names := loadApp(ec, app, env, appConfigOverride)
 
-		if !merged.DatabaseMigrations {
+		shouldRun, err := migrationExecutionPolicy(explicitMigration, merged.DatabaseMigrations, merged.MigrationCommand, *merged.Replicas)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		if !shouldRun {
 			log.Info("No migrations configured for this app, skipping", "app", merged.Name)
 			return
-		}
-		if *merged.Replicas == 0 {
-			log.Info("replicas is 0, skipping migrations", "app", merged.Name)
-			return
-		}
-		if len(merged.MigrationCommand) == 0 {
-			log.Fatal("database_migrations is true but migration_command is not set")
 		}
 
 		capacityProvider := pkgecs.ExpandTemplate(ec.base.ECS.CapacityProvider, merged.Name, env)
