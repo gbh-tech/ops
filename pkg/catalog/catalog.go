@@ -51,8 +51,12 @@ func Discover(cfg *config.OpsConfig) ([]Unit, error) {
 			}
 			seen[global.Name] = configPath
 			dockerfile := filepath.Join(appRoot, "Dockerfile")
-			if _, err := os.Stat(dockerfile); err != nil {
+			info, err := os.Stat(dockerfile)
+			if err != nil {
 				return nil, fmt.Errorf("Dockerfile for %s: %w", global.Name, err)
+			}
+			if !info.Mode().IsRegular() {
+				return nil, fmt.Errorf("Dockerfile for %s must be a regular file", global.Name)
 			}
 			var packageName string
 			if data, err := os.ReadFile(filepath.Join(appRoot, "package.json")); err == nil {

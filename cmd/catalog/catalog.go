@@ -45,6 +45,9 @@ var Command = &cobra.Command{
 		if format == "json" {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(units)
 		}
+		if format != "table" {
+			return fmt.Errorf("unsupported format %q; expected table or json", format)
+		}
 		for _, unit := range units {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", unit.ID, unit.Kind, unit.Config)
 		}
