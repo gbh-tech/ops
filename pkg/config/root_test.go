@@ -306,3 +306,18 @@ func TestResolveAppFilePath(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveAppFilePathAcrossAppDirs(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	services := filepath.Join(root, "services")
+	functions := filepath.Join(root, "functions")
+	if err := os.MkdirAll(filepath.Join(functions, "worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &OpsConfig{RepoMode: "mono", AppDirs: []string{services, functions}}
+	want := filepath.Join(functions, "worker", "deploy", "config.toml")
+	if got := cfg.ResolveAppFilePath("worker", "", "deploy/config.toml"); got != want {
+		t.Fatalf("ResolveAppFilePath() = %q, want %q", got, want)
+	}
+}

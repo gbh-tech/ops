@@ -116,6 +116,9 @@ func (c *OpsConfig) IsMonoRepo() bool {
 // AppsDirPath returns the apps directory, checking the top-level apps_dir
 // first, then ecs.apps_dir, then defaulting to "apps".
 func (c *OpsConfig) AppsDirPath() string {
+	if len(c.AppDirs) > 0 {
+		return c.AppDirs[0]
+	}
 	if c.AppsDir != "" {
 		return c.AppsDir
 	}
@@ -168,7 +171,7 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 	if override != "" {
 		needsAppPrefix := c.IsMonoRepo() && app != "" && !filepath.IsAbs(override)
 		if needsAppPrefix {
-			appRoot := filepath.Join(c.AppsDirPath(), app)
+			appRoot := c.resolveAppRoot(app)
 			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
 				return filepath.Join(appRoot, override)
 			}
@@ -176,9 +179,19 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 		return override
 	}
 	if c.IsMonoRepo() {
-		return filepath.Join(c.AppsDirPath(), app, defaultSubpath)
+		return filepath.Join(c.resolveAppRoot(app), defaultSubpath)
 	}
 	return defaultSubpath
+}
+
+func (c *OpsConfig) resolveAppRoot(app string) string {
+	for _, root := range c.AppsDirPaths() {
+		candidate := filepath.Join(root, app)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return filepath.Join(c.AppsDirPath(), app)
 }
 
 // ResolveAppConfigPath resolves the path to an app config file. In
