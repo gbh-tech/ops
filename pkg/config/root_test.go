@@ -52,6 +52,21 @@ func TestAppsDirPath(t *testing.T) {
 	}
 }
 
+func TestAppsDirPaths(t *testing.T) {
+	t.Parallel()
+	cfg := &OpsConfig{AppsDir: "services", AppDirs: []string{"apps", "services", "functions"}}
+	want := []string{"apps", "services", "functions"}
+	got := cfg.AppsDirPaths()
+	if len(got) != len(want) {
+		t.Fatalf("AppsDirPaths() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("AppsDirPaths() = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestRegistryType(t *testing.T) {
 	t.Parallel()
 	cfg := &OpsConfig{Provider: "aws"}

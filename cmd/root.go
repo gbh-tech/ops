@@ -2,6 +2,7 @@ package cmd
 
 import (
 	configcmd "ops/cmd/config"
+	"ops/cmd/catalog"
 	"ops/cmd/deploy"
 	ecscmd "ops/cmd/ecs"
 	"ops/cmd/env"
@@ -34,6 +35,7 @@ func init() {
 	configcmd.RegisterGlobalFlags(rootCmd)
 
 	rootCmd.AddCommand(configcmd.Command)
+	rootCmd.AddCommand(catalog.Command)
 	rootCmd.AddCommand(env.Command)
 	rootCmd.AddCommand(kube.ConfigCommand)
 	rootCmd.AddCommand(git.GetTicketIDCommand)

@@ -34,6 +34,10 @@ type OpsConfig struct {
 	// AppsDir is the root directory containing per-app subdirectories.
 	// Only relevant in mono-repo mode. Falls back to ecs.apps_dir, then "apps".
 	AppsDir string `mapstructure:"apps_dir"`
+	// AppDirs lists every root that contains per-app subdirectories. It replaces
+	// apps_dir for catalog discovery while apps_dir remains supported by existing
+	// single-app commands.
+	AppDirs []string `mapstructure:"app_dirs"`
 
 	Git GitConfig `mapstructure:"git"`
 	K8s K8sConfig `mapstructure:"k8s"`
@@ -119,6 +123,14 @@ func (c *OpsConfig) AppsDirPath() string {
 		return c.ECS.AppsDir
 	}
 	return "apps"
+}
+
+// AppsDirPaths returns all configured app roots in deterministic order.
+func (c *OpsConfig) AppsDirPaths() []string {
+	if len(c.AppDirs) > 0 {
+		return append([]string(nil), c.AppDirs...)
+	}
+	return []string{c.AppsDirPath()}
 }
 
 // CloudProvider returns the resolved active cloud provider (e.g. "aws").
