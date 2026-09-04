@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	configcmd "ops/cmd/config"
 	"ops/cmd/catalog"
+	configcmd "ops/cmd/config"
 	"ops/cmd/deploy"
 	ecscmd "ops/cmd/ecs"
 	"ops/cmd/env"
