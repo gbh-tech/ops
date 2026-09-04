@@ -12,7 +12,6 @@ import (
 
 var (
 	format         string
-	environment    string
 	appID          string
 	deployableOnly bool
 )
@@ -31,9 +30,6 @@ var Command = &cobra.Command{
 				continue
 			}
 			if deployableOnly && unit.Kind == "image-only" {
-				continue
-			}
-			if environment != "" && len(unit.Environments) > 0 && !contains(unit.Environments, environment) {
 				continue
 			}
 			filtered = append(filtered, unit)
@@ -57,16 +53,6 @@ var Command = &cobra.Command{
 
 func init() {
 	Command.Flags().StringVar(&format, "format", "table", "Output format: table or json")
-	Command.Flags().StringVar(&environment, "env", "", "Include applications configured for this environment")
 	Command.Flags().StringVar(&appID, "app", "", "Include only this application ID")
 	Command.Flags().BoolVar(&deployableOnly, "deployable", false, "Exclude image-only applications")
-}
-
-func contains(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }
