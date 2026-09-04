@@ -33,7 +33,7 @@ var Command = &cobra.Command{
 			if deployableOnly && unit.Kind == "image-only" {
 				continue
 			}
-			if environment != "" && !contains(unit.Environments, environment) {
+			if environment != "" && len(unit.Environments) > 0 && !contains(unit.Environments, environment) {
 				continue
 			}
 			filtered = append(filtered, unit)
