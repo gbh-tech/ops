@@ -45,7 +45,9 @@ var Command = &cobra.Command{
 			return fmt.Errorf("unsupported format %q; expected table or json", format)
 		}
 		for _, unit := range units {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", unit.ID, unit.Kind, unit.Config)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", unit.ID, unit.Kind, unit.Config); err != nil {
+				return err
+			}
 		}
 		return nil
 	},

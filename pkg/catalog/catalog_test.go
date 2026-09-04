@@ -50,7 +50,11 @@ kind = "lambda"
 	if err := os.Chdir(root); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(old)
+	t.Cleanup(func() {
+		if err := os.Chdir(old); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
 
 	units, err := Discover(&config.OpsConfig{AppDirs: []string{"services", "functions"}})
 	if err != nil {
