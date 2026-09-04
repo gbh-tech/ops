@@ -12,14 +12,20 @@ import (
 )
 
 type Unit struct {
-	ID           string              `json:"id"`
-	Kind         string              `json:"kind"`
-	Root         string              `json:"root"`
-	Config       string              `json:"config"`
-	Dockerfile   string              `json:"dockerfile"`
-	Package      string              `json:"package,omitempty"`
-	Environments []string            `json:"environments"`
-	Subgraph     *app.SubgraphConfig `json:"subgraph,omitempty"`
+	ID           string            `json:"id"`
+	Kind         string            `json:"kind"`
+	Root         string            `json:"root"`
+	Config       string            `json:"config"`
+	Dockerfile   string            `json:"dockerfile"`
+	Package      string            `json:"package,omitempty"`
+	Environments []string          `json:"environments"`
+	Subgraph     *SubgraphMetadata `json:"subgraph,omitempty"`
+}
+
+type SubgraphMetadata struct {
+	Name   string `json:"name"`
+	Port   int    `json:"port"`
+	Schema string `json:"schema"`
 }
 
 func Discover(cfg *config.OpsConfig) ([]Unit, error) {
@@ -65,7 +71,15 @@ func Discover(cfg *config.OpsConfig) ([]Unit, error) {
 				}
 			}
 			sort.Strings(environments)
-			units = append(units, Unit{ID: global.Name, Kind: global.Kind, Root: appRoot, Config: configPath, Dockerfile: dockerfile, Package: packageName, Environments: environments, Subgraph: global.Subgraph})
+			var subgraph *SubgraphMetadata
+			if global.Subgraph != nil {
+				subgraph = &SubgraphMetadata{
+					Name:   global.Subgraph.Name,
+					Port:   global.Port,
+					Schema: filepath.Join(appRoot, global.Subgraph.Schema),
+				}
+			}
+			units = append(units, Unit{ID: global.Name, Kind: global.Kind, Root: appRoot, Config: configPath, Dockerfile: dockerfile, Package: packageName, Environments: environments, Subgraph: subgraph})
 		}
 	}
 	sort.Slice(units, func(i, j int) bool { return units[i].ID < units[j].ID })

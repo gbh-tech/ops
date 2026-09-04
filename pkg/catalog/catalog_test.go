@@ -62,6 +62,9 @@ kind = "lambda"
 	if units[0].ID != "subgraph-policies" || units[0].Subgraph == nil {
 		t.Fatalf("unexpected first unit: %+v", units[0])
 	}
+	if units[0].Subgraph.Port != 4001 || units[0].Subgraph.Schema != "services/policies/src/schema.graphql" {
+		t.Fatalf("unexpected subgraph metadata: %+v", units[0].Subgraph)
+	}
 	if units[1].ID != "worker" || units[1].Package != "@leopard/worker" {
 		t.Fatalf("unexpected second unit: %+v", units[1])
 	}
