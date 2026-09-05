@@ -34,6 +34,10 @@ type OpsConfig struct {
 	// AppsDir is the root directory containing per-app subdirectories.
 	// Only relevant in mono-repo mode. Falls back to ecs.apps_dir, then "apps".
 	AppsDir string `mapstructure:"apps_dir"`
+	// AppDirs lists every root that contains per-app subdirectories. It replaces
+	// apps_dir for catalog discovery while apps_dir remains supported by existing
+	// single-app commands.
+	AppDirs []string `mapstructure:"app_dirs"`
 
 	Git GitConfig `mapstructure:"git"`
 	K8s K8sConfig `mapstructure:"k8s"`
@@ -115,10 +119,21 @@ func (c *OpsConfig) AppsDirPath() string {
 	if c.AppsDir != "" {
 		return c.AppsDir
 	}
+	if len(c.AppDirs) > 0 {
+		return c.AppDirs[0]
+	}
 	if c.ECS.AppsDir != "" {
 		return c.ECS.AppsDir
 	}
 	return "apps"
+}
+
+// AppsDirPaths returns all configured app roots in deterministic order.
+func (c *OpsConfig) AppsDirPaths() []string {
+	if len(c.AppDirs) > 0 {
+		return append([]string(nil), c.AppDirs...)
+	}
+	return []string{c.AppsDirPath()}
 }
 
 // CloudProvider returns the resolved active cloud provider (e.g. "aws").
@@ -156,7 +171,7 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 	if override != "" {
 		needsAppPrefix := c.IsMonoRepo() && app != "" && !filepath.IsAbs(override)
 		if needsAppPrefix {
-			appRoot := filepath.Join(c.AppsDirPath(), app)
+			appRoot := c.resolveAppRoot(app)
 			if !strings.HasPrefix(override, appRoot+string(filepath.Separator)) {
 				return filepath.Join(appRoot, override)
 			}
@@ -164,9 +179,19 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 		return override
 	}
 	if c.IsMonoRepo() {
-		return filepath.Join(c.AppsDirPath(), app, defaultSubpath)
+		return filepath.Join(c.resolveAppRoot(app), defaultSubpath)
 	}
 	return defaultSubpath
+}
+
+func (c *OpsConfig) resolveAppRoot(app string) string {
+	for _, root := range c.AppsDirPaths() {
+		candidate := filepath.Join(root, app)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return filepath.Join(c.AppsDirPath(), app)
 }
 
 // ResolveAppConfigPath resolves the path to an app config file. In
