@@ -86,6 +86,5 @@ func Discover(cfg *config.OpsConfig) ([]Unit, error) {
 			units = append(units, Unit{ID: global.Name, Kind: global.Kind, Root: appRoot, Config: configPath, Dockerfile: dockerfile, Package: packageName, Environments: environments, Subgraph: subgraph})
 		}
 	}
-	sort.Slice(units, func(i, j int) bool { return units[i].ID < units[j].ID })
 	return units, nil
 }

@@ -29,7 +29,7 @@ func TestDiscover(t *testing.T) {
 		}
 	}
 	writeApp("services/policies", `[global]
-name = "subgraph-policies"
+name = "zeta-policies"
 kind = "ecs"
 port = 4001
 [global.subgraph]
@@ -63,7 +63,7 @@ kind = "lambda"
 	if len(units) != 2 {
 		t.Fatalf("len = %d, want 2", len(units))
 	}
-	if units[0].ID != "subgraph-policies" || units[0].Subgraph == nil {
+	if units[0].ID != "zeta-policies" || units[0].Subgraph == nil {
 		t.Fatalf("unexpected first unit: %+v", units[0])
 	}
 	if units[0].Subgraph.Port != 4001 || units[0].Subgraph.Schema != "services/policies/src/schema.graphql" {

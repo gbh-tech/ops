@@ -116,11 +116,11 @@ func (c *OpsConfig) IsMonoRepo() bool {
 // AppsDirPath returns the apps directory, checking the top-level apps_dir
 // first, then ecs.apps_dir, then defaulting to "apps".
 func (c *OpsConfig) AppsDirPath() string {
-	if len(c.AppDirs) > 0 {
-		return c.AppDirs[0]
-	}
 	if c.AppsDir != "" {
 		return c.AppsDir
+	}
+	if len(c.AppDirs) > 0 {
+		return c.AppDirs[0]
 	}
 	if c.ECS.AppsDir != "" {
 		return c.ECS.AppsDir
@@ -187,7 +187,7 @@ func (c *OpsConfig) ResolveAppFilePath(app, override, defaultSubpath string) str
 func (c *OpsConfig) resolveAppRoot(app string) string {
 	for _, root := range c.AppsDirPaths() {
 		candidate := filepath.Join(root, app)
-		if _, err := os.Stat(candidate); err == nil {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return candidate
 		}
 	}

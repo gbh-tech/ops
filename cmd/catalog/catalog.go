@@ -24,7 +24,7 @@ var Command = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		filtered := units[:0]
+		filtered := make([]catalog.Unit, 0, len(units))
 		for _, unit := range units {
 			if appID != "" && unit.ID != appID {
 				continue
