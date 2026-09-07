@@ -36,12 +36,12 @@ port = 4001
 name = "policies"
 schema = "src/schema.graphql"
 [dev]
-`, "@leopard/subgraph-policies")
+`, "@example/subgraph-policies")
 	writeApp("functions/worker", `[global]
 name = "worker"
 kind = "lambda"
 [stage]
-`, "@leopard/worker")
+`, "@example/worker")
 
 	old, err := os.Getwd()
 	if err != nil {
@@ -69,7 +69,7 @@ kind = "lambda"
 	if units[0].Subgraph.Port != 4001 || units[0].Subgraph.Schema != "services/policies/src/schema.graphql" {
 		t.Fatalf("unexpected subgraph metadata: %+v", units[0].Subgraph)
 	}
-	if units[1].ID != "worker" || units[1].Package != "@leopard/worker" {
+	if units[1].ID != "worker" || units[1].Package != "@example/worker" {
 		t.Fatalf("unexpected second unit: %+v", units[1])
 	}
 }
