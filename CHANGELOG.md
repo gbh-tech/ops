@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.0
+
+### Minor Changes
+
+- 19d50cd: Add application catalog discovery across multiple app directories.
+
 ## 1.16.1
 
 ### Patch Changes
