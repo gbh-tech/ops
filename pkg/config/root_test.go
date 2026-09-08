@@ -106,24 +106,23 @@ func TestRegistryURL(t *testing.T) {
 	})
 }
 
-func TestRegistryMode(t *testing.T) {
+func TestRegistryRepositoryTemplate(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		mode string
-		want string
+		name     string
+		template string
+		want     string
 	}{
-		{name: "defaults to environment", want: "environment"},
-		{name: "shared", mode: "shared", want: "shared"},
-		{name: "unknown defaults to environment", mode: "other", want: "environment"},
+		{name: "defaults to environment service", want: "{env}/{service}"},
+		{name: "configured template", template: "application/{service}", want: "application/{service}"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &OpsConfig{Registry: RegistryConfig{Mode: tt.mode}}
-			if got := cfg.RegistryMode(); got != tt.want {
-				t.Fatalf("RegistryMode() = %q, want %q", got, tt.want)
+			cfg := &OpsConfig{Registry: RegistryConfig{RepositoryTemplate: tt.template}}
+			if got := cfg.RegistryRepositoryTemplate(); got != tt.want {
+				t.Fatalf("RegistryRepositoryTemplate() = %q, want %q", got, tt.want)
 			}
 		})
 	}

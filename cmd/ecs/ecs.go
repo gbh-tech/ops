@@ -99,10 +99,10 @@ func ecsDefaultReplicas(d config.ECSDefaults) int {
 func buildBaseConfig(cfg *config.OpsConfig, env string) *pkgecs.BaseConfig {
 	return &pkgecs.BaseConfig{
 		AWS: pkgecs.BaseAWS{
-			AccountID:    cfg.AWS.AccountId,
-			Region:       cfg.AWS.Region,
-			ECRUrl:       cfg.RegistryURL(),
-			RegistryMode: cfg.RegistryMode(),
+			AccountID:                  cfg.AWS.AccountId,
+			Region:                     cfg.AWS.Region,
+			ECRUrl:                     cfg.RegistryURL(),
+			RegistryRepositoryTemplate: cfg.RegistryRepositoryTemplate(),
 		},
 		ECS: pkgecs.BaseECS{
 			Cluster:          cfg.ECS.ResolvedCluster(env),

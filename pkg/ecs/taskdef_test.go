@@ -264,25 +264,34 @@ func TestResolveImage(t *testing.T) {
 		{
 			name: "environment repository by default",
 			opts: resolveImageOptions{
-				ECRURL:     "123456789012.dkr.ecr.us-east-1.amazonaws.com",
-				Env:        "stage",
-				ImageField: "platform-api",
-				AppName:    "api",
-				ImageTag:   "sha",
+				ECRURL:   "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				Env:      "stage",
+				AppName:  "api",
+				ImageTag: "sha",
 			},
-			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/stage/platform-api:sha",
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/stage/api:sha",
 		},
 		{
-			name: "shared repository",
+			name: "configured application repository",
 			opts: resolveImageOptions{
-				ECRURL:       "123456789012.dkr.ecr.us-east-1.amazonaws.com",
-				RegistryMode: "shared",
-				Env:          "stage",
-				ImageField:   "platform-api",
-				AppName:      "api",
-				ImageTag:     "sha",
+				ECRURL:                     "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				RegistryRepositoryTemplate: "application/{service}",
+				Env:                        "stage",
+				AppName:                    "api",
+				ImageTag:                   "sha",
 			},
-			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/api:sha",
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/application/api:sha",
+		},
+		{
+			name: "configured environment and service repository",
+			opts: resolveImageOptions{
+				ECRURL:                     "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				RegistryRepositoryTemplate: "application/{env}/{service}",
+				Env:                        "stage",
+				AppName:                    "api",
+				ImageTag:                   "sha",
+			},
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/application/stage/api:sha",
 		},
 	}
 

@@ -63,9 +63,12 @@ changesets / commitlint tooling).
   `provider:` / `deployment:` keys in the config or by the persistent
   `--provider` / `--deployment` CLI flags. The registry kind and URL are
   derived from the active cloud provider; set `registry.url` only when
-  overriding the default. Use `cfg.CloudProvider()`,
-  `cfg.DeploymentProvider()`, `cfg.RegistryType()`, `cfg.RegistryURL()` from
-  call sites instead of reading the raw fields directly. The `ops config`
+  overriding the default. ECS image repositories use
+  `registry.repository_template`, which supports `{env}` and `{service}` and
+  defaults to `{env}/{service}`. Use `cfg.CloudProvider()`,
+  `cfg.DeploymentProvider()`, `cfg.RegistryType()`, `cfg.RegistryURL()`, and
+  `cfg.RegistryRepositoryTemplate()` from call sites instead of reading the
+  raw fields directly. The `ops config`
   command prints the resolved settings for the current invocation. New
   providers slot in by adding a package under `pkg/` and a block under
   `OpsConfig` plus an entry in `definedCloudBlocks` /

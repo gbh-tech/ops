@@ -67,7 +67,7 @@ which environment / apps_dir will be used. Honours --provider and
 			{"deployment", cfg.DeploymentProvider()},
 			{"registry.type", cfg.RegistryType()},
 			{"registry.url", cfg.RegistryURL()},
-			{"registry.mode", cfg.RegistryMode()},
+			{"registry.repository_template", cfg.RegistryRepositoryTemplate()},
 		}
 
 		switch cfg.CloudProvider() {
