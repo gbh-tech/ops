@@ -31,24 +31,43 @@ func TestAppsDirPath(t *testing.T) {
 	tests := []struct {
 		name    string
 		appsDir string
+		appDirs []string
 		ecsDir  string
 		want    string
 	}{
-		{"top-level wins", "myapps", "ecsapps", "myapps"},
-		{"ecs fallback", "", "ecsapps", "ecsapps"},
-		{"default fallback", "", "", "apps"},
+		{"top-level wins", "myapps", nil, "ecsapps", "myapps"},
+		{"legacy top-level wins over multiple roots", "myapps", []string{"services", "functions"}, "ecsapps", "myapps"},
+		{"multiple roots fallback", "", []string{"services", "functions"}, "ecsapps", "services"},
+		{"ecs fallback", "", nil, "ecsapps", "ecsapps"},
+		{"default fallback", "", nil, "", "apps"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &OpsConfig{
 				AppsDir: tt.appsDir,
+				AppDirs: tt.appDirs,
 				ECS:     ECSConfig{AppsDir: tt.ecsDir},
 			}
 			if got := cfg.AppsDirPath(); got != tt.want {
 				t.Fatalf("AppsDirPath() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAppsDirPaths(t *testing.T) {
+	t.Parallel()
+	cfg := &OpsConfig{AppsDir: "services", AppDirs: []string{"apps", "services", "functions"}}
+	want := []string{"apps", "services", "functions"}
+	got := cfg.AppsDirPaths()
+	if len(got) != len(want) {
+		t.Fatalf("AppsDirPaths() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("AppsDirPaths() = %v, want %v", got, want)
+		}
 	}
 }
 
@@ -289,5 +308,26 @@ func TestResolveAppFilePath(t *testing.T) {
 				t.Fatalf("ResolveAppFilePath() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveAppFilePathAcrossAppDirs(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	services := filepath.Join(root, "services")
+	functions := filepath.Join(root, "functions")
+	if err := os.MkdirAll(services, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(services, "worker"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(functions, "worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &OpsConfig{RepoMode: "mono", AppDirs: []string{services, functions}}
+	want := filepath.Join(functions, "worker", "deploy", "config.toml")
+	if got := cfg.ResolveAppFilePath("worker", "", "deploy/config.toml"); got != want {
+		t.Fatalf("ResolveAppFilePath() = %q, want %q", got, want)
 	}
 }

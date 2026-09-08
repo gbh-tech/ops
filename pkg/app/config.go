@@ -135,6 +135,7 @@ type AppSection struct {
 	Name              string `toml:"name"               yaml:"name"`
 	AppendEnvironment *bool  `toml:"append_environment" yaml:"append_environment"`
 	Image             string `toml:"image"              yaml:"image"`
+	Kind              string `toml:"kind"               yaml:"kind"`
 	Port              int    `toml:"port"               yaml:"port"`
 	Ports             []int  `toml:"ports"              yaml:"ports"`
 	CPU               int    `toml:"cpu"                yaml:"cpu"`
@@ -183,6 +184,13 @@ type AppSection struct {
 	// global list entirely (like Volumes), so re-declare all tasks when
 	// overriding per-env.
 	ScheduledTasks []ScheduledTaskConfig `toml:"scheduled_tasks" yaml:"scheduled_tasks"`
+	Subgraph       *SubgraphConfig       `toml:"subgraph"        yaml:"subgraph"`
+}
+
+// SubgraphConfig identifies an Apollo subgraph and its SDL relative to the app root.
+type SubgraphConfig struct {
+	Name   string `toml:"name"   yaml:"name"`
+	Schema string `toml:"schema" yaml:"schema"`
 }
 
 // AppConfig is the top-level structure of an app's config.toml / config.yaml.
