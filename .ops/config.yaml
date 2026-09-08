@@ -36,10 +36,6 @@ k8s:
 # (and the registry is implicitly ECR). All cross-cutting AWS values like
 # the registry URL and the secrets manager / IAM ARN prefixes are derived
 # from `account_id` and `region` below — no need to repeat them.
-# registry:
-#   # "environment" (default): <ECR_URL>/<env>/leopardai-platform-<app>:<tag>
-#   # "shared":              <ECR_URL>/leopard-platform/<app>:<tag>
-#   mode: "shared"
 aws:
   profile: "gbh"  # optional; omit when using env vars, IAM role, or instance profile
   account_id: "091791791455"

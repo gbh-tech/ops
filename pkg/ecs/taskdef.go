@@ -270,8 +270,7 @@ type resolveImageOptions struct {
 // resolveImage derives the full image URI following the Python renderer logic:
 //   - External images (containing '/') are used as-is if already tagged, else
 //     the imageTag is appended.
-//   - ECR images use either the environment repository or the shared
-//     leopard-platform repository.
+//   - ECR images use either the environment repository or a shared repository.
 func resolveImage(opts resolveImageOptions) string {
 	repo := opts.ImageField
 	if repo == "" {
@@ -285,7 +284,7 @@ func resolveImage(opts resolveImageOptions) string {
 		return repo + ":" + opts.ImageTag
 	}
 	if opts.RegistryMode == "shared" {
-		return fmt.Sprintf("%s/leopard-platform/%s:%s", opts.ECRURL, opts.AppName, opts.ImageTag)
+		return fmt.Sprintf("%s/%s:%s", opts.ECRURL, opts.AppName, opts.ImageTag)
 	}
 	return fmt.Sprintf("%s/%s/%s:%s", opts.ECRURL, opts.Env, repo, opts.ImageTag)
 }

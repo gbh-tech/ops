@@ -266,23 +266,23 @@ func TestResolveImage(t *testing.T) {
 			opts: resolveImageOptions{
 				ECRURL:     "123456789012.dkr.ecr.us-east-1.amazonaws.com",
 				Env:        "stage",
-				ImageField: "leopardai-platform-api",
+				ImageField: "platform-api",
 				AppName:    "api",
 				ImageTag:   "sha",
 			},
-			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/stage/leopardai-platform-api:sha",
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/stage/platform-api:sha",
 		},
 		{
-			name: "shared leopard platform repository",
+			name: "shared repository",
 			opts: resolveImageOptions{
 				ECRURL:       "123456789012.dkr.ecr.us-east-1.amazonaws.com",
 				RegistryMode: "shared",
 				Env:          "stage",
-				ImageField:   "leopardai-platform-api",
+				ImageField:   "platform-api",
 				AppName:      "api",
 				ImageTag:     "sha",
 			},
-			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/leopard-platform/api:sha",
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/api:sha",
 		},
 	}
 
