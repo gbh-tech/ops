@@ -87,6 +87,29 @@ func TestRegistryURL(t *testing.T) {
 	})
 }
 
+func TestRegistryMode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		mode string
+		want string
+	}{
+		{name: "defaults to environment", want: "environment"},
+		{name: "shared", mode: "shared", want: "shared"},
+		{name: "unknown defaults to environment", mode: "other", want: "environment"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &OpsConfig{Registry: RegistryConfig{Mode: tt.mode}}
+			if got := cfg.RegistryMode(); got != tt.want {
+				t.Fatalf("RegistryMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveAppConfigPath(t *testing.T) {
 	tests := []struct {
 		name     string

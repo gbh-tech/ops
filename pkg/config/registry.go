@@ -8,7 +8,17 @@ import "fmt"
 // Set `registry.url` only when pulling/pushing to a registry in a different
 // account or region.
 type RegistryConfig struct {
-	URL string `mapstructure:"url"`
+	URL  string `mapstructure:"url"`
+	Mode string `mapstructure:"mode"`
+}
+
+// RegistryMode returns the image repository layout. Environment repositories
+// remain the default so existing deployments keep their current image URI.
+func (c *OpsConfig) RegistryMode() string {
+	if c.Registry.Mode == "shared" {
+		return "shared"
+	}
+	return "environment"
 }
 
 // registryTypeForCloud returns the canonical registry kind for a cloud provider.

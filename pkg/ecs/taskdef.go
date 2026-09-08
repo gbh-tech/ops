@@ -78,11 +78,12 @@ type buildTaskDefinitionInputOptions struct {
 func buildTaskDefinitionInput(opts buildTaskDefinitionInputOptions) awsecs.RegisterTaskDefinitionInput {
 	appName := opts.Merged.Name
 	image := resolveImage(resolveImageOptions{
-		ECRURL:     opts.Base.AWS.ECRUrl,
-		Env:        opts.Env,
-		ImageField: opts.Merged.Image,
-		AppName:    appName,
-		ImageTag:   opts.ImageTag,
+		ECRURL:       opts.Base.AWS.ECRUrl,
+		RegistryMode: opts.Base.AWS.RegistryMode,
+		Env:          opts.Env,
+		ImageField:   opts.Merged.Image,
+		AppName:      appName,
+		ImageTag:     opts.ImageTag,
 	})
 
 	taskVolumes, mountPoints := buildVolumes(opts.Merged.Volumes)
@@ -258,17 +259,19 @@ func ExpandSchedulerTemplate(s, cluster, env string) string {
 
 // resolveImageOptions bundles the inputs for resolveImage.
 type resolveImageOptions struct {
-	ECRURL     string
-	Env        string
-	ImageField string
-	AppName    string
-	ImageTag   string
+	ECRURL       string
+	RegistryMode string
+	Env          string
+	ImageField   string
+	AppName      string
+	ImageTag     string
 }
 
 // resolveImage derives the full image URI following the Python renderer logic:
 //   - External images (containing '/') are used as-is if already tagged, else
 //     the imageTag is appended.
-//   - ECR images are prefixed with the ECR URL and env path.
+//   - ECR images use either the environment repository or the shared
+//     leopard-platform repository.
 func resolveImage(opts resolveImageOptions) string {
 	repo := opts.ImageField
 	if repo == "" {
@@ -280,6 +283,9 @@ func resolveImage(opts resolveImageOptions) string {
 			return repo
 		}
 		return repo + ":" + opts.ImageTag
+	}
+	if opts.RegistryMode == "shared" {
+		return fmt.Sprintf("%s/leopard-platform/%s:%s", opts.ECRURL, opts.AppName, opts.ImageTag)
 	}
 	return fmt.Sprintf("%s/%s/%s:%s", opts.ECRURL, opts.Env, repo, opts.ImageTag)
 }

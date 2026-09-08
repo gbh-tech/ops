@@ -254,6 +254,48 @@ func TestBuildScheduledTaskDefinitionAddsFargateCompatibilityForTaskCapacityProv
 	}
 }
 
+func TestResolveImage(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		opts resolveImageOptions
+		want string
+	}{
+		{
+			name: "environment repository by default",
+			opts: resolveImageOptions{
+				ECRURL:     "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				Env:        "stage",
+				ImageField: "leopardai-platform-api",
+				AppName:    "api",
+				ImageTag:   "sha",
+			},
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/stage/leopardai-platform-api:sha",
+		},
+		{
+			name: "shared leopard platform repository",
+			opts: resolveImageOptions{
+				ECRURL:       "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				RegistryMode: "shared",
+				Env:          "stage",
+				ImageField:   "leopardai-platform-api",
+				AppName:      "api",
+				ImageTag:     "sha",
+			},
+			want: "123456789012.dkr.ecr.us-east-1.amazonaws.com/leopard-platform/api:sha",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveImage(tt.opts); got != tt.want {
+				t.Fatalf("resolveImage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func containerMappingPorts(mappings []ecstypes.PortMapping) []int {
 	ports := make([]int, 0, len(mappings))
 	for _, mapping := range mappings {
