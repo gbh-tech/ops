@@ -78,12 +78,12 @@ type buildTaskDefinitionInputOptions struct {
 func buildTaskDefinitionInput(opts buildTaskDefinitionInputOptions) awsecs.RegisterTaskDefinitionInput {
 	appName := opts.Merged.Name
 	image := resolveImage(resolveImageOptions{
-		ECRURL:                     opts.Base.AWS.ECRUrl,
-		RegistryRepositoryTemplate: opts.Base.AWS.RegistryRepositoryTemplate,
-		Env:                        opts.Env,
-		ImageField:                 opts.Merged.Image,
-		AppName:                    appName,
-		ImageTag:                   opts.ImageTag,
+		ECRURL:             opts.Base.AWS.ECRUrl,
+		RegistryRepository: opts.Base.AWS.RegistryRepository,
+		Env:                opts.Env,
+		ImageField:         opts.Merged.Image,
+		AppName:            appName,
+		ImageTag:           opts.ImageTag,
 	})
 
 	taskVolumes, mountPoints := buildVolumes(opts.Merged.Volumes)
@@ -259,12 +259,12 @@ func ExpandSchedulerTemplate(s, cluster, env string) string {
 
 // resolveImageOptions bundles the inputs for resolveImage.
 type resolveImageOptions struct {
-	ECRURL                     string
-	RegistryRepositoryTemplate string
-	Env                        string
-	ImageField                 string
-	AppName                    string
-	ImageTag                   string
+	ECRURL             string
+	RegistryRepository string
+	Env                string
+	ImageField         string
+	AppName            string
+	ImageTag           string
 }
 
 // resolveImage derives the full image URI following the Python renderer logic:
@@ -280,11 +280,11 @@ func resolveImage(opts resolveImageOptions) string {
 		}
 		return opts.ImageField + ":" + opts.ImageTag
 	}
-	repositoryTemplate := opts.RegistryRepositoryTemplate
-	if repositoryTemplate == "" {
-		repositoryTemplate = "{env}/{service}"
+	repository := opts.RegistryRepository
+	if repository == "" {
+		repository = "{env}/{service}"
 	}
-	repository := ExpandTemplate(repositoryTemplate, opts.AppName, opts.Env)
+	repository = ExpandTemplate(repository, opts.AppName, opts.Env)
 	return fmt.Sprintf("%s/%s:%s", opts.ECRURL, repository, opts.ImageTag)
 }
 

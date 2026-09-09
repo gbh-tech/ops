@@ -2,10 +2,10 @@ package ecs
 
 // BaseAWS holds AWS-level settings from base.toml.
 type BaseAWS struct {
-	AccountID                  string `toml:"account_id"                    yaml:"account_id"`
-	Region                     string `toml:"region"                        yaml:"region"`
-	ECRUrl                     string `toml:"ecr_url"                       yaml:"ecr_url"`
-	RegistryRepositoryTemplate string `toml:"registry_repository_template" yaml:"registry_repository_template"`
+	AccountID          string `toml:"account_id"          yaml:"account_id"`
+	Region             string `toml:"region"              yaml:"region"`
+	ECRUrl             string `toml:"ecr_url"             yaml:"ecr_url"`
+	RegistryRepository string `toml:"registry_repository" yaml:"registry_repository"`
 }
 
 // BaseECS holds the ECS platform settings from base.toml.

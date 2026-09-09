@@ -39,7 +39,7 @@ k8s:
 # registry:
 #   # ECR repository path template for ECS images. Supports {env} and {service}.
 #   # Defaults to "{env}/{service}" when omitted.
-#   repository_template: "application/{service}"
+#   repository: "application/{service}"
 aws:
   profile: "gbh"  # optional; omit when using env vars, IAM role, or instance profile
   account_id: "091791791455"

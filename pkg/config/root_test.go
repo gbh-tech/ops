@@ -106,7 +106,7 @@ func TestRegistryURL(t *testing.T) {
 	})
 }
 
-func TestRegistryRepositoryTemplate(t *testing.T) {
+func TestRegistryRepository(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
@@ -120,9 +120,9 @@ func TestRegistryRepositoryTemplate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &OpsConfig{Registry: RegistryConfig{RepositoryTemplate: tt.template}}
-			if got := cfg.RegistryRepositoryTemplate(); got != tt.want {
-				t.Fatalf("RegistryRepositoryTemplate() = %q, want %q", got, tt.want)
+			cfg := &OpsConfig{Registry: RegistryConfig{Repository: tt.template}}
+			if got := cfg.RegistryRepository(); got != tt.want {
+				t.Fatalf("RegistryRepository() = %q, want %q", got, tt.want)
 			}
 		})
 	}

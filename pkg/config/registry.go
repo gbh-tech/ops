@@ -8,15 +8,15 @@ import "fmt"
 // Set `registry.url` only when pulling/pushing to a registry in a different
 // account or region.
 type RegistryConfig struct {
-	URL                string `mapstructure:"url"`
-	RepositoryTemplate string `mapstructure:"repository_template"`
+	URL        string `mapstructure:"url"`
+	Repository string `mapstructure:"repository"`
 }
 
-// RegistryRepositoryTemplate returns the ECR repository path template. The
+// RegistryRepository returns the ECR repository path template. The
 // default preserves existing environment-specific repository names.
-func (c *OpsConfig) RegistryRepositoryTemplate() string {
-	if c.Registry.RepositoryTemplate != "" {
-		return c.Registry.RepositoryTemplate
+func (c *OpsConfig) RegistryRepository() string {
+	if c.Registry.Repository != "" {
+		return c.Registry.Repository
 	}
 	return "{env}/{service}"
 }
