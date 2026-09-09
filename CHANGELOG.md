@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.0
+
+### Minor Changes
+
+- 1360282: Add configurable ECS registry repository paths with `{env}` and `{service}` placeholders.
+
 ## 1.17.0
 
 ### Minor Changes
