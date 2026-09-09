@@ -106,6 +106,28 @@ func TestRegistryURL(t *testing.T) {
 	})
 }
 
+func TestRegistryRepository(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		template string
+		want     string
+	}{
+		{name: "defaults to environment service", want: "{env}/{service}"},
+		{name: "configured template", template: "application/{service}", want: "application/{service}"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &OpsConfig{Registry: RegistryConfig{Repository: tt.template}}
+			if got := cfg.RegistryRepository(); got != tt.want {
+				t.Fatalf("RegistryRepository() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveAppConfigPath(t *testing.T) {
 	tests := []struct {
 		name     string
