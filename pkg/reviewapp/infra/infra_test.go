@@ -86,3 +86,53 @@ func TestLoadUnit(t *testing.T) {
 		t.Fatal("want an error for an incomplete unit")
 	}
 }
+
+func TestLoadBlueprint(t *testing.T) {
+	ssmc := fakeSSM{
+		"/reviewapp/infra": infraJSON,
+		"/reviewapp/blueprint": `{
+  "db_owner_role": "reviewapp_owner",
+  "service_connect_domain": "platform.internal",
+  "routes": {
+    "shell": {"port": 3002, "health_check_path": "/", "rules": [["/*"]]},
+    "apollo-router": {"port": 4000, "health_check_path": "/health", "health_check_port": 8088, "rules": [["/graphql", "/graphql/*"]]}
+  }
+}`,
+	}
+	inf, err := Load(context.Background(), ssmc, "/reviewapp/infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bp, err := inf.LoadBlueprint(context.Background(), ssmc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bp.DBOwnerRole != "reviewapp_owner" || bp.Routes["apollo-router"].HealthCheckPort != 8088 {
+		t.Fatalf("unexpected blueprint: %+v", bp)
+	}
+}
+
+func TestLoadBlueprintRejectsBadRoutes(t *testing.T) {
+	for name, body := range map[string]string{
+		"no owner":       `{"service_connect_domain": "d", "routes": {}}`,
+		"no rules":       `{"db_owner_role": "o", "service_connect_domain": "d", "routes": {"shell": {"port": 1, "health_check_path": "/"}}}`,
+		"too many paths": `{"db_owner_role": "o", "service_connect_domain": "d", "routes": {"shell": {"port": 1, "health_check_path": "/", "rules": [["/a", "/b", "/c", "/d", "/e"]]}}}`,
+	} {
+		ssmc := fakeSSM{"/reviewapp/infra": infraJSON, "/reviewapp/blueprint": body}
+		inf, err := Load(context.Background(), ssmc, "/reviewapp/infra")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := inf.LoadBlueprint(context.Background(), ssmc); err == nil {
+			t.Fatalf("%s: want an error", name)
+		}
+	}
+}
+
+func TestSecretRef(t *testing.T) {
+	inf := &Infra{}
+	inf.Cluster.ARN = "arn:aws:ecs:us-east-1:123456789012:cluster/c"
+	if got := inf.SecretRef("reviewapp/db", "RLS_DATABASE_URL"); got != "arn:aws:secretsmanager:us-east-1:123456789012:secret:reviewapp/db:RLS_DATABASE_URL::" {
+		t.Fatalf("got %s", got)
+	}
+}

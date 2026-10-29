@@ -106,7 +106,7 @@ func newTestClient(e *fakeECS, l *fakeLogs, m *fakeManifests, out *bytes.Buffer)
 		Manifests:    m,
 		Infra:        inf,
 		Controller:   &infra.Unit{SecurityGroup: "sg-c", LogGroup: "/ecs/c"},
-		Settings:     Settings{Domain: "reviewapps.example.com", InfraSSM: "/reviewapp/infra", ToolsImage: "repo/tools", Region: "us-east-1"},
+		Settings:     Settings{Domain: "reviewapps.example.com", InfraSSM: "/reviewapp/infra", ToolsImage: "repo/tools", Region: "us-east-1", Repository: "acme/app", Actor: "octocat"},
 		Out:          out,
 		PollInterval: time.Millisecond,
 	}
@@ -159,6 +159,8 @@ func TestExecuteUploadsManifestAndPassesItsVersion(t *testing.T) {
 		"--infra-ssm", "/reviewapp/infra",
 		"--tools-image", "repo/tools",
 		"--region", "us-east-1",
+		"--repository", "acme/app",
+		"--actor", "octocat",
 	}
 	if !slices.Equal(override.Command, want) {
 		t.Fatalf("command = %q\nwant      %q", override.Command, want)
@@ -170,14 +172,14 @@ func TestExecuteWithoutManifest(t *testing.T) {
 	m := &fakeManifests{}
 	c := newTestClient(e, &fakeLogs{}, m, &bytes.Buffer{})
 
-	if _, err := c.Execute(context.Background(), Run{Command: "run", PR: 7, Args: []string{"cron-alerts"}}); err != nil {
+	if _, err := c.Execute(context.Background(), Run{Command: "run", PR: 7, Args: []string{"--", "cron-alerts", "--dry-run"}}); err != nil {
 		t.Fatal(err)
 	}
 	if m.got != nil {
 		t.Fatal("uploaded a manifest for a run without one")
 	}
 	cmd := e.runIn.Overrides.ContainerOverrides[0].Command
-	if !slices.Equal(cmd[:5], []string{"reviewapp", "run", "--pr", "7", "cron-alerts"}) {
+	if !slices.Equal(cmd[:4], []string{"reviewapp", "run", "--pr", "7"}) || !slices.Equal(cmd[len(cmd)-3:], []string{"--", "cron-alerts", "--dry-run"}) {
 		t.Fatalf("command = %q", cmd)
 	}
 	if slices.Contains(cmd, "--manifest-version") {

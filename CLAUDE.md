@@ -95,7 +95,18 @@ changesets / commitlint tooling).
   manifest, runs the `reviewapp-controller` task with `--in-cluster`, prints
   its logs and returns its exit code. The controller has no repository, so
   the client passes the `reviewapps:` values as flags.
-- `cmd/reviewapp` — `ops reviewapp list|status|logs`. Settings come from
+- `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
+  review app section into the `UnitSpec` that travels in the manifest. The
+  client renders; the controller never reads the repository.
+- `pkg/reviewapp/provision` — in-cluster mode: `Create`, `Deploy`,
+  `Destroy`, `Sleep`, `Wake`, `Run`, `GC`. Every step is idempotent and saves
+  the state, so a failed create resumes or destroys cleanly. Destroy also
+  finds resources by the `reviewapp=pr-<n>` tag. Public routes, the DB owner
+  role and the Service Connect domain come from the blueprint parameter
+  (`blueprint_ssm` in the infra parameter), which Terraform writes.
+- `cmd/reviewapp` — `ops reviewapp list|status|logs` and the commands that
+  change a review app (client mode by default, `--in-cluster` in the
+  controller). Settings come from
   flags first, then `.ops/config.yaml`, so the commands also run in the
   controller image (`ghcr.io/gbh-tech/ops`, built by GoReleaser from
   `Dockerfile`).
