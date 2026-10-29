@@ -106,10 +106,10 @@ changesets / commitlint tooling).
   (`blueprint_ssm` in the infra parameter), which Terraform writes.
 - `cmd/reviewapp` — `ops reviewapp list|status|logs` and the commands that
   change a review app (client mode by default, `--in-cluster` in the
-  controller). Settings come from
-  flags first, then `.ops/config.yaml`, so the commands also run in the
-  controller task, which has no repository. The project builds that image
-  from a released binary; ops publishes no image.
+  controller). Settings come from flags first, then `.ops/config.yaml`, so
+  the commands also run in the controller task, which has no repository.
+  The project builds that image from a released binary; ops publishes no
+  image.
 - `pkg/utils` — shared helpers: `bin.go` (locate/run external binaries),
   `cobra.go` (flag plumbing), `git.go`, `env.go`, `system.go`,
   `registry.go`. Most commands rely on `utils.RunCommand`-style shell-outs

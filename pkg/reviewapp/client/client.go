@@ -224,19 +224,30 @@ func (c *Client) follow(ctx context.Context, taskARN string) (int, error) {
 		interval = 5 * time.Second
 	}
 
+	// The task's exit code is the result. A log read that fails (access,
+	// throttling) only costs output, so it warns once and polling goes on.
+	warned := false
+	drain := func() {
+		if err := logs.drain(ctx); err != nil && !warned {
+			c.printf("WARNING: %v; the exit code still comes from the task\n", err)
+			warned = true
+		}
+	}
+
 	for {
 		task, err := c.describe(ctx, taskARN)
 		if err != nil {
 			return 0, err
 		}
-		if err := logs.drain(ctx); err != nil {
-			return 0, err
-		}
+		drain()
 		if aws.ToString(task.LastStatus) == string(ecstypes.DesiredStatusStopped) {
-			// Events can reach CloudWatch shortly after the task stops.
-			if err := logs.drain(ctx); err != nil {
-				return 0, err
+			// Events can reach CloudWatch shortly after the task stops, and the
+			// last lines usually hold the failure reason.
+			select {
+			case <-ctx.Done():
+			case <-time.After(interval):
 			}
+			drain()
 			return exitCode(task)
 		}
 

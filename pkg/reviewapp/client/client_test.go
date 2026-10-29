@@ -286,3 +286,68 @@ func TestExecuteTimeout(t *testing.T) {
 		t.Fatalf("err = %v, want a deadline", err)
 	}
 }
+
+// failingLogs fails every read, as with AccessDenied or throttling.
+type failingLogs struct{ calls int }
+
+func (f *failingLogs) GetLogEvents(context.Context, *cwlogs.GetLogEventsInput, ...func(*cwlogs.Options)) (*cwlogs.GetLogEventsOutput, error) {
+	f.calls++
+	return nil, errors.New("AccessDeniedException")
+}
+
+func TestExecuteKeepsTheExitCodeWhenLogsFail(t *testing.T) {
+	e := &fakeECS{runningPolls: 2, exitCode: int32p(4)}
+	l := &failingLogs{}
+	var out bytes.Buffer
+	c := newTestClient(e, nil, &fakeManifests{}, &out)
+	c.Logs = l
+
+	res, err := c.Execute(context.Background(), Run{Command: "destroy", PR: 7})
+	if err != nil {
+		t.Fatalf("a log failure ended the run: %v", err)
+	}
+	if res.ExitCode != 4 {
+		t.Fatalf("exit code = %d, want 4", res.ExitCode)
+	}
+	if strings.Count(out.String(), "WARNING") != 1 {
+		t.Fatalf("want one warning, got:\n%s", out.String())
+	}
+	if l.calls < 4 {
+		t.Fatalf("logs read %d times; polling stopped early", l.calls)
+	}
+}
+
+// lateLogs returns its last line only after the task has stopped.
+type lateLogs struct {
+	ecs   *fakeECS
+	given bool
+}
+
+func (l *lateLogs) GetLogEvents(_ context.Context, in *cwlogs.GetLogEventsInput, _ ...func(*cwlogs.Options)) (*cwlogs.GetLogEventsOutput, error) {
+	if l.ecs.polls > l.ecs.runningPolls && !l.given && in.NextToken != nil {
+		l.given = true
+		return &cwlogs.GetLogEventsOutput{
+			Events:           []cwtypes.OutputLogEvent{{Message: aws.String("ERROR: bootstrap failed")}},
+			NextForwardToken: aws.String("2"),
+		}, nil
+	}
+	tok := in.NextToken
+	if tok == nil {
+		tok = aws.String("1")
+	}
+	return &cwlogs.GetLogEventsOutput{NextForwardToken: tok}, nil
+}
+
+func TestExecuteReadsLogsOnceMoreAfterTheTaskStops(t *testing.T) {
+	e := &fakeECS{runningPolls: 1, exitCode: int32p(1)}
+	var out bytes.Buffer
+	c := newTestClient(e, nil, &fakeManifests{}, &out)
+	c.Logs = &lateLogs{ecs: e}
+
+	if _, err := c.Execute(context.Background(), Run{Command: "create", PR: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "ERROR: bootstrap failed") {
+		t.Fatalf("the last line was lost:\n%s", out.String())
+	}
+}
