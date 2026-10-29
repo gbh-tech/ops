@@ -278,9 +278,14 @@ func TestManifestReadsExactVersion(t *testing.T) {
 		t.Fatalf("manifest = %+v, want the first upload", m)
 	}
 
-	first.SHA256 = "0000"
-	if _, err := s.GetManifest(ctx, 7, first); !errors.Is(err, ErrManifestMismatch) {
-		t.Fatalf("err = %v, want ErrManifestMismatch", err)
+	for name, ref := range map[string]ManifestRef{
+		"wrong sha256":  {VersionID: first.VersionID, SHA256: "0000"},
+		"no sha256":     {VersionID: first.VersionID},
+		"no version id": {SHA256: first.SHA256},
+	} {
+		if _, err := s.GetManifest(ctx, 7, ref); !errors.Is(err, ErrManifestMismatch) {
+			t.Fatalf("%s: err = %v, want ErrManifestMismatch", name, err)
+		}
 	}
 }
 

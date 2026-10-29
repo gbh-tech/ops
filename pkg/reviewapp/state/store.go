@@ -86,7 +86,7 @@ func (s *Store) Get(ctx context.Context, pr int) (*State, string, error) {
 		}
 		return nil, "", fmt.Errorf("get state of %s: %w", ID(pr), err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 
 	var st State
 	if err := json.NewDecoder(out.Body).Decode(&st); err != nil {
@@ -213,6 +213,9 @@ func (s *Store) PutManifest(ctx context.Context, m *Manifest) (ManifestRef, erro
 
 // GetManifest reads the exact manifest version a run uploaded and checks its hash.
 func (s *Store) GetManifest(ctx context.Context, pr int, ref ManifestRef) (*Manifest, error) {
+	if ref.VersionID == "" || ref.SHA256 == "" {
+		return nil, fmt.Errorf("%w: %s needs a version and a sha256", ErrManifestMismatch, ID(pr))
+	}
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket:    aws.String(s.bucket),
 		Key:       aws.String(ManifestKey(pr)),
@@ -221,13 +224,13 @@ func (s *Store) GetManifest(ctx context.Context, pr int, ref ManifestRef) (*Mani
 	if err != nil {
 		return nil, fmt.Errorf("get manifest of %s version %s: %w", ID(pr), ref.VersionID, err)
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 
 	body, err := io.ReadAll(out.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest of %s: %w", ID(pr), err)
 	}
-	if ref.SHA256 != "" && digest(body) != ref.SHA256 {
+	if digest(body) != ref.SHA256 {
 		return nil, fmt.Errorf("%w: %s version %s", ErrManifestMismatch, ID(pr), ref.VersionID)
 	}
 
