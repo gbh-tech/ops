@@ -81,7 +81,7 @@ type Client struct {
 
 // Run is one controller invocation.
 type Run struct {
-	// Command is the ops reviewapp subcommand, e.g. "create".
+	// Command is the ops reviewapp subcommand, e.g. "deploy".
 	Command string
 	PR      int
 	// Manifest, when set, is uploaded and passed to the controller by version.

@@ -121,7 +121,7 @@ func TestExecuteUploadsManifestAndPassesItsVersion(t *testing.T) {
 	c := newTestClient(e, &fakeLogs{}, m, &out)
 
 	manifest := &state.Manifest{PR: 7, SHA: "abc1234", Images: map[string]string{"shell": "pr-7-abc1234"}}
-	res, err := c.Execute(context.Background(), Run{Command: "create", PR: 7, Manifest: manifest, StartedBy: "github-42"})
+	res, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7, Manifest: manifest, StartedBy: "github-42"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestExecuteUploadsManifestAndPassesItsVersion(t *testing.T) {
 		t.Fatalf("override container = %s", aws.ToString(override.Name))
 	}
 	want := []string{
-		"reviewapp", "create", "--pr", "7",
+		"reviewapp", "deploy", "--pr", "7",
 		"--manifest-version", "v7", "--manifest-sha256", "abc",
 		"--in-cluster",
 		"--domain", "reviewapps.example.com",
@@ -210,7 +210,7 @@ func TestExecutePrintsLogsOnceAsTheyArrive(t *testing.T) {
 	var out bytes.Buffer
 	c := newTestClient(e, l, &fakeManifests{}, &out)
 
-	if _, err := c.Execute(context.Background(), Run{Command: "create", PR: 7}); err != nil {
+	if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7}); err != nil {
 		t.Fatal(err)
 	}
 	if l.stream != "controller/ops/abc123" {
@@ -246,7 +246,7 @@ func TestExecuteStartFailures(t *testing.T) {
 		"failure":   {failures: []ecstypes.Failure{{Reason: aws.String("RESOURCE:MEMORY")}}},
 	} {
 		c := newTestClient(e, &fakeLogs{}, &fakeManifests{}, &bytes.Buffer{})
-		if _, err := c.Execute(context.Background(), Run{Command: "create", PR: 7}); err == nil {
+		if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7}); err == nil {
 			t.Fatalf("%s: want an error", name)
 		}
 	}
@@ -256,7 +256,7 @@ func TestExecuteManifestUploadFailureStartsNothing(t *testing.T) {
 	e := &fakeECS{}
 	c := newTestClient(e, &fakeLogs{}, &fakeManifests{err: errors.New("AccessDenied")}, &bytes.Buffer{})
 
-	if _, err := c.Execute(context.Background(), Run{Command: "create", PR: 7, Manifest: &state.Manifest{PR: 7}}); err == nil {
+	if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7, Manifest: &state.Manifest{PR: 7}}); err == nil {
 		t.Fatal("want an error")
 	}
 	if e.runIn != nil {
@@ -268,7 +268,7 @@ func TestExecuteNoExitCode(t *testing.T) {
 	e := &fakeECS{exitCode: nil}
 	c := newTestClient(e, &fakeLogs{}, &fakeManifests{}, &bytes.Buffer{})
 
-	_, err := c.Execute(context.Background(), Run{Command: "create", PR: 7})
+	_, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7})
 	if err == nil || !strings.Contains(err.Error(), "Essential container in task exited") {
 		t.Fatalf("err = %v, want the stop reason", err)
 	}
@@ -279,7 +279,7 @@ func TestExecuteTimeout(t *testing.T) {
 	c := newTestClient(e, &fakeLogs{}, &fakeManifests{}, &bytes.Buffer{})
 	c.Timeout = 20 * time.Millisecond
 
-	_, err := c.Execute(context.Background(), Run{Command: "create", PR: 7})
+	_, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want a deadline", err)
 	}
@@ -342,7 +342,7 @@ func TestExecuteReadsLogsOnceMoreAfterTheTaskStops(t *testing.T) {
 	c := newTestClient(e, nil, &fakeManifests{}, &out)
 	c.Logs = &lateLogs{ecs: e}
 
-	if _, err := c.Execute(context.Background(), Run{Command: "create", PR: 7}); err != nil {
+	if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "ERROR: bootstrap failed") {
