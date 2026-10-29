@@ -133,7 +133,7 @@ var logsCmd = &cobra.Command{
 
 func init() {
 	pf := Command.PersistentFlags()
-	pf.String("domain", "", "Parent domain of review app hosts (default: reviewapps.domain in .ops/config.yaml)")
+	pf.String("domain", "", "Parent domain of review app hosts (default: reviewapps.domain in the ops config)")
 	pf.String("infra-ssm", "", "SSM parameter with the review app infrastructure (default: reviewapps.infra_ssm)")
 	pf.String("tools-image", "", "Helper image of the project (default: reviewapps.tools_image)")
 	pf.String("region", "", "AWS region (default: aws.region, then AWS_REGION)")
@@ -150,7 +150,7 @@ func init() {
 }
 
 // settings are the reviewapps: values, from flags first and then the
-// project's .ops/config.yaml. The controller task has no repository, so it
+// project's ops config (.ops/config.yaml or .ops/config.toml). The controller task has no repository, so it
 // gets every value as a flag.
 type settings struct {
 	domain     string
@@ -164,7 +164,7 @@ type settings struct {
 func resolveSettings(cmd *cobra.Command) settings {
 	var s settings
 	s.limit = config.DefaultReviewAppsLimit
-	if _, err := os.Stat(".ops/config.yaml"); err == nil {
+	if config.FindConfig(".") != "" {
 		cfg := config.LoadConfig()
 		s.domain = cfg.ReviewApps.Domain
 		s.infraSSM = cfg.ReviewApps.InfraSSM

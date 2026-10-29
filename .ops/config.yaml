@@ -99,7 +99,7 @@ ecs:
 #   resource_group: "gbh-rg"
 
 # Review apps (RFC 0004): per-PR environments on a shared ECS cluster, managed
-# by `ops reviewapp`. Only policy lives here; the cluster, network, ALB,
+# by `ops reviewapp`. In .ops/config.toml the same keys go under [reviewapps]. Only policy lives here; the cluster, network, ALB,
 # buckets and secret names come from the SSM parameter named by infra_ssm.
 # reviewapps:
 #   domain: reviewapps.example.com      # hosts are pr-<n>.<domain>

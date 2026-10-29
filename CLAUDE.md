@@ -47,7 +47,8 @@ changesets / commitlint tooling).
   small — they parse flags and delegate to `pkg/`.
 
 ### Configuration (`pkg/config`)
-- `config.LoadConfig()` reads `.ops/config.yaml` via Viper (env prefix `OPS`,
+- `config.LoadConfig()` reads `.ops/config.yaml` (or `.yml`, or `.toml`;
+  YAML wins when both exist) via Viper (env prefix `OPS`,
   AutomaticEnv on). The loaded `OpsConfig` struct fans out to per-area configs
   (`AWSConfig`, `AzureConfig`, `K8sConfig`, `ECSConfig`, `WerfConfig`,
   `RegistryConfig`, etc.).
