@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,26 +62,45 @@ type OpsConfig struct {
 
 var config OpsConfig
 
-// LoadConfig reads .ops/config.yaml into the package-level config singleton,
-// resolves the active cloud/deployment providers, and validates the active
-// cloud block. Callers receive a pointer to the populated config.
+// ConfigFiles are the ops config files under .ops/, in lookup order. YAML
+// comes first so a repository that has both keeps its current behavior.
+var ConfigFiles = []string{"config.yaml", "config.yml", "config.toml"}
+
+// FindConfig returns the path of the ops config under dir/.ops, or "" when
+// the directory has none.
+func FindConfig(dir string) string {
+	for _, name := range ConfigFiles {
+		p := filepath.Join(dir, ".ops", name)
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+			return p
+		}
+	}
+	return ""
+}
+
+// readConfig reads one ops config file, YAML or TOML by its extension.
+func readConfig(v *viper.Viper, path string, out *OpsConfig) error {
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil {
+		return err
+	}
+	return v.Unmarshal(out)
+}
+
+// LoadConfig reads .ops/config.yaml (or .yml, or .toml) into the
+// package-level config singleton, resolves the active cloud/deployment
+// providers, and validates the active cloud block. Callers receive a pointer
+// to the populated config.
 func LoadConfig() *OpsConfig {
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("config")
-	viper.AddConfigPath(".ops")
 	viper.SetEnvPrefix("ops")
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			log.Fatal("Ops config file not found")
-		}
-		log.Fatal("Failed to read Ops config file", "err", err)
+	path := FindConfig(".")
+	if path == "" {
+		log.Fatal("Ops config file not found", "looked_for", ".ops/"+strings.Join(ConfigFiles, ", .ops/"))
 	}
-
-	if err := viper.Unmarshal(&config); err != nil {
-		log.Fatal("Unable to parse Ops config file", "err", err)
+	if err := readConfig(viper.GetViper(), path, &config); err != nil {
+		log.Fatal("Failed to read Ops config file", "path", path, "err", err)
 	}
 
 	// Resolve the active providers before running per-block validators so
