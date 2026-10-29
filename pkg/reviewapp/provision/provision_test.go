@@ -17,11 +17,11 @@ import (
 
 var ctx = context.Background()
 
-func TestCreate(t *testing.T) {
+func TestDeployCreatesTheReviewApp(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(7, "abc1234")
 
-	if err := h.c.Create(ctx, 7, ref); err != nil {
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,34 +137,41 @@ func registered(h *harness, family string) *awsecs.RegisterTaskDefinitionInput {
 	return last
 }
 
-func TestCreateTwiceChangesNothing(t *testing.T) {
+func TestDeployTwiceUpdatesWithoutCreating(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(7, "abc1234")
-	if err := h.c.Create(ctx, 7, ref); err != nil {
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
 		t.Fatal(err)
 	}
 	ns, tgs, rules, services := h.aws.createdNamespace, h.aws.createdTGs, h.aws.createdRules, len(h.aws.created)
 
-	if err := h.c.Create(ctx, 7, ref); err != nil {
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
 		t.Fatal(err)
 	}
 	if h.aws.createdNamespace != ns || h.aws.createdTGs != tgs || h.aws.createdRules != rules || len(h.aws.created) != services {
-		t.Fatal("a second create created resources")
+		t.Fatal("a second deploy created resources")
 	}
 	if got := h.aws.runs[len(h.aws.runs)-1]; !slices.Equal(got, []string{"migrate"}) {
-		t.Fatalf("second create ran %v, want migrate", got)
+		t.Fatalf("second deploy ran %v, want migrate", got)
+	}
+	hist := h.store.states[7].History
+	if hist[0].Action != "create" || !slices.ContainsFunc(hist, func(e state.HistoryEntry) bool { return e.Action == "update" }) {
+		t.Fatalf("history = %+v", hist)
+	}
+	if got := h.comments.bodies[len(h.comments.bodies)-1]; !strings.Contains(got, "updated to commit") {
+		t.Fatalf("second comment = %q", got)
 	}
 	if len(h.store.states[7].Resources.ListenerRules) != 2 {
 		t.Fatalf("rules = %v", h.store.states[7].Resources.ListenerRules)
 	}
 }
 
-func TestCreateResumesAfterAFailedBootstrap(t *testing.T) {
+func TestDeployResumesAfterAFailedBootstrap(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(7, "abc1234")
 	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 1 }
 
-	err := h.c.Create(ctx, 7, ref)
+	err := h.c.Deploy(ctx, 7, ref)
 	if err == nil || !strings.Contains(err.Error(), "exited with code 1") {
 		t.Fatalf("err = %v, want the helper exit code", err)
 	}
@@ -174,7 +181,7 @@ func TestCreateResumesAfterAFailedBootstrap(t *testing.T) {
 	}
 
 	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 0 }
-	if err := h.c.Create(ctx, 7, ref); err != nil {
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
 		t.Fatal(err)
 	}
 	if h.store.states[7].Status != state.StatusReady {
@@ -188,26 +195,26 @@ func TestCreateResumesAfterAFailedBootstrap(t *testing.T) {
 	}
 }
 
-func TestCreateEleventhFails(t *testing.T) {
+func TestDeployEleventhFails(t *testing.T) {
 	h := newHarness()
 	for pr := 100; pr < 110; pr++ {
 		h.store.states[pr] = state.New(pr, "x", "a", "u", h.now)
 		h.store.etags[pr] = 1
 	}
-	err := h.c.Create(ctx, 7, h.manifest(7, "abc1234"))
+	err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234"))
 	if !errors.Is(err, state.ErrLimit) {
 		t.Fatalf("err = %v, want ErrLimit", err)
 	}
 	if _, ok := h.store.states[7]; ok || h.aws.createdNamespace != 0 {
-		t.Fatal("the eleventh create wrote state or created resources")
+		t.Fatal("the eleventh deploy wrote state or created resources")
 	}
 }
 
-func TestCreateMissingImageCreatesNothing(t *testing.T) {
+func TestDeployMissingImageCreatesNothing(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(7, "abc1234", ecrHost+"/shell:pr-abc1234")
 
-	err := h.c.Create(ctx, 7, ref)
+	err := h.c.Deploy(ctx, 7, ref)
 	if err == nil || !strings.Contains(err.Error(), "shell:pr-abc1234") {
 		t.Fatalf("err = %v, want the missing image named", err)
 	}
@@ -216,10 +223,10 @@ func TestCreateMissingImageCreatesNothing(t *testing.T) {
 	}
 }
 
-func TestCreateRefusesAManifestForAnotherPR(t *testing.T) {
+func TestDeployRefusesAManifestForAnotherPR(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(8, "abc1234")
-	if err := h.c.Create(ctx, 7, ref); err == nil {
+	if err := h.c.Deploy(ctx, 7, ref); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -239,9 +246,9 @@ func TestEnvironmentRefusesCredentials(t *testing.T) {
 	}
 }
 
-func TestDeploy(t *testing.T) {
+func TestDeployUpdatesToANewCommit(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	created := len(h.aws.created)
@@ -251,7 +258,7 @@ func TestDeploy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(h.aws.created) != created {
-		t.Fatal("deploy created services")
+		t.Fatal("an update created services")
 	}
 	if !strings.Contains(aws.ToString(h.aws.services["pr-7-shell"].TaskDefinition), "reviewapp-pr-7-shell:2") {
 		t.Fatalf("shell runs %s", aws.ToString(h.aws.services["pr-7-shell"].TaskDefinition))
@@ -270,7 +277,7 @@ func TestDeploy(t *testing.T) {
 
 func TestDestroy(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	// A neighbour whose names share the prefix must survive.
@@ -344,7 +351,7 @@ func TestDestroyWithoutStateUsesTags(t *testing.T) {
 
 func TestDestroyFailureKeepsTheState(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 2 }
@@ -372,7 +379,7 @@ func TestDestroyFailureKeepsTheState(t *testing.T) {
 
 func TestSleepAndWake(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.c.Sleep(ctx, 7); err != nil {
@@ -400,7 +407,7 @@ func TestSleepAndWake(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.c.Run(ctx, 7, "cron-alerts", nil); err != nil {
@@ -423,7 +430,7 @@ func TestRun(t *testing.T) {
 func TestGC(t *testing.T) {
 	h := newHarness()
 	for _, pr := range []int{1, 2, 3, 4} {
-		if err := h.c.Create(ctx, pr, h.manifest(pr, "sha"+strconv.Itoa(pr))); err != nil {
+		if err := h.c.Deploy(ctx, pr, h.manifest(pr, "sha"+strconv.Itoa(pr))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -461,7 +468,7 @@ func TestGC(t *testing.T) {
 
 func TestGCWarnsOnceBeforeExpiry(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	h.aws.requests = 1
@@ -480,7 +487,7 @@ func TestGCWarnsOnceBeforeExpiry(t *testing.T) {
 
 func TestGCWithAnErrorPublishesNoHeartbeat(t *testing.T) {
 	h := newHarness()
-	if err := h.c.Create(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	h.now = h.store.states[7].ExpiresAt.Add(time.Minute)
@@ -491,5 +498,38 @@ func TestGCWithAnErrorPublishesNoHeartbeat(t *testing.T) {
 	}
 	if len(h.aws.metrics) != 0 {
 		t.Fatal("published the heartbeat after a failed run")
+	}
+}
+
+func TestDeployWakesASleepingReviewApp(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.c.Sleep(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	created := h.store.states[7].CreatedAt
+
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "def5678")); err != nil {
+		t.Fatal(err)
+	}
+	st := h.store.states[7]
+	if st.Status != state.StatusReady || h.aws.services["pr-7-shell"].DesiredCount != 1 {
+		t.Fatalf("after deploy: %s desired=%d", st.Status, h.aws.services["pr-7-shell"].DesiredCount)
+	}
+	if !st.CreatedAt.Equal(created) || !st.ExpiresAt.Equal(created.Add(state.TTL)) {
+		t.Fatal("an update moved the TTL")
+	}
+}
+
+func TestDeployRefusesAReviewAppBeingDestroyed(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.store.states[7].Status = state.StatusDestroying
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "def5678")); err == nil || !strings.Contains(err.Error(), "being destroyed") {
+		t.Fatalf("err = %v", err)
 	}
 }

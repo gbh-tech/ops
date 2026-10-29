@@ -16,104 +16,99 @@ import (
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
-// Create creates a review app, or resumes one whose last run failed. Every
-// step is idempotent and the state is saved after each, so running create
-// twice changes nothing and a failed create can be resumed or destroyed.
-func (c *Controller) Create(ctx context.Context, pr int, ref state.ManifestRef) error {
-	m, err := c.manifest(ctx, pr, ref)
-	if err != nil {
-		return err
-	}
-	// Check every image before creating anything.
-	if err := c.checkImages(ctx, m); err != nil {
-		return err
-	}
-
-	t, err := c.begin(ctx, pr, m)
-	if err != nil {
-		return err
-	}
-	if t.Status == state.StatusDestroying {
-		return fmt.Errorf("%s is being destroyed; run destroy again before creating it", t.ID)
-	}
-	t.Status = state.StatusCreating
-	t.SHA = m.SHA
-	t.Manifest = ref
-	c.record(t, "create")
-	if err := c.save(ctx, t); err != nil {
-		return err
-	}
-
-	if err := c.provision(ctx, t, m, "bootstrap"); err != nil {
-		return c.fail(ctx, t, err)
-	}
-	c.comment(ctx, pr, fmt.Sprintf("Review app ready: %s (commit %s). It expires %s.",
-		t.URL, shortSHA(m.SHA), t.ExpiresAt.Format("Mon Jan 2 15:04 UTC")))
-	return nil
-}
-
-// Deploy updates a review app to a new manifest: helper image, migrations,
-// task definitions and services. The namespace, database and rules stay.
+// Deploy brings a review app to a manifest. Without state it creates the
+// review app: checks the limit, writes the state and runs bootstrap. With
+// state it updates it: runs migrate and moves the services to the new task
+// definitions. A review app whose last run failed resumes from where it
+// stopped, and a sleeping one wakes. Every step is idempotent and the state
+// is saved after each.
 func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) error {
 	m, err := c.manifest(ctx, pr, ref)
 	if err != nil {
 		return err
 	}
+	// Check every image before changing anything.
 	if err := c.checkImages(ctx, m); err != nil {
 		return err
 	}
-	st, etag, err := c.Store.Get(ctx, pr)
+
+	t, created, err := c.begin(ctx, pr, m)
 	if err != nil {
 		return err
 	}
-	t := &tracked{State: st, etag: etag}
 	if t.Status == state.StatusDestroying {
-		return fmt.Errorf("%s is being destroyed", t.ID)
+		return fmt.Errorf("%s is being destroyed; run destroy again before deploying it", t.ID)
+	}
+	// A ready review app keeps serving while it updates.
+	if t.Status != state.StatusReady {
+		t.Status = state.StatusCreating
 	}
 	t.SHA = m.SHA
 	t.Manifest = ref
 	t.LastActivityAt = c.now()
-	c.record(t, "deploy")
+	action := "update"
+	if created {
+		action = "create"
+	}
+	c.record(t, action)
 	if err := c.save(ctx, t); err != nil {
 		return err
 	}
-	if err := c.provision(ctx, t, m, "migrate"); err != nil {
+
+	// bootstrap until it has run once, migrate afterwards.
+	tools := "migrate"
+	if !t.Resources.Bootstrapped {
+		tools = "bootstrap"
+	}
+	if err := c.provision(ctx, t, m, tools); err != nil {
 		return c.fail(ctx, t, err)
 	}
-	c.comment(ctx, pr, fmt.Sprintf("Review app updated to commit %s: %s", shortSHA(m.SHA), t.URL))
+
+	if created {
+		c.comment(ctx, pr, fmt.Sprintf("Review app ready: %s (commit %s). It expires %s.",
+			t.URL, shortSHA(m.SHA), t.ExpiresAt.Format("Mon Jan 2 15:04 UTC")))
+	} else {
+		c.comment(ctx, pr, fmt.Sprintf("Review app updated to commit %s: %s", shortSHA(m.SHA), t.URL))
+	}
 	return nil
 }
 
-// begin returns the state to work on: a new one, checked against the limit,
-// or the existing one when this run resumes.
-func (c *Controller) begin(ctx context.Context, pr int, m *state.Manifest) (*tracked, error) {
+// begin returns the state to work on and whether this run created it: the
+// existing state when there is one, otherwise a new one checked against the
+// limit.
+func (c *Controller) begin(ctx context.Context, pr int, m *state.Manifest) (*tracked, bool, error) {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err == nil {
-		c.logf("Resuming %s (status %s)", st.ID, st.Status)
-		return &tracked{State: st, etag: etag}, nil
+		c.logf("Updating %s (status %s)", st.ID, st.Status)
+		return &tracked{State: st, etag: etag}, false, nil
 	}
 	if !errors.Is(err, state.ErrNotFound) {
-		return nil, err
+		return nil, false, err
 	}
 	if err := c.Store.CheckLimit(ctx, c.Limit); err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	c.logf("Creating %s", state.ID(pr))
 	st = state.New(pr, m.SHA, c.Actor, reviewapp.URL(pr, c.Domain), c.now())
 	st.Resources.KafkaTopicPrefix = reviewapp.TopicPrefix(pr)
 	st.Resources.S3DataPrefix = reviewapp.DataPrefix(pr)
 	etag, err = c.Store.Create(ctx, st)
 	if errors.Is(err, state.ErrExists) {
-		// Another run created it after our read; continue from its state.
+		// Another run created it after our read; update its state instead.
 		st, etag, err = c.Store.Get(ctx, pr)
+		if err != nil {
+			return nil, false, err
+		}
+		return &tracked{State: st, etag: etag}, false, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &tracked{State: st, etag: etag}, nil
+	return &tracked{State: st, etag: etag}, true, nil
 }
 
 // provision brings a review app to the manifest, running the helper command
-// (bootstrap on the first create, migrate afterwards) before the services.
+// (bootstrap or migrate) before the services.
 func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifest, tools string) error {
 	pr := t.PR
 
@@ -148,10 +143,6 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
-	// A resumed create whose bootstrap already ran only migrates.
-	if tools == "bootstrap" && t.Resources.Bootstrapped {
-		tools = "migrate"
-	}
 	if err := c.runOneOff(ctx, oneOff{PR: pr, Unit: ToolsUnit, Family: toolsARN, Container: ToolsContainer, Command: []string{tools}}); err != nil {
 		return err
 	}
@@ -186,10 +177,8 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
+	// A deploy always leaves the review app running, so a sleeping one wakes.
 	desired := int32(1)
-	if t.Status == state.StatusSleeping {
-		desired = 0
-	}
 	t.Config = map[string]state.Env{}
 	var services []string
 	for _, unit := range sortedKeys(m.Units) {
@@ -221,13 +210,11 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		}
 	}
 
-	if desired > 0 {
-		c.logf("Waiting for %d services to reach steady state", len(services))
-		if err := c.waitStable(ctx, services); err != nil {
-			return err
-		}
-		t.Status = state.StatusReady
+	c.logf("Waiting for %d services to reach steady state", len(services))
+	if err := c.waitStable(ctx, services); err != nil {
+		return err
 	}
+	t.Status = state.StatusReady
 	c.record(t, string(t.Status))
 	return c.save(ctx, t)
 }

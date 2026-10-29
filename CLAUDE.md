@@ -99,9 +99,10 @@ changesets / commitlint tooling).
 - `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
   review app section into the `UnitSpec` that travels in the manifest. The
   client renders; the controller never reads the repository.
-- `pkg/reviewapp/provision` — in-cluster mode: `Create`, `Deploy`,
-  `Destroy`, `Sleep`, `Wake`, `Run`, `GC`. Every step is idempotent and saves
-  the state, so a failed create resumes or destroys cleanly. Destroy also
+- `pkg/reviewapp/provision` — in-cluster mode: `Deploy`, `Destroy`,
+  `Sleep`, `Wake`, `Run`, `GC`. `Deploy` creates the review app when it has
+  no state and updates it when it does. Every step is idempotent and saves
+  the state, so a failed deploy resumes or destroys cleanly. Destroy also
   finds resources by the `reviewapp=pr-<n>` tag. Public routes, the DB owner
   role and the Service Connect domain come from the blueprint parameter
   (`blueprint_ssm` in the infra parameter), which Terraform writes.

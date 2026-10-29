@@ -82,16 +82,16 @@ func TestMutatingCommandsAreRegistered(t *testing.T) {
 	for _, c := range Command.Commands() {
 		names[c.Name()] = true
 	}
-	for _, name := range []string{"create", "deploy", "destroy", "sleep", "wake", "run", "gc"} {
+	for _, name := range []string{"deploy", "destroy", "sleep", "wake", "run", "gc"} {
 		if !names[name] {
 			t.Fatalf("%s not registered", name)
 		}
 	}
-	for _, c := range []string{"create", "deploy"} {
-		cmd, _, _ := Command.Find([]string{c})
-		if cmd.Flags().Lookup("manifest") == nil {
-			t.Fatalf("%s has no --manifest", c)
-		}
+	if names["create"] {
+		t.Fatal("create is registered; deploy creates or updates")
+	}
+	if deployCmd.Flags().Lookup("manifest") == nil {
+		t.Fatal("deploy has no --manifest")
 	}
 	for _, flag := range []string{"in-cluster", "manifest-version", "manifest-sha256"} {
 		if f := Command.PersistentFlags().Lookup(flag); f == nil || !f.Hidden {

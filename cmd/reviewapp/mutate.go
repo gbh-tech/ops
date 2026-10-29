@@ -37,25 +37,16 @@ import (
 // what the controller needs and runs it in the reviewapp-controller task
 // (client mode); with --in-cluster it does the work (D11).
 
-var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a review app for a pull request, or resume a failed one",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
-		pr := prFlag(cmd)
-		if inCluster(cmd) {
-			c := controller(cmd)
-			must(c.Create(c.ctx, pr, manifestRef(cmd)))
-			return
-		}
-		runClient(cmd, client.Run{Command: "create", PR: pr, Manifest: clientManifest(cmd, pr)})
-	},
-}
-
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
-	Short: "Deploy a new commit to an existing review app",
-	Args:  cobra.NoArgs,
+	Short: "Create the review app of a pull request, or update it to a new commit",
+	Long: `Deploy brings the review app of a pull request to the images in --manifest.
+
+The first run creates it: namespace, database, bootstrap (topics, migrations,
+seed), target groups, listener rules and services. Later runs find its state
+and update it: migrations and new task definitions. A failed run resumes
+where it stopped, and a sleeping review app wakes.`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pr := prFlag(cmd)
 		if inCluster(cmd) {
@@ -162,15 +153,13 @@ func init() {
 		_ = pf.MarkHidden(name)
 	}
 
-	for _, c := range []*cobra.Command{createCmd, deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd} {
+	for _, c := range []*cobra.Command{deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd} {
 		c.Flags().Int("pr", 0, "Pull request number")
 	}
-	for _, c := range []*cobra.Command{createCmd, deployCmd} {
-		c.Flags().String("manifest", "", "Manifest file: {pr, sha, tag, images: {unit: image}} (client mode)")
-	}
+	deployCmd.Flags().String("manifest", "", "Manifest file: {pr, sha, tag, images: {unit: image}} (client mode)")
 	sleepCmd.Flags().Bool("all", false, "Sleep every ready review app (in-cluster only)")
 
-	Command.AddCommand(createCmd, deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd, gcCmd)
+	Command.AddCommand(deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd, gcCmd)
 }
 
 func must(err error) {
