@@ -56,6 +56,9 @@ type OpsConfig struct {
 	// Registry holds optional overrides; the registry kind and URL are
 	// otherwise derived from the active cloud provider.
 	Registry RegistryConfig `mapstructure:"registry"`
+
+	// ReviewApps configures ops reviewapp (RFC 0004).
+	ReviewApps ReviewAppsConfig `mapstructure:"reviewapps"`
 }
 
 var config OpsConfig

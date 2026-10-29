@@ -10,6 +10,7 @@ import (
 	imagecmd "ops/cmd/image"
 	"ops/cmd/kube"
 	"ops/cmd/registry"
+	reviewappcmd "ops/cmd/reviewapp"
 	"ops/cmd/secrets"
 	"os"
 
@@ -46,4 +47,5 @@ func init() {
 	rootCmd.AddCommand(secrets.Command)
 	rootCmd.AddCommand(imagecmd.BuildCommand)
 	rootCmd.AddCommand(imagecmd.PushCommand)
+	rootCmd.AddCommand(reviewappcmd.Command)
 }
