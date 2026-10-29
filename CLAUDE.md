@@ -84,6 +84,10 @@ changesets / commitlint tooling).
   and `werf.values_files` in config, layered with per-env files discovered
   under those directories.
 - `pkg/github` — go-github client (used by `git tag-cleaner`).
+- `pkg/reviewapp/state` — S3 registry of review apps (RFC 0004):
+  `reviewapps/pr-<n>/state.json` and `manifest.json`, `archive/` after
+  destroy. Writes are conditional (If-None-Match / If-Match), so a losing
+  writer gets `ErrExists` or `ErrConflict` instead of overwriting.
 - `pkg/utils` — shared helpers: `bin.go` (locate/run external binaries),
   `cobra.go` (flag plumbing), `git.go`, `env.go`, `system.go`,
   `registry.go`. Most commands rely on `utils.RunCommand`-style shell-outs
