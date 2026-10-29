@@ -97,8 +97,8 @@ changesets / commitlint tooling).
   the client passes the `reviewapps:` values as flags.
 - `cmd/reviewapp` — `ops reviewapp list|status|logs`. Settings come from
   flags first, then `.ops/config.yaml`, so the commands also run in the
-  controller image (`ghcr.io/gbh-tech/ops`, built by GoReleaser from
-  `Dockerfile`).
+  controller task, which has no repository. The project builds that image
+  from a released binary; ops publishes no image.
 - `pkg/utils` — shared helpers: `bin.go` (locate/run external binaries),
   `cobra.go` (flag plumbing), `git.go`, `env.go`, `system.go`,
   `registry.go`. Most commands rely on `utils.RunCommand`-style shell-outs
