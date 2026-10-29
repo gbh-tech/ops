@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.0
+
+### Minor Changes
+
+- 970717b: Add the `pkg/reviewapp/state` package: the S3 registry of review apps with conditional writes, the running limit, manifests by version, and archive on destroy.
+
 ## 1.18.0
 
 ### Minor Changes
