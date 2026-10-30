@@ -137,6 +137,7 @@ func init() {
 	pf.String("infra-ssm", "", "SSM parameter with the review app infrastructure (default: reviewapps.infra_ssm)")
 	pf.String("tools-image", "", "Helper image of the project (default: reviewapps.tools_image)")
 	pf.String("region", "", "AWS region (default: aws.region, then AWS_REGION)")
+	pf.Duration("idle-pause", 0, "Time without requests before gc pauses a review app (default: reviewapps.idle_pause, then 2h)")
 
 	listCmd.Flags().Bool("json", false, "Print JSON")
 	statusCmd.Flags().Bool("json", false, "Print JSON")
@@ -159,6 +160,7 @@ type settings struct {
 	region     string
 	profile    string
 	limit      int
+	idlePause  time.Duration
 }
 
 func resolveSettings(cmd *cobra.Command) settings {
@@ -175,6 +177,7 @@ func resolveSettings(cmd *cobra.Command) settings {
 		s.infraSSM = cfg.ReviewApps.InfraSSM
 		s.toolsImage = cfg.ReviewApps.ToolsImage
 		s.limit = cfg.ReviewApps.ResolvedLimit()
+		s.idlePause = cfg.ReviewApps.IdlePause
 		s.region = cfg.AWS.Region
 		s.profile = cfg.AWS.Profile
 	}
@@ -187,6 +190,9 @@ func resolveSettings(cmd *cobra.Command) settings {
 		if v, _ := cmd.Flags().GetString(flag); v != "" {
 			*dst = v
 		}
+	}
+	if v, _ := cmd.Flags().GetDuration("idle-pause"); v > 0 {
+		s.idlePause = v
 	}
 	if s.region == "" {
 		s.region = os.Getenv("AWS_REGION")

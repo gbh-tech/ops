@@ -61,6 +61,13 @@ type Settings struct {
 	InfraSSM   string
 	ToolsImage string
 	Region     string
+	// Repository (owner/name) is where the controller comments.
+	Repository string
+	// IdlePause, when set, is passed on so gc runs see the project's value.
+	IdlePause time.Duration
+	// Actor and RunURL go into the review app's history.
+	Actor  string
+	RunURL string
 }
 
 // Client starts controller runs.
@@ -86,7 +93,8 @@ type Run struct {
 	PR      int
 	// Manifest, when set, is uploaded and passed to the controller by version.
 	Manifest *state.Manifest
-	// Args are extra subcommand arguments, e.g. a unit name for run.
+	// Args are extra subcommand arguments, e.g. "--", a unit and its command
+	// for run. They follow every flag.
 	Args []string
 	// StartedBy identifies the caller in ECS, e.g. the GitHub run id.
 	StartedBy string
@@ -140,7 +148,6 @@ func (c *Client) Execute(ctx context.Context, r Run) (*Result, error) {
 // --in-cluster and the settings the controller cannot read from a repository.
 func (c *Client) Command(r Run, ref *state.ManifestRef) []string {
 	cmd := []string{"reviewapp", r.Command, "--pr", strconv.Itoa(r.PR)}
-	cmd = append(cmd, r.Args...)
 	if ref != nil {
 		cmd = append(cmd, "--manifest-version", ref.VersionID, "--manifest-sha256", ref.SHA256)
 	}
@@ -151,7 +158,21 @@ func (c *Client) Command(r Run, ref *state.ManifestRef) []string {
 		"--tools-image", c.Settings.ToolsImage,
 		"--region", c.Settings.Region,
 	)
-	return cmd
+	for _, kv := range [][2]string{
+		{"--repository", c.Settings.Repository},
+		{"--actor", c.Settings.Actor},
+		{"--run-url", c.Settings.RunURL},
+	} {
+		if kv[1] != "" {
+			cmd = append(cmd, kv[0], kv[1])
+		}
+	}
+	if c.Settings.IdlePause > 0 {
+		cmd = append(cmd, "--idle-pause", c.Settings.IdlePause.String())
+	}
+	// Arguments go last, after "--" when the caller passes one, so a
+	// command for a one-off task is never read as ops flags.
+	return append(cmd, r.Args...)
 }
 
 func (c *Client) start(ctx context.Context, r Run, ref *state.ManifestRef) (string, error) {

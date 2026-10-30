@@ -26,3 +26,50 @@ func Service(pr int, unit string) string {
 func LogStreamPrefix(pr int) string {
 	return fmt.Sprintf("pr-%d", pr)
 }
+
+// TagKey is the tag every review app resource carries, with value pr-<n>.
+const TagKey = "reviewapp"
+
+// Namespace returns the Service Connect namespace of a review app.
+func Namespace(pr int) string {
+	return fmt.Sprintf("reviewapp-pr-%d", pr)
+}
+
+// Database returns the database of a review app.
+func Database(pr int) string {
+	return fmt.Sprintf("reviewapp_pr_%d", pr)
+}
+
+// TopicPrefix returns the Kafka topic prefix of a review app.
+func TopicPrefix(pr int) string {
+	return fmt.Sprintf("pr-%d.", pr)
+}
+
+// DataPrefix returns the key prefix of a review app in the data bucket.
+func DataPrefix(pr int) string {
+	return fmt.Sprintf("pr-%d/", pr)
+}
+
+// Family returns the task definition family of a unit.
+func Family(pr int, unit string) string {
+	return fmt.Sprintf("reviewapp-pr-%d-%s", pr, unit)
+}
+
+// ToolsFamily returns the task definition family of the helper tasks.
+func ToolsFamily(pr int) string {
+	return Family(pr, "tools")
+}
+
+// TargetGroup returns the target group name of a unit: pr-<n>-<unit>, cut
+// to the 32-character limit without a trailing hyphen. The controller's IAM
+// policy only allows target groups named pr-*.
+func TargetGroup(pr int, unit string) string {
+	name := fmt.Sprintf("pr-%d-%s", pr, unit)
+	if len(name) > 32 {
+		name = name[:32]
+	}
+	for len(name) > 0 && name[len(name)-1] == '-' {
+		name = name[:len(name)-1]
+	}
+	return name
+}

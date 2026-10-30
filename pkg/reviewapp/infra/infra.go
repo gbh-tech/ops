@@ -106,6 +106,7 @@ func (inf *Infra) validate() error {
 		"buckets.state":              inf.Buckets.State,
 		"units_ssm":                  inf.UnitsSSM,
 		"controller.task_definition": inf.Controller.TaskDefinition,
+		"alb.arn":                    inf.ALB.ARN,
 		"alb.https_listener_arn":     inf.ALB.HTTPSListenerARN,
 		"network.vpc_id":             inf.Network.VPCID,
 		"secrets.db":                 inf.Secrets.DB,
@@ -137,4 +138,71 @@ func getJSON(ctx context.Context, client API, name string, v any) error {
 		return fmt.Errorf("parse SSM parameter %s: %w", name, err)
 	}
 	return nil
+}
+
+// Blueprint is the content of the blueprint parameter: what the project's
+// catalog says about review apps that no unit config holds. Terraform writes
+// it from the same catalog that builds the shared environments.
+type Blueprint struct {
+	// DBOwnerRole owns each review app database. The other roles whose
+	// passwords are in the db secret get access to it.
+	DBOwnerRole string `json:"db_owner_role"`
+	// ServiceConnectDomain is the suffix of each unit's Service Connect alias
+	// (<unit>.<domain>), the same names the shared environments use.
+	ServiceConnectDomain string `json:"service_connect_domain"`
+	// Routes are the units the ALB serves, by unit name.
+	Routes map[string]Route `json:"routes"`
+}
+
+// Route is how the ALB serves one unit on the review app host.
+type Route struct {
+	Port            int    `json:"port"`
+	HealthCheckPath string `json:"health_check_path"`
+	// HealthCheckPort is the target group health check port when it differs
+	// from Port.
+	HealthCheckPort int `json:"health_check_port,omitempty"`
+	// Rules are the path patterns of each listener rule, most specific first.
+	// A rule holds at most four patterns: the host header takes the fifth
+	// condition value.
+	Rules [][]string `json:"rules"`
+}
+
+// LoadBlueprint reads and validates the blueprint parameter.
+func (inf *Infra) LoadBlueprint(ctx context.Context, client API) (*Blueprint, error) {
+	if inf.BlueprintSSM == "" {
+		return nil, errors.New("the infra parameter names no blueprint_ssm")
+	}
+	var bp Blueprint
+	if err := getJSON(ctx, client, inf.BlueprintSSM, &bp); err != nil {
+		return nil, err
+	}
+	if bp.DBOwnerRole == "" || bp.ServiceConnectDomain == "" {
+		return nil, fmt.Errorf("parameter %s: db_owner_role and service_connect_domain are required", inf.BlueprintSSM)
+	}
+	for unit, r := range bp.Routes {
+		if r.Port == 0 || r.HealthCheckPath == "" || len(r.Rules) == 0 {
+			return nil, fmt.Errorf("parameter %s: route %s needs port, health_check_path and rules", inf.BlueprintSSM, unit)
+		}
+		for _, rule := range r.Rules {
+			if len(rule) == 0 || len(rule) > 4 {
+				return nil, fmt.Errorf("parameter %s: route %s has a rule with %d path patterns, want 1 to 4", inf.BlueprintSSM, unit, len(rule))
+			}
+		}
+	}
+	return &bp, nil
+}
+
+// SecretARNPrefix returns arn:aws:secretsmanager:<region>:<account>:secret,
+// taken from the cluster ARN, to build secret references.
+func (inf *Infra) SecretARNPrefix() string {
+	parts := strings.Split(inf.Cluster.ARN, ":")
+	if len(parts) < 5 {
+		return ""
+	}
+	return fmt.Sprintf("arn:%s:secretsmanager:%s:%s:secret", parts[1], parts[3], parts[4])
+}
+
+// SecretRef returns the ECS valueFrom of one JSON key of a secret.
+func (inf *Infra) SecretRef(secret, key string) string {
+	return inf.SecretARNPrefix() + ":" + secret + ":" + key + "::"
 }

@@ -96,10 +96,22 @@ changesets / commitlint tooling).
   manifest, runs the `reviewapp-controller` task with `--in-cluster`, prints
   its logs and returns its exit code. The controller has no repository, so
   the client passes the `reviewapps:` values as flags.
-- `cmd/reviewapp` — `ops reviewapp list|status|logs`. Settings come from
-  flags first, then `.ops/config.yaml`, so the commands work without a
-  repository. The project builds the controller image from a released
-  binary; ops publishes no image.
+- `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
+  review app section into the `UnitSpec` that travels in the manifest. The
+  client renders; the controller never reads the repository.
+- `pkg/reviewapp/provision` — in-cluster mode: `Deploy`, `Destroy`,
+  `Pause`, `Unpause`, `Run`, `GC`. `Deploy` creates the review app when it has
+  no state and updates it when it does. Every step is idempotent and saves
+  the state, so a failed deploy resumes or destroys cleanly. Destroy also
+  finds resources by the `reviewapp=pr-<n>` tag. Public routes, the DB owner
+  role and the Service Connect domain come from the blueprint parameter
+  (`blueprint_ssm` in the infra parameter), which Terraform writes.
+- `cmd/reviewapp` — `ops reviewapp list|status|logs` and the commands that
+  change a review app (client mode by default, `--in-cluster` in the
+  controller). Settings come from flags first, then `.ops/config.yaml`, so
+  the commands also run in the controller task, which has no repository.
+  The project builds that image from a released binary; ops publishes no
+  image.
 - `pkg/utils` — shared helpers: `bin.go` (locate/run external binaries),
   `cobra.go` (flag plumbing), `git.go`, `env.go`, `system.go`,
   `registry.go`. Most commands rely on `utils.RunCommand`-style shell-outs

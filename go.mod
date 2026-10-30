@@ -8,16 +8,22 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.47.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
+	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.75.2
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.68.0
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.67.1
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.78.0
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.63.6
+	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.23
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.5
+	github.com/aws/aws-sdk-go-v2/service/servicediscovery v1.49.7
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.81.1
 	github.com/aws/smithy-go v1.28.7
 	github.com/charmbracelet/huh v1.0.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v84 v84.0.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -68,6 +74,8 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
