@@ -87,6 +87,17 @@ func readConfig(v *viper.Viper, path string, out *OpsConfig) error {
 	return v.Unmarshal(out)
 }
 
+// Read reads one ops config file without resolving providers or validating
+// any block, for commands that only need a few settings and let flags
+// override them.
+func Read(path string) (*OpsConfig, error) {
+	var cfg OpsConfig
+	if err := readConfig(viper.New(), path, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
 // LoadConfig reads .ops/config.yaml (or .yml, or .toml) into the
 // package-level config singleton, resolves the active cloud/deployment
 // providers, and validates the active cloud block. Callers receive a pointer
