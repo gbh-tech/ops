@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.20.0
+
+### Minor Changes
+
+- 0e69fd2: Add `ops reviewapp list`, `status` and `logs`, the `reviewapps:` config section, and the client groundwork for running review app commands in the controller task (the commands that use it come next). The ops config can now also be `.ops/config.toml`.
+- 515d21d: Add `ops reviewapp deploy`, `destroy`, `pause`, `unpause`, `run` and `gc`. `deploy` creates the review app the first time and updates it after that. `gc` pauses review apps after `reviewapps.idle_pause` (default 2h) without requests. Outside the cluster they run in the review app controller task; with `--in-cluster` they create and remove the per-PR namespace, database, helper tasks, task definitions, target groups, listener rules and services.
+
 ## 1.19.0
 
 ### Minor Changes
