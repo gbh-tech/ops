@@ -82,7 +82,7 @@ func TestMutatingCommandsAreRegistered(t *testing.T) {
 	for _, c := range Command.Commands() {
 		names[c.Name()] = true
 	}
-	for _, name := range []string{"deploy", "destroy", "sleep", "wake", "run", "gc"} {
+	for _, name := range []string{"deploy", "destroy", "pause", "unpause", "run", "gc"} {
 		if !names[name] {
 			t.Fatalf("%s not registered", name)
 		}

@@ -22,7 +22,7 @@ type Status string
 const (
 	StatusCreating   Status = "creating"
 	StatusReady      Status = "ready"
-	StatusSleeping   Status = "sleeping"
+	StatusPaused     Status = "paused"
 	StatusFailed     Status = "failed"
 	StatusDestroying Status = "destroying"
 )
@@ -30,9 +30,9 @@ const (
 // TTL is how long a review app lives, counted in wall-clock hours from creation.
 const TTL = 48 * time.Hour
 
-// IdleTimeout is how long a ready review app can go without requests before
-// gc puts it to sleep.
-const IdleTimeout = 8 * time.Hour
+// DefaultIdlePause is how long a ready review app can go without requests
+// before gc pauses it. reviewapps.idle_pause overrides it.
+const DefaultIdlePause = 2 * time.Hour
 
 // ExpiryWarning is how long before expiry gc warns on the PR.
 const ExpiryWarning = time.Hour

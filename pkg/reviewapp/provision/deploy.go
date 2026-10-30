@@ -20,7 +20,7 @@ import (
 // review app: checks the limit, writes the state and runs bootstrap. With
 // state it updates it: runs migrate and moves the services to the new task
 // definitions. A review app whose last run failed resumes from where it
-// stopped, and a sleeping one wakes. Every step is idempotent and the state
+// stopped, and a paused one is unpaused. Every step is idempotent and the state
 // is saved after each.
 func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) error {
 	m, err := c.manifest(ctx, pr, ref)
@@ -177,7 +177,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
-	// A deploy always leaves the review app running, so a sleeping one wakes.
+	// A deploy always leaves the review app running, so a paused one restarts.
 	desired := int32(1)
 	t.Config = map[string]state.Env{}
 	var services []string

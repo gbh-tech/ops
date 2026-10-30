@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Defaults of the reviewapps: section. A project overrides them in the same
 // section; leopard-platform needs none.
 const (
@@ -24,6 +26,9 @@ type ReviewAppsConfig struct {
 	Env string `mapstructure:"env"`
 	// Limit is how many review apps can run at once. Defaults to 10.
 	Limit int `mapstructure:"limit"`
+	// IdlePause is how long a review app can go without requests before it
+	// is paused, e.g. "2h". Empty means the ops default (2h).
+	IdlePause time.Duration `mapstructure:"idle_pause"`
 }
 
 // Defined reports whether the section is present.

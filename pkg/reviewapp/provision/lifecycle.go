@@ -16,6 +16,13 @@ import (
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 )
 
+func (c *Controller) idlePause() time.Duration {
+	if c.IdlePause > 0 {
+		return c.IdlePause
+	}
+	return state.DefaultIdlePause
+}
+
 // MetricNamespace is the CloudWatch namespace of the gc heartbeat.
 const MetricNamespace = "ReviewApps"
 
@@ -23,30 +30,31 @@ const MetricNamespace = "ReviewApps"
 // its absence catches a broken scheduler.
 const MetricGcSuccess = "ReviewAppGcSuccess"
 
-// Sleep scales every service of a review app to zero.
-func (c *Controller) Sleep(ctx context.Context, pr int) error {
+// Pause scales every service of a review app to zero. The database, rules
+// and state stay, so Unpause brings it back as it was.
+func (c *Controller) Pause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
 		return err
 	}
-	return c.sleepState(ctx, &tracked{State: st, etag: etag})
+	return c.pauseState(ctx, &tracked{State: st, etag: etag})
 }
 
-func (c *Controller) sleepState(ctx context.Context, t *tracked) error {
+func (c *Controller) pauseState(ctx context.Context, t *tracked) error {
 	if t.Status != state.StatusReady {
-		return fmt.Errorf("%s is %s; only a ready review app can sleep", t.ID, t.Status)
+		return fmt.Errorf("%s is %s; only a ready review app can be paused", t.ID, t.Status)
 	}
 	if err := c.scale(ctx, t.Resources.Services, 0); err != nil {
 		return err
 	}
-	t.Status = state.StatusSleeping
-	c.record(t, "sleep")
-	c.logf("%s is asleep", t.ID)
+	t.Status = state.StatusPaused
+	c.record(t, "pause")
+	c.logf("%s is paused", t.ID)
 	return c.save(ctx, t)
 }
 
-// SleepAll puts every ready review app to sleep (the evening schedule).
-func (c *Controller) SleepAll(ctx context.Context) error {
+// PauseAll pauses every ready review app (an evening schedule).
+func (c *Controller) PauseAll(ctx context.Context) error {
 	states, err := c.Store.List(ctx)
 	if err != nil {
 		return err
@@ -57,23 +65,23 @@ func (c *Controller) SleepAll(ctx context.Context) error {
 			continue
 		}
 		// Re-read for a fresh ETag: List does not return one.
-		if err := c.Sleep(ctx, st.PR); err != nil {
+		if err := c.Pause(ctx, st.PR); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", st.ID, err))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// Wake scales a sleeping review app back up and restarts its idle clock.
-// The TTL keeps counting while it sleeps (D7).
-func (c *Controller) Wake(ctx context.Context, pr int) error {
+// Unpause scales a paused review app back up and restarts its idle clock.
+// The TTL keeps counting while it is paused (D7).
+func (c *Controller) Unpause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
 		return err
 	}
 	t := &tracked{State: st, etag: etag}
-	if t.Status != state.StatusSleeping && t.Status != state.StatusReady {
-		return fmt.Errorf("%s is %s; only a sleeping review app can wake", t.ID, t.Status)
+	if t.Status != state.StatusPaused && t.Status != state.StatusReady {
+		return fmt.Errorf("%s is %s; only a paused review app can be unpaused", t.ID, t.Status)
 	}
 	if err := c.scale(ctx, t.Resources.Services, 1); err != nil {
 		return err
@@ -83,8 +91,8 @@ func (c *Controller) Wake(ctx context.Context, pr int) error {
 	}
 	t.Status = state.StatusReady
 	t.LastActivityAt = c.now()
-	c.record(t, "wake")
-	c.logf("%s is awake: %s", t.ID, t.URL)
+	c.record(t, "unpause")
+	c.logf("%s is running: %s", t.ID, t.URL)
 	return c.save(ctx, t)
 }
 
@@ -108,7 +116,7 @@ func (c *Controller) Run(ctx context.Context, pr int, unit string, command []str
 }
 
 // GC applies the lifetime rules to every review app (D7, SCRUM-4550):
-// destroy at the TTL, sleep after the idle timeout, warn an hour before
+// destroy at the TTL, pause after the idle time, warn an hour before
 // expiry, and finish destroys that failed. It publishes the heartbeat only
 // when every review app was handled.
 func (c *Controller) GC(ctx context.Context) error {
@@ -164,9 +172,9 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 			if err := c.save(ctx, t); err != nil {
 				return err
 			}
-		} else if now.Sub(t.LastActivityAt) >= state.IdleTimeout {
-			c.logf("%s idle since %s; sleeping", t.ID, t.LastActivityAt.Format(time.RFC3339))
-			if err := c.sleepState(ctx, t); err != nil {
+		} else if now.Sub(t.LastActivityAt) >= c.idlePause() {
+			c.logf("%s idle since %s; pausing", t.ID, t.LastActivityAt.Format(time.RFC3339))
+			if err := c.pauseState(ctx, t); err != nil {
 				return err
 			}
 		}

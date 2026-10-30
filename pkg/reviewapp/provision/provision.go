@@ -1,6 +1,6 @@
 // Package provision is the in-cluster mode of ops reviewapp (RFC 0004, D11):
 // the work that runs inside the reviewapp-controller task, where RDS, MSK and
-// the private ALB targets are reachable. It creates, updates, sleeps, wakes
+// the private ALB targets are reachable. It creates, updates, pauses, unpauses
 // and destroys the per-PR resources on top of the shared base Terraform
 // builds, and keeps reviewapps/pr-<n>/state.json current after every step so
 // a failed run can be resumed or destroyed.
@@ -151,6 +151,9 @@ type Controller struct {
 	PollInterval time.Duration
 	// StableTimeout bounds the wait for services to reach steady state.
 	StableTimeout time.Duration
+	// IdlePause is how long a ready review app can go without requests
+	// before gc pauses it; zero means state.DefaultIdlePause.
+	IdlePause time.Duration
 
 	units map[string]*infra.Unit
 }

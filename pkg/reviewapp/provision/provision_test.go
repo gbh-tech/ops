@@ -377,31 +377,31 @@ func TestDestroyFailureKeepsTheState(t *testing.T) {
 	}
 }
 
-func TestSleepAndWake(t *testing.T) {
+func TestPauseAndUnpause(t *testing.T) {
 	h := newHarness()
 	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.c.Sleep(ctx, 7); err != nil {
+	if err := h.c.Pause(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
-	if h.store.states[7].Status != state.StatusSleeping || h.aws.services["pr-7-shell"].DesiredCount != 0 {
-		t.Fatal("not asleep")
+	if h.store.states[7].Status != state.StatusPaused || h.aws.services["pr-7-shell"].DesiredCount != 0 {
+		t.Fatal("not paused")
 	}
-	if err := h.c.Sleep(ctx, 7); err == nil {
-		t.Fatal("sleeping twice should fail")
+	if err := h.c.Pause(ctx, 7); err == nil {
+		t.Fatal("pausing twice should fail")
 	}
 
 	h.now = h.now.Add(3 * time.Hour)
-	if err := h.c.Wake(ctx, 7); err != nil {
+	if err := h.c.Unpause(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
 	st := h.store.states[7]
 	if st.Status != state.StatusReady || h.aws.services["pr-7-shell"].DesiredCount != 1 || !st.LastActivityAt.Equal(h.now) {
-		t.Fatalf("after wake: %s desired=%d last=%s", st.Status, h.aws.services["pr-7-shell"].DesiredCount, st.LastActivityAt)
+		t.Fatalf("after unpause: %s desired=%d last=%s", st.Status, h.aws.services["pr-7-shell"].DesiredCount, st.LastActivityAt)
 	}
 	if !st.ExpiresAt.Equal(st.CreatedAt.Add(state.TTL)) {
-		t.Fatal("wake moved the TTL")
+		t.Fatal("unpause moved the TTL")
 	}
 }
 
@@ -437,7 +437,7 @@ func TestGC(t *testing.T) {
 	created := h.now
 
 	// pr-1 expires, pr-2 has been idle 9 hours, pr-3 had requests, pr-4 is
-	// idle but too recently active to sleep.
+	// idle but too recently active to pause.
 	h.store.states[1].ExpiresAt = created.Add(time.Hour)
 	h.store.states[2].LastActivityAt = created
 	h.store.states[4].LastActivityAt = created.Add(8 * time.Hour)
@@ -452,14 +452,14 @@ func TestGC(t *testing.T) {
 	if _, ok := h.store.states[1]; ok {
 		t.Fatal("expired pr-1 not destroyed")
 	}
-	if h.store.states[2].Status != state.StatusSleeping {
+	if h.store.states[2].Status != state.StatusPaused {
 		t.Fatalf("idle pr-2 is %s", h.store.states[2].Status)
 	}
 	if st := h.store.states[3]; st.Status != state.StatusReady || !st.LastActivityAt.Equal(h.now) {
 		t.Fatalf("active pr-3: %s last=%s", st.Status, st.LastActivityAt)
 	}
 	if h.store.states[4].Status != state.StatusReady {
-		t.Fatal("pr-4 slept too early")
+		t.Fatal("pr-4 paused too early")
 	}
 	if !slices.Equal(h.aws.metrics, []string{MetricGcSuccess}) {
 		t.Fatalf("metrics = %v", h.aws.metrics)
@@ -501,12 +501,12 @@ func TestGCWithAnErrorPublishesNoHeartbeat(t *testing.T) {
 	}
 }
 
-func TestDeployWakesASleepingReviewApp(t *testing.T) {
+func TestDeployRestartsAPausedReviewApp(t *testing.T) {
 	h := newHarness()
 	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.c.Sleep(ctx, 7); err != nil {
+	if err := h.c.Pause(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
 	created := h.store.states[7].CreatedAt
@@ -531,5 +531,29 @@ func TestDeployRefusesAReviewAppBeingDestroyed(t *testing.T) {
 	h.store.states[7].Status = state.StatusDestroying
 	if err := h.c.Deploy(ctx, 7, h.manifest(7, "def5678")); err == nil || !strings.Contains(err.Error(), "being destroyed") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestGCUsesTheConfiguredIdlePause(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.now.Add(45 * time.Minute)
+
+	// The 2h default leaves it running.
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if h.store.states[7].Status != state.StatusReady {
+		t.Fatalf("paused after 45m with the 2h default: %s", h.store.states[7].Status)
+	}
+
+	h.c.IdlePause = 30 * time.Minute
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if h.store.states[7].Status != state.StatusPaused {
+		t.Fatalf("not paused after 45m with a 30m idle pause: %s", h.store.states[7].Status)
 	}
 }

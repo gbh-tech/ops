@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -75,6 +76,7 @@ domain = "reviewapps.example.com"
 infra_ssm = "/reviewapp/infra"
 tools_image = "repo/reviewapp-tools"
 limit = 5
+idle_pause = "90m"
 `
 	const yaml = `
 project: leopard
@@ -89,6 +91,7 @@ reviewapps:
   infra_ssm: /reviewapp/infra
   tools_image: repo/reviewapp-tools
   limit: 5
+  idle_pause: 90m
 `
 	var got [2]OpsConfig
 	for i, f := range []struct{ name, body string }{{"config.toml", toml}, {"config.yaml", yaml}} {
@@ -100,7 +103,7 @@ reviewapps:
 	}
 	fromTOML, fromYAML := got[0], got[1]
 	r := fromTOML.ReviewApps
-	if r.Domain != "reviewapps.example.com" || r.InfraSSM != "/reviewapp/infra" || r.ToolsImage != "repo/reviewapp-tools" || r.ResolvedLimit() != 5 {
+	if r.Domain != "reviewapps.example.com" || r.InfraSSM != "/reviewapp/infra" || r.ToolsImage != "repo/reviewapp-tools" || r.ResolvedLimit() != 5 || r.IdlePause != 90*time.Minute {
 		t.Fatalf("reviewapps from TOML = %+v", r)
 	}
 	if fromTOML.AWS.Region != "us-east-1" || fromTOML.ECS.Defaults.CPU != 256 || fromTOML.Project != "leopard" {

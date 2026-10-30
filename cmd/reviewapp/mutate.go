@@ -45,7 +45,7 @@ var deployCmd = &cobra.Command{
 The first run creates it: namespace, database, bootstrap (topics, migrations,
 seed), target groups, listener rules and services. Later runs find its state
 and update it: migrations and new task definitions. A failed run resumes
-where it stopped, and a sleeping review app wakes.`,
+where it stopped, and a paused review app is unpaused.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pr := prFlag(cmd)
@@ -73,42 +73,42 @@ var destroyCmd = &cobra.Command{
 	},
 }
 
-var sleepCmd = &cobra.Command{
-	Use:   "sleep",
-	Short: "Scale a review app to zero; --all sleeps every ready one",
+var pauseCmd = &cobra.Command{
+	Use:   "pause",
+	Short: "Scale a review app to zero and keep its data; --all pauses every ready one",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		all, _ := cmd.Flags().GetBool("all")
 		if all {
 			if !inCluster(cmd) {
-				log.Fatal("sleep --all runs only in the controller task (--in-cluster)")
+				log.Fatal("pause --all runs only in the controller task (--in-cluster)")
 			}
 			c := controller(cmd)
-			must(c.SleepAll(c.ctx))
+			must(c.PauseAll(c.ctx))
 			return
 		}
 		pr := prFlag(cmd)
 		if inCluster(cmd) {
 			c := controller(cmd)
-			must(c.Sleep(c.ctx, pr))
+			must(c.Pause(c.ctx, pr))
 			return
 		}
-		runClient(cmd, client.Run{Command: "sleep", PR: pr})
+		runClient(cmd, client.Run{Command: "pause", PR: pr})
 	},
 }
 
-var wakeCmd = &cobra.Command{
-	Use:   "wake",
-	Short: "Scale a sleeping review app back up",
+var unpauseCmd = &cobra.Command{
+	Use:   "unpause",
+	Short: "Scale a paused review app back up",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pr := prFlag(cmd)
 		if inCluster(cmd) {
 			c := controller(cmd)
-			must(c.Wake(c.ctx, pr))
+			must(c.Unpause(c.ctx, pr))
 			return
 		}
-		runClient(cmd, client.Run{Command: "wake", PR: pr})
+		runClient(cmd, client.Run{Command: "unpause", PR: pr})
 	},
 }
 
@@ -129,7 +129,7 @@ var runCmd = &cobra.Command{
 
 var gcCmd = &cobra.Command{
 	Use:   "gc",
-	Short: "Apply the TTL and idle rules to every review app (scheduled)",
+	Short: "Destroy expired review apps and pause idle ones (scheduled)",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if !inCluster(cmd) {
@@ -153,13 +153,13 @@ func init() {
 		_ = pf.MarkHidden(name)
 	}
 
-	for _, c := range []*cobra.Command{deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd} {
+	for _, c := range []*cobra.Command{deployCmd, destroyCmd, pauseCmd, unpauseCmd, runCmd} {
 		c.Flags().Int("pr", 0, "Pull request number")
 	}
 	deployCmd.Flags().String("manifest", "", "Manifest file: {pr, sha, tag, images: {unit: image}} (client mode)")
-	sleepCmd.Flags().Bool("all", false, "Sleep every ready review app (in-cluster only)")
+	pauseCmd.Flags().Bool("all", false, "Pause every ready review app (in-cluster only)")
 
-	Command.AddCommand(deployCmd, destroyCmd, sleepCmd, wakeCmd, runCmd, gcCmd)
+	Command.AddCommand(deployCmd, destroyCmd, pauseCmd, unpauseCmd, runCmd, gcCmd)
 }
 
 func must(err error) {
@@ -236,6 +236,7 @@ func runClient(cmd *cobra.Command, run client.Run) {
 			Repository: repository,
 			Actor:      actor,
 			RunURL:     runURL,
+			IdlePause:  rc.settings.idlePause,
 		},
 		Out: os.Stdout,
 	}
@@ -393,6 +394,7 @@ func controller(cmd *cobra.Command) *ctlContext {
 		Domain:    rc.settings.domain,
 		Region:    rc.settings.region,
 		Limit:     rc.settings.limit,
+		IdlePause: rc.settings.idlePause,
 		Actor:     actor,
 		RunURL:    runURL,
 		Out:       os.Stdout,
