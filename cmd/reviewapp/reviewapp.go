@@ -164,8 +164,13 @@ type settings struct {
 func resolveSettings(cmd *cobra.Command) settings {
 	var s settings
 	s.limit = config.DefaultReviewAppsLimit
-	if config.FindConfig(".") != "" {
-		cfg := config.LoadConfig()
+	// Read without LoadConfig's validation: a config without aws.region is
+	// fine when --region or AWS_REGION supplies it.
+	if path := config.FindConfig("."); path != "" {
+		cfg, err := config.Read(path)
+		if err != nil {
+			log.Fatal("Failed to read the ops config", "path", path, "err", err)
+		}
 		s.domain = cfg.ReviewApps.Domain
 		s.infraSSM = cfg.ReviewApps.InfraSSM
 		s.toolsImage = cfg.ReviewApps.ToolsImage
@@ -187,7 +192,7 @@ func resolveSettings(cmd *cobra.Command) settings {
 		s.region = os.Getenv("AWS_REGION")
 	}
 	if s.infraSSM == "" {
-		log.Fatal("No infra parameter: set reviewapps.infra_ssm in .ops/config.yaml or pass --infra-ssm")
+		log.Fatal("No infra parameter: set reviewapps.infra_ssm in the ops config or pass --infra-ssm")
 	}
 	return s
 }

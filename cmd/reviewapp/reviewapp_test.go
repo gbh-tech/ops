@@ -1,8 +1,12 @@
 package reviewapp
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestShortDuration(t *testing.T) {
@@ -45,5 +49,30 @@ func TestCommandTree(t *testing.T) {
 	}
 	if statusCmd.Flags().Lookup("pr") == nil || logsCmd.Flags().Lookup("pr") == nil {
 		t.Fatal("status and logs need --pr")
+	}
+}
+
+func TestResolveSettingsLetsFlagsCoverAnIncompleteConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".ops"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// No aws block: LoadConfig would refuse this file.
+	body := "[reviewapps]\ndomain = \"reviewapps.example.com\"\ninfra_ssm = \"/reviewapp/infra\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".ops", "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	cmd := &cobra.Command{}
+	for _, name := range []string{"domain", "infra-ssm", "tools-image", "region"} {
+		cmd.Flags().String(name, "", "")
+	}
+	if err := cmd.Flags().Set("region", "us-west-2"); err != nil {
+		t.Fatal(err)
+	}
+	s := resolveSettings(cmd)
+	if s.region != "us-west-2" || s.domain != "reviewapps.example.com" || s.infraSSM != "/reviewapp/infra" {
+		t.Fatalf("settings = %+v", s)
 	}
 }

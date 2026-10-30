@@ -317,23 +317,26 @@ func TestExecuteKeepsTheExitCodeWhenLogsFail(t *testing.T) {
 	}
 }
 
-// lateLogs returns its last line only after the task has stopped.
+// lateLogs returns its last line only on the second read after the task
+// stopped, so only the client's final read can print it.
 type lateLogs struct {
-	ecs   *fakeECS
-	given bool
+	ecs           *fakeECS
+	postStopReads int
 }
 
 func (l *lateLogs) GetLogEvents(_ context.Context, in *cwlogs.GetLogEventsInput, _ ...func(*cwlogs.Options)) (*cwlogs.GetLogEventsOutput, error) {
-	if l.ecs.polls > l.ecs.runningPolls && !l.given && in.NextToken != nil {
-		l.given = true
-		return &cwlogs.GetLogEventsOutput{
-			Events:           []cwtypes.OutputLogEvent{{Message: aws.String("ERROR: bootstrap failed")}},
-			NextForwardToken: aws.String("2"),
-		}, nil
-	}
 	tok := in.NextToken
 	if tok == nil {
 		tok = aws.String("1")
+	}
+	if l.ecs.polls > l.ecs.runningPolls {
+		l.postStopReads++
+		if l.postStopReads == 2 {
+			return &cwlogs.GetLogEventsOutput{
+				Events:           []cwtypes.OutputLogEvent{{Message: aws.String("ERROR: bootstrap failed")}},
+				NextForwardToken: aws.String("2"),
+			}, nil
+		}
 	}
 	return &cwlogs.GetLogEventsOutput{NextForwardToken: tok}, nil
 }
