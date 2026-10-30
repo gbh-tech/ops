@@ -13,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.17.23
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.5
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.81.1
 	github.com/aws/smithy-go v1.28.7
 	github.com/charmbracelet/huh v1.0.0
 	github.com/google/go-cmp v0.7.0

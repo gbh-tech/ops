@@ -47,7 +47,8 @@ changesets / commitlint tooling).
   small — they parse flags and delegate to `pkg/`.
 
 ### Configuration (`pkg/config`)
-- `config.LoadConfig()` reads `.ops/config.yaml` via Viper (env prefix `OPS`,
+- `config.LoadConfig()` reads `.ops/config.yaml` (or `.yml`, or `.toml`;
+  YAML wins when both exist) via Viper (env prefix `OPS`,
   AutomaticEnv on). The loaded `OpsConfig` struct fans out to per-area configs
   (`AWSConfig`, `AzureConfig`, `K8sConfig`, `ECSConfig`, `WerfConfig`,
   `RegistryConfig`, etc.).
@@ -88,6 +89,17 @@ changesets / commitlint tooling).
   `reviewapps/pr-<n>/state.json` and `manifest.json`, `archive/` after
   destroy. Writes are conditional (If-None-Match / If-Match), so a losing
   writer gets `ErrExists` or `ErrConflict` instead of overwriting.
+- `pkg/reviewapp/infra` — reads the infra facts Terraform writes to SSM
+  (`reviewapps.infra_ssm`, plus one parameter per unit). Never copy these
+  into the repository.
+- `pkg/reviewapp/client` — client mode of `ops reviewapp`: uploads the
+  manifest, runs the `reviewapp-controller` task with `--in-cluster`, prints
+  its logs and returns its exit code. The controller has no repository, so
+  the client passes the `reviewapps:` values as flags.
+- `cmd/reviewapp` — `ops reviewapp list|status|logs`. Settings come from
+  flags first, then `.ops/config.yaml`, so the commands work without a
+  repository. The project builds the controller image from a released
+  binary; ops publishes no image.
 - `pkg/utils` — shared helpers: `bin.go` (locate/run external binaries),
   `cobra.go` (flag plumbing), `git.go`, `env.go`, `system.go`,
   `registry.go`. Most commands rely on `utils.RunCommand`-style shell-outs

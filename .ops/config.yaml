@@ -97,3 +97,14 @@ ecs:
 # azure:
 #   location: "East US"
 #   resource_group: "gbh-rg"
+
+# Review apps (RFC 0004): per-PR environments on a shared ECS cluster, managed
+# by `ops reviewapp`. In .ops/config.toml the same keys go under [reviewapps]. Only policy lives here; the cluster, network, ALB,
+# buckets and secret names come from the SSM parameter named by infra_ssm.
+# reviewapps:
+#   domain: reviewapps.example.com      # hosts are pr-<n>.<domain>
+#   infra_ssm: /reviewapp/infra         # written by Terraform
+#   tools_image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/project/reviewapp-tools
+#   # Optional overrides:
+#   # env: reviewapp                    # per-unit config section to render
+#   # limit: 10                         # review apps running at once
