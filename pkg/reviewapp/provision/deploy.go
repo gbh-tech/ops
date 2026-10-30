@@ -256,11 +256,14 @@ func (c *Controller) checkImages(ctx context.Context, m *state.Manifest) error {
 	}
 	var missing []string
 	for _, image := range images {
-		repo, tag, ok := ecrImage(image)
+		registry, repo, tag, ok := ecrImage(image)
 		if !ok {
 			continue
 		}
+		// RegistryId keeps images in another account's ECR from reading as
+		// missing.
 		_, err := c.ECR.DescribeImages(ctx, &ecr.DescribeImagesInput{
+			RegistryId:     aws.String(registry),
 			RepositoryName: aws.String(repo),
 			ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(tag)}},
 		})
@@ -280,16 +283,20 @@ func (c *Controller) checkImages(ctx context.Context, m *state.Manifest) error {
 }
 
 // ecrImage splits <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>.
-func ecrImage(image string) (repo, tag string, ok bool) {
+func ecrImage(image string) (registry, repo, tag string, ok bool) {
 	host, path, found := strings.Cut(image, "/")
-	if !found || !strings.Contains(host, ".dkr.ecr.") {
-		return "", "", false
+	if !found {
+		return "", "", "", false
+	}
+	registry, _, found = strings.Cut(host, ".dkr.ecr.")
+	if !found {
+		return "", "", "", false
 	}
 	i := strings.LastIndex(path, ":")
 	if i < 0 {
-		return "", "", false
+		return "", "", "", false
 	}
-	return path[:i], path[i+1:], true
+	return registry, path[:i], path[i+1:], true
 }
 
 // renderedEnv is what the state keeps of a unit's config: plain values and

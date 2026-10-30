@@ -36,6 +36,7 @@ type ECSAPI interface {
 	RegisterTaskDefinition(ctx context.Context, in *awsecs.RegisterTaskDefinitionInput, opts ...func(*awsecs.Options)) (*awsecs.RegisterTaskDefinitionOutput, error)
 	DeregisterTaskDefinition(ctx context.Context, in *awsecs.DeregisterTaskDefinitionInput, opts ...func(*awsecs.Options)) (*awsecs.DeregisterTaskDefinitionOutput, error)
 	ListTaskDefinitions(ctx context.Context, in *awsecs.ListTaskDefinitionsInput, opts ...func(*awsecs.Options)) (*awsecs.ListTaskDefinitionsOutput, error)
+	ListTaskDefinitionFamilies(ctx context.Context, in *awsecs.ListTaskDefinitionFamiliesInput, opts ...func(*awsecs.Options)) (*awsecs.ListTaskDefinitionFamiliesOutput, error)
 	CreateService(ctx context.Context, in *awsecs.CreateServiceInput, opts ...func(*awsecs.Options)) (*awsecs.CreateServiceOutput, error)
 	UpdateService(ctx context.Context, in *awsecs.UpdateServiceInput, opts ...func(*awsecs.Options)) (*awsecs.UpdateServiceOutput, error)
 	DeleteService(ctx context.Context, in *awsecs.DeleteServiceInput, opts ...func(*awsecs.Options)) (*awsecs.DeleteServiceOutput, error)

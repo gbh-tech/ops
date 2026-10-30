@@ -139,16 +139,25 @@ func (f *fakeAWS) ListTaskDefinitions(_ context.Context, in *awsecs.ListTaskDefi
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var arns []string
-	for family, rev := range f.taskDefs {
-		if !strings.HasPrefix(family, aws.ToString(in.FamilyPrefix)) {
-			continue
-		}
-		for r := 1; r <= rev; r++ {
-			arns = append(arns, fmt.Sprintf("arn:aws:ecs:us-east-1:1:task-definition/%s:%d", family, r))
+	// Like ECS, FamilyPrefix names one whole family.
+	family := aws.ToString(in.FamilyPrefix)
+	for r := 1; r <= f.taskDefs[family]; r++ {
+		arns = append(arns, fmt.Sprintf("arn:aws:ecs:us-east-1:1:task-definition/%s:%d", family, r))
+	}
+	return &awsecs.ListTaskDefinitionsOutput{TaskDefinitionArns: arns}, nil
+}
+
+func (f *fakeAWS) ListTaskDefinitionFamilies(_ context.Context, in *awsecs.ListTaskDefinitionFamiliesInput, _ ...func(*awsecs.Options)) (*awsecs.ListTaskDefinitionFamiliesOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var families []string
+	for family := range f.taskDefs {
+		if strings.HasPrefix(family, aws.ToString(in.FamilyPrefix)) {
+			families = append(families, family)
 		}
 	}
-	sort.Strings(arns)
-	return &awsecs.ListTaskDefinitionsOutput{TaskDefinitionArns: arns}, nil
+	sort.Strings(families)
+	return &awsecs.ListTaskDefinitionFamiliesOutput{Families: families}, nil
 }
 
 func (f *fakeAWS) CreateService(_ context.Context, in *awsecs.CreateServiceInput, _ ...func(*awsecs.Options)) (*awsecs.CreateServiceOutput, error) {
@@ -378,7 +387,7 @@ func (f *fakeAWS) GetSecretValue(_ context.Context, in *secretsmanager.GetSecret
 }
 
 func (f *fakeAWS) DescribeImages(_ context.Context, in *ecr.DescribeImagesInput, _ ...func(*ecr.Options)) (*ecr.DescribeImagesOutput, error) {
-	if !f.images[aws.ToString(in.RepositoryName)+":"+aws.ToString(in.ImageIds[0].ImageTag)] {
+	if !f.images[aws.ToString(in.RegistryId)+"/"+aws.ToString(in.RepositoryName)+":"+aws.ToString(in.ImageIds[0].ImageTag)] {
 		return nil, &ecrtypes.ImageNotFoundException{}
 	}
 	return &ecr.DescribeImagesOutput{}, nil
@@ -678,12 +687,12 @@ func (h *harness) manifest(pr int, sha string, missing ...string) state.Manifest
 		},
 	}
 	for _, image := range append([]string{m.ToolsImage}, m.Images["shell"], m.Images["subgraph-users"], m.Images["cron-alerts"]) {
-		repo, tag, _ := ecrImage(image)
-		h.aws.images[repo+":"+tag] = true
+		registry, repo, tag, _ := ecrImage(image)
+		h.aws.images[registry+"/"+repo+":"+tag] = true
 	}
 	for _, image := range missing {
-		repo, tag, _ := ecrImage(image)
-		delete(h.aws.images, repo+":"+tag)
+		registry, repo, tag, _ := ecrImage(image)
+		delete(h.aws.images, registry+"/"+repo+":"+tag)
 	}
 	id := fmt.Sprintf("v-%d-%s", pr, sha)
 	h.store.manifests[id] = m

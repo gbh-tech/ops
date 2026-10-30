@@ -106,6 +106,7 @@ func (inf *Infra) validate() error {
 		"buckets.state":              inf.Buckets.State,
 		"units_ssm":                  inf.UnitsSSM,
 		"controller.task_definition": inf.Controller.TaskDefinition,
+		"alb.arn":                    inf.ALB.ARN,
 		"alb.https_listener_arn":     inf.ALB.HTTPSListenerARN,
 		"network.vpc_id":             inf.Network.VPCID,
 		"secrets.db":                 inf.Secrets.DB,

@@ -23,7 +23,7 @@ func (f fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ..
 const infraJSON = `{
   "cluster": {"name": "c", "arn": "arn:aws:ecs:us-east-1:1:cluster/c"},
   "network": {"vpc_id": "vpc-1", "private_subnet_ids": ["subnet-1", "subnet-2"], "security_group_ids": {"namespace": "sg-ns"}},
-  "alb": {"arn": "alb", "dns_name": "alb.example", "https_listener_arn": "listener"},
+  "alb": {"arn": "arn:aws:elasticloadbalancing:us-east-1:1:loadbalancer/app/alb/abc", "dns_name": "alb.example", "https_listener_arn": "listener"},
   "msk": {"cluster_arn": "msk", "bootstrap_brokers": "b:9098"},
   "buckets": {"data": "data", "state": "state"},
   "rds": {"endpoint": "db:5432"},
@@ -58,7 +58,7 @@ func TestLoadRequiredFields(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error for an incomplete parameter")
 	}
-	for _, field := range []string{"buckets.state", "controller.task_definition", "network.private_subnet_ids"} {
+	for _, field := range []string{"alb.arn", "buckets.state", "controller.task_definition", "network.private_subnet_ids"} {
 		if !strings.Contains(err.Error(), field) {
 			t.Fatalf("err = %v, want it to name %s", err, field)
 		}

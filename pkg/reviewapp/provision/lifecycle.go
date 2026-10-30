@@ -186,7 +186,7 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 	}
 
 	if t.ExpiresAt.Sub(now) <= state.ExpiryWarning && !warned(t.State) {
-		c.comment(ctx, pr, fmt.Sprintf("Review app %s expires at %s. Run the review app workflow with create to start a new one.",
+		c.comment(ctx, pr, fmt.Sprintf("Review app %s expires at %s. Run the review app workflow with deploy to start a new one.",
 			t.URL, t.ExpiresAt.Format("15:04 UTC")))
 		c.record(t, "warn")
 		return c.save(ctx, t)
@@ -209,7 +209,10 @@ func (c *Controller) hadRequests(ctx context.Context, targetGroups []string, sin
 	if len(targetGroups) == 0 {
 		return false, nil
 	}
-	lb := c.Infra.ALB.ARN[strings.Index(c.Infra.ALB.ARN, "loadbalancer/")+len("loadbalancer/"):]
+	_, lb, ok := strings.Cut(c.Infra.ALB.ARN, ":loadbalancer/")
+	if !ok {
+		return false, fmt.Errorf("alb.arn %q is not a load balancer ARN", c.Infra.ALB.ARN)
+	}
 	queries := make([]cwtypes.MetricDataQuery, len(targetGroups))
 	for i, arn := range targetGroups {
 		tg := arn[strings.LastIndex(arn, ":")+1:]

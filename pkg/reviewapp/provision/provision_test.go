@@ -223,6 +223,16 @@ func TestDeployMissingImageCreatesNothing(t *testing.T) {
 	}
 }
 
+func TestEcrImageKeepsTheRegistry(t *testing.T) {
+	registry, repo, tag, ok := ecrImage("222.dkr.ecr.us-east-1.amazonaws.com/shared/shell:pr-abc")
+	if !ok || registry != "222" || repo != "shared/shell" || tag != "pr-abc" {
+		t.Fatalf("ecrImage = %q %q %q %v", registry, repo, tag, ok)
+	}
+	if _, _, _, ok := ecrImage("ghcr.io/acme/shell:1"); ok {
+		t.Fatal("parsed a non-ECR image")
+	}
+}
+
 func TestDeployRefusesAManifestForAnotherPR(t *testing.T) {
 	h := newHarness()
 	ref := h.manifest(8, "abc1234")

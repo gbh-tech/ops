@@ -54,7 +54,8 @@ where it stopped, and a paused review app is unpaused.`,
 			must(c.Deploy(c.ctx, pr, manifestRef(cmd)))
 			return
 		}
-		runClient(cmd, client.Run{Command: "deploy", PR: pr, Manifest: clientManifest(cmd, pr)})
+		rc := load(cmd)
+		runClient(rc, cmd, client.Run{Command: "deploy", PR: pr, Manifest: clientManifest(rc, cmd, pr)})
 	},
 }
 
@@ -69,7 +70,7 @@ var destroyCmd = &cobra.Command{
 			must(c.Destroy(c.ctx, pr))
 			return
 		}
-		runClient(cmd, client.Run{Command: "destroy", PR: pr})
+		runClient(load(cmd), cmd, client.Run{Command: "destroy", PR: pr})
 	},
 }
 
@@ -93,7 +94,7 @@ var pauseCmd = &cobra.Command{
 			must(c.Pause(c.ctx, pr))
 			return
 		}
-		runClient(cmd, client.Run{Command: "pause", PR: pr})
+		runClient(load(cmd), cmd, client.Run{Command: "pause", PR: pr})
 	},
 }
 
@@ -108,7 +109,7 @@ var unpauseCmd = &cobra.Command{
 			must(c.Unpause(c.ctx, pr))
 			return
 		}
-		runClient(cmd, client.Run{Command: "unpause", PR: pr})
+		runClient(load(cmd), cmd, client.Run{Command: "unpause", PR: pr})
 	},
 }
 
@@ -123,7 +124,7 @@ var runCmd = &cobra.Command{
 			must(c.Run(c.ctx, pr, args[0], args[1:]))
 			return
 		}
-		runClient(cmd, client.Run{Command: "run", PR: pr, Args: append([]string{"--"}, args...)})
+		runClient(load(cmd), cmd, client.Run{Command: "run", PR: pr, Args: append([]string{"--"}, args...)})
 	},
 }
 
@@ -212,8 +213,7 @@ func identity(cmd *cobra.Command) (repository, actor, runURL string) {
 }
 
 // runClient starts the controller task and exits with its exit code.
-func runClient(cmd *cobra.Command, run client.Run) {
-	rc := load(cmd)
+func runClient(rc *runContext, cmd *cobra.Command, run client.Run) {
 	controllerUnit, err := rc.infra.LoadUnit(rc.ctx, ssm.NewFromConfig(rc.aws), infra.ControllerUnit)
 	if err != nil {
 		log.Fatal("Failed to read the controller unit", "err", err)
@@ -262,7 +262,7 @@ type manifestFile struct {
 
 // clientManifest reads --manifest and renders each unit's config from the
 // repository, so the controller deploys exactly this commit's config.
-func clientManifest(cmd *cobra.Command, pr int) *state.Manifest {
+func clientManifest(rc *runContext, cmd *cobra.Command, pr int) *state.Manifest {
 	path, _ := cmd.Flags().GetString("manifest")
 	if path == "" {
 		log.Fatal("--manifest is required")
@@ -282,10 +282,16 @@ func clientManifest(cmd *cobra.Command, pr int) *state.Manifest {
 		log.Fatal("Manifest has no images", "path", path)
 	}
 
-	cfg := config.LoadConfig()
-	settings := resolveSettings(cmd)
-	rc := load(cmd)
-	m, err := buildManifest(f, cfg, settings.toolsImage, rc.infra.SecretARNPrefix())
+	// Read, not LoadConfig: --region or AWS_REGION may stand in for aws.region.
+	path = config.FindConfig(".")
+	if path == "" {
+		log.Fatal("Ops config file not found; deploy renders the units from the repository")
+	}
+	cfg, err := config.Read(path)
+	if err != nil {
+		log.Fatal("Failed to read the ops config", "path", path, "err", err)
+	}
+	m, err := buildManifest(f, cfg, rc.settings.toolsImage, rc.infra.SecretARNPrefix())
 	if err != nil {
 		log.Fatal("Failed to build the manifest", "err", err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwlogs "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	elb "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	tagtypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
@@ -236,18 +237,18 @@ func (c *Controller) teardown(ctx context.Context, pr int) error {
 	return c.runOneOff(ctx, oneOff{PR: pr, Unit: ToolsUnit, Family: arns[len(arns)-1], Container: ToolsContainer, Command: []string{"teardown"}})
 }
 
-// taskDefinitions lists the active revisions of families starting with
-// prefix, oldest first.
-func (c *Controller) taskDefinitions(ctx context.Context, prefix string) ([]string, error) {
+// taskDefinitions lists the active revisions of one family, oldest first.
+// ListTaskDefinitions matches FamilyPrefix against the whole family name.
+func (c *Controller) taskDefinitions(ctx context.Context, family string) ([]string, error) {
 	var arns []string
 	var token *string
 	for {
 		out, err := c.ECS.ListTaskDefinitions(ctx, &awsecs.ListTaskDefinitionsInput{
-			FamilyPrefix: aws.String(prefix),
+			FamilyPrefix: aws.String(family),
 			NextToken:    token,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list task definitions %s: %w", prefix, err)
+			return nil, fmt.Errorf("list task definitions %s: %w", family, err)
 		}
 		arns = append(arns, out.TaskDefinitionArns...)
 		if out.NextToken == nil {
@@ -257,23 +258,50 @@ func (c *Controller) taskDefinitions(ctx context.Context, prefix string) ([]stri
 	}
 }
 
+// families lists the active task definition families starting with prefix.
+// Unlike ListTaskDefinitions, ListTaskDefinitionFamilies matches a prefix.
+func (c *Controller) families(ctx context.Context, prefix string) ([]string, error) {
+	var families []string
+	var token *string
+	for {
+		out, err := c.ECS.ListTaskDefinitionFamilies(ctx, &awsecs.ListTaskDefinitionFamiliesInput{
+			FamilyPrefix: aws.String(prefix),
+			Status:       ecstypes.TaskDefinitionFamilyStatusActive,
+			NextToken:    token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list task definition families %s: %w", prefix, err)
+		}
+		families = append(families, out.Families...)
+		if out.NextToken == nil {
+			return families, nil
+		}
+		token = out.NextToken
+	}
+}
+
 // deregister deregisters every revision of every reviewapp-pr-<n>-* family.
-// FamilyPrefix is a plain prefix, so the trailing hyphen keeps pr-1 from
-// matching pr-10.
+// The trailing hyphen of the prefix keeps pr-1 from matching pr-10.
 func (c *Controller) deregister(ctx context.Context, pr int) error {
 	prefix := reviewapp.Family(pr, "")
-	arns, err := c.taskDefinitions(ctx, prefix)
+	families, err := c.families(ctx, prefix)
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, arn := range arns {
-		family := arn[strings.LastIndex(arn, "/")+1:]
+	for _, family := range families {
 		if !strings.HasPrefix(family, prefix) {
 			continue
 		}
-		if _, err := c.ECS.DeregisterTaskDefinition(ctx, &awsecs.DeregisterTaskDefinitionInput{TaskDefinition: aws.String(arn)}); err != nil {
-			errs = append(errs, fmt.Errorf("deregister %s: %w", arn, err))
+		arns, err := c.taskDefinitions(ctx, family)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, arn := range arns {
+			if _, err := c.ECS.DeregisterTaskDefinition(ctx, &awsecs.DeregisterTaskDefinitionInput{TaskDefinition: aws.String(arn)}); err != nil {
+				errs = append(errs, fmt.Errorf("deregister %s: %w", arn, err))
+			}
 		}
 	}
 	return errors.Join(errs...)
