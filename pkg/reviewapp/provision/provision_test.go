@@ -388,8 +388,12 @@ func TestPauseAndUnpause(t *testing.T) {
 	if h.store.states[7].Status != state.StatusPaused || h.aws.services["pr-7-shell"].DesiredCount != 0 {
 		t.Fatal("not paused")
 	}
-	if err := h.c.Pause(ctx, 7); err == nil {
-		t.Fatal("pausing twice should fail")
+	updates, history, etag := len(h.aws.updates), len(h.store.states[7].History), h.store.etags[7]
+	if err := h.c.Pause(ctx, 7); err != nil {
+		t.Fatalf("pausing a paused review app failed: %v", err)
+	}
+	if len(h.aws.updates) != updates || len(h.store.states[7].History) != history || h.store.etags[7] != etag {
+		t.Fatal("pausing twice changed something")
 	}
 
 	h.now = h.now.Add(3 * time.Hour)
@@ -555,5 +559,19 @@ func TestGCUsesTheConfiguredIdlePause(t *testing.T) {
 	}
 	if h.store.states[7].Status != state.StatusPaused {
 		t.Fatalf("not paused after 45m with a 30m idle pause: %s", h.store.states[7].Status)
+	}
+}
+
+func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
+	for _, status := range []state.Status{state.StatusCreating, state.StatusFailed, state.StatusDestroying} {
+		h := newHarness()
+		if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+			t.Fatal(err)
+		}
+		h.store.states[7].Status = status
+		err := h.c.Pause(ctx, 7)
+		if err == nil || !strings.Contains(err.Error(), string(status)) {
+			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
+		}
 	}
 }

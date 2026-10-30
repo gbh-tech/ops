@@ -31,11 +31,16 @@ const MetricNamespace = "ReviewApps"
 const MetricGcSuccess = "ReviewAppGcSuccess"
 
 // Pause scales every service of a review app to zero. The database, rules
-// and state stay, so Unpause brings it back as it was.
+// and state stay, so Unpause brings it back as it was. Pausing a paused
+// review app changes nothing and succeeds.
 func (c *Controller) Pause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
 		return err
+	}
+	if st.Status == state.StatusPaused {
+		c.logf("%s is already paused", st.ID)
+		return nil
 	}
 	return c.pauseState(ctx, &tracked{State: st, etag: etag})
 }
