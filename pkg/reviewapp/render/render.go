@@ -5,6 +5,7 @@ package render
 
 import (
 	"fmt"
+	"maps"
 	"path"
 	"regexp"
 	"slices"
@@ -80,6 +81,17 @@ func Files(files map[string]string) (map[string]string, error) {
 			return nil, fmt.Errorf("files: key %q of %s is not a key under the data prefix", key, dst)
 		}
 		out[dst] = key
+	}
+	// A destination inside another would be hidden by, or mount over, the
+	// other's directory. Whole components only: /a/schema and /a/schemas are
+	// fine.
+	dsts := slices.Sorted(maps.Keys(out))
+	for _, a := range dsts {
+		for _, b := range dsts {
+			if strings.HasPrefix(b, a+"/") {
+				return nil, fmt.Errorf("files: %s is inside %s; a destination cannot contain another", b, a)
+			}
+		}
 	}
 	return out, nil
 }

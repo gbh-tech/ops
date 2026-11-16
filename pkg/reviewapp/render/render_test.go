@@ -102,3 +102,22 @@ func TestFilesRefusesBadPathsAndKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestFilesRefusesADestinationInsideAnother(t *testing.T) {
+	for _, files := range []map[string]string{
+		{"/config/schema": "a.graphql", "/config/schema/options.json": "b.json"},
+		{"/config/schema/options.json": "b.json", "/config/schema": "a.graphql"},
+		{"/config/schema": "a.graphql", "/config/schema/deep/options.json": "b.json"},
+	} {
+		if _, err := Files(files); err == nil || !strings.Contains(err.Error(), "cannot contain another") {
+			t.Errorf("files %v: err = %v", files, err)
+		}
+	}
+}
+
+func TestFilesAllowsSiblingsWithACommonPrefix(t *testing.T) {
+	files := map[string]string{"/config/schema": "a.graphql", "/config/schemas/options.json": "b.json", "/config/schema.json": "c.json"}
+	if _, err := Files(files); err != nil {
+		t.Fatal(err)
+	}
+}
