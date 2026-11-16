@@ -60,7 +60,7 @@ func (c *Controller) ensureNamespace(ctx context.Context, pr int) (string, error
 	out, err := c.Discovery.CreateHttpNamespace(ctx, &sd.CreateHttpNamespaceInput{
 		Name:        aws.String(reviewapp.Namespace(pr)),
 		Description: aws.String("Review app " + state.ID(pr)),
-		Tags:        []sdtypes.Tag{{Key: aws.String(reviewapp.TagKey), Value: aws.String(tagValue(pr))}},
+		Tags:        c.sdTags(pr),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create namespace: %w", err)
@@ -120,7 +120,7 @@ func (c *Controller) ensureTargetGroup(ctx context.Context, pr int, unit string,
 		HealthCheckPath: aws.String(route.HealthCheckPath),
 		HealthCheckPort: aws.String(hcPort),
 		Matcher:         &elbtypes.Matcher{HttpCode: aws.String("200-399")},
-		Tags:            []elbtypes.Tag{{Key: aws.String(reviewapp.TagKey), Value: aws.String(tagValue(pr))}},
+		Tags:            c.elbTags(pr),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create target group %s: %w", name, err)
@@ -233,7 +233,7 @@ func (c *Controller) ensureRules(ctx context.Context, pr int, tgs map[string]str
 					{Field: aws.String("path-pattern"), PathPatternConfig: &elbtypes.PathPatternConditionConfig{Values: plan.paths}},
 				},
 				Actions: []elbtypes.Action{{Type: elbtypes.ActionTypeEnumForward, TargetGroupArn: aws.String(plan.tgARN)}},
-				Tags:    []elbtypes.Tag{{Key: aws.String(reviewapp.TagKey), Value: aws.String(tagValue(pr))}},
+				Tags:    c.elbTags(pr),
 			})
 			var inUse *elbtypes.PriorityInUseException
 			if errors.As(err, &inUse) {
@@ -355,7 +355,7 @@ func (c *Controller) ensureService(ctx context.Context, s serviceSpec) (string, 
 			MaximumPercent:        aws.Int32(100),
 		},
 		PropagateTags: ecstypes.PropagateTagsService,
-		Tags:          ecsTags(s.PR),
+		Tags:          c.ecsTags(s.PR),
 	}
 	if s.TGARN != "" {
 		in.LoadBalancers = []ecstypes.LoadBalancer{{

@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
 var ctx = context.Background()
@@ -718,6 +719,38 @@ func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
 		err := h.c.Pause(ctx, 7)
 		if err == nil || !strings.Contains(err.Error(), string(status)) {
 			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
+		}
+	}
+}
+
+func TestDeployAddsTheInfraTags(t *testing.T) {
+	h := newHarness()
+	// reviewapp in the infra tags cannot replace the tag destroy finds by.
+	h.c.Infra.Tags = map[string]string{"Environment": "reviewapp", "reviewapp": "nope"}
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Environment=reviewapp", "reviewapp=pr-7"}
+	ecsTags := func(tags []ecstypes.Tag) []string {
+		var out []string
+		for _, tag := range tags {
+			out = append(out, aws.ToString(tag.Key)+"="+aws.ToString(tag.Value))
+		}
+		return out
+	}
+	for _, in := range h.aws.created {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) || in.PropagateTags != ecstypes.PropagateTagsService {
+			t.Fatalf("service %s tags = %v, propagate %s", aws.ToString(in.ServiceName), got, in.PropagateTags)
+		}
+	}
+	for _, in := range h.aws.registered {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) {
+			t.Fatalf("task definition %s tags = %v", aws.ToString(in.Family), got)
+		}
+	}
+	for _, in := range h.aws.tasks {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) {
+			t.Fatalf("task tags = %v", got)
 		}
 	}
 }

@@ -25,10 +25,12 @@ import (
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	elb "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	sd "github.com/aws/aws-sdk-go-v2/service/servicediscovery"
+	sdtypes "github.com/aws/aws-sdk-go-v2/service/servicediscovery/types"
 )
 
 // ECSAPI is the subset of the ECS client the controller uses.
@@ -245,8 +247,42 @@ func tagValue(pr int) string {
 	return state.ID(pr)
 }
 
-func ecsTags(pr int) []ecstypes.Tag {
-	return []ecstypes.Tag{{Key: aws.String(reviewapp.TagKey), Value: aws.String(tagValue(pr))}}
+// tags are the tags of every resource of a review app: the infra tags, then
+// reviewapp=pr-<n>, which always wins because destroy finds resources by it.
+func (c *Controller) tags(pr int) [][2]string {
+	var out [][2]string
+	if c.Infra != nil {
+		for _, k := range sortedKeys(c.Infra.Tags) {
+			if k != reviewapp.TagKey {
+				out = append(out, [2]string{k, c.Infra.Tags[k]})
+			}
+		}
+	}
+	return append(out, [2]string{reviewapp.TagKey, tagValue(pr)})
+}
+
+func (c *Controller) ecsTags(pr int) []ecstypes.Tag {
+	var out []ecstypes.Tag
+	for _, kv := range c.tags(pr) {
+		out = append(out, ecstypes.Tag{Key: aws.String(kv[0]), Value: aws.String(kv[1])})
+	}
+	return out
+}
+
+func (c *Controller) elbTags(pr int) []elbtypes.Tag {
+	var out []elbtypes.Tag
+	for _, kv := range c.tags(pr) {
+		out = append(out, elbtypes.Tag{Key: aws.String(kv[0]), Value: aws.String(kv[1])})
+	}
+	return out
+}
+
+func (c *Controller) sdTags(pr int) []sdtypes.Tag {
+	var out []sdtypes.Tag
+	for _, kv := range c.tags(pr) {
+		out = append(out, sdtypes.Tag{Key: aws.String(kv[0]), Value: aws.String(kv[1])})
+	}
+	return out
 }
 
 func sortedKeys[V any](m map[string]V) []string {

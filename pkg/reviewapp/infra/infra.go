@@ -64,6 +64,10 @@ type Infra struct {
 		TaskDefinition string `json:"task_definition"`
 	} `json:"controller"`
 	BlueprintSSM string `json:"blueprint_ssm"`
+	// Tags go on every resource the controller creates for a review app,
+	// next to reviewapp=pr-<n>, e.g. the cost allocation tags a budget
+	// filters on. Optional.
+	Tags map[string]string `json:"tags,omitempty"`
 }
 
 // Unit holds the facts of one unit: what a pr-<n> copy of it runs with.
