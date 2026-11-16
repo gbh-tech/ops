@@ -152,9 +152,9 @@ type Controller struct {
 	PollInterval time.Duration
 	// StableTimeout bounds the wait for services to reach steady state.
 	StableTimeout time.Duration
-	// IdlePause is how long a ready review app can go without requests
-	// before gc pauses it; zero means state.DefaultIdlePause.
-	IdlePause time.Duration
+	// IdleTimeout is how long a ready review app can go without requests
+	// before gc destroys it; zero means state.DefaultIdleTimeout.
+	IdleTimeout time.Duration
 
 	units map[string]*infra.Unit
 }

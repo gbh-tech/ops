@@ -701,11 +701,10 @@ func (h *harness) manifest(pr int, sha string, missing ...string) state.Manifest
 
 var ecstypesService = ecstypes.Service{ServiceName: aws.String("pr-7-shell"), Status: aws.String("ACTIVE")}
 
-// perPRMetrics reports requests only for target groups whose name starts
-// with active.
+// perPRMetrics reports requests only for the target groups named in active.
 type perPRMetrics struct {
 	*fakeAWS
-	active string
+	active []string
 }
 
 func (m *perPRMetrics) GetMetricData(_ context.Context, in *cloudwatch.GetMetricDataInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
@@ -713,8 +712,10 @@ func (m *perPRMetrics) GetMetricData(_ context.Context, in *cloudwatch.GetMetric
 	for _, q := range in.MetricDataQueries {
 		v := 0.0
 		for _, d := range q.MetricStat.Metric.Dimensions {
-			if aws.ToString(d.Name) == "TargetGroup" && strings.HasPrefix(aws.ToString(d.Value), "targetgroup/"+m.active) {
-				v = 5
+			for _, name := range m.active {
+				if aws.ToString(d.Name) == "TargetGroup" && strings.HasPrefix(aws.ToString(d.Value), "targetgroup/"+name+"/") {
+					v = 5
+				}
 			}
 		}
 		out.MetricDataResults = append(out.MetricDataResults, cwtypes.MetricDataResult{Values: []float64{v}})

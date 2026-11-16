@@ -106,6 +106,10 @@ changesets / commitlint tooling).
   finds resources by the `reviewapp=pr-<n>` tag. Public routes, the DB owner
   role and the Service Connect domain come from the blueprint parameter
   (`blueprint_ssm` in the infra parameter), which Terraform writes.
+  `GC` applies the lifetime rules in `state.Lifetime` (TTL 48 wall-clock
+  hours, 8 awake hours idle on the `/*` unit's target group, one PR warning
+  an hour before the limit reached first); `Pause`/`Unpause` back the
+  `sleep`/`wake` commands, and wake restarts the idle clock.
 - `cmd/reviewapp` — `ops reviewapp list|status|logs` and the commands that
   change a review app (client mode by default, `--in-cluster` in the
   controller). Settings come from flags first, then `.ops/config.yaml`, so

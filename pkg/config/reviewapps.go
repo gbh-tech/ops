@@ -26,9 +26,10 @@ type ReviewAppsConfig struct {
 	Env string `mapstructure:"env"`
 	// Limit is how many review apps can run at once. Defaults to 10.
 	Limit int `mapstructure:"limit"`
-	// IdlePause is how long a review app can go without requests before it
-	// is paused, e.g. "2h". Empty means the ops default (2h).
-	IdlePause time.Duration `mapstructure:"idle_pause"`
+	// IdleTimeout is how many awake hours a review app can go without
+	// requests before gc destroys it, e.g. "8h". Time asleep does not count.
+	// Empty means the ops default (8h).
+	IdleTimeout time.Duration `mapstructure:"idle_timeout"`
 }
 
 // Defined reports whether the section is present.

@@ -30,12 +30,13 @@ const (
 // TTL is how long a review app lives, counted in wall-clock hours from creation.
 const TTL = 48 * time.Hour
 
-// DefaultIdlePause is how long a ready review app can go without requests
-// before gc pauses it. reviewapps.idle_pause overrides it.
-const DefaultIdlePause = 2 * time.Hour
+// DefaultIdleTimeout is how many awake hours a ready review app can go
+// without requests before gc destroys it. Time asleep does not count: wake
+// restarts the clock. reviewapps.idle_timeout overrides it.
+const DefaultIdleTimeout = 8 * time.Hour
 
-// ExpiryWarning is how long before expiry gc warns on the PR.
-const ExpiryWarning = time.Hour
+// Warning is how long before either limit (TTL or idle) gc warns on the PR.
+const Warning = time.Hour
 
 // DefaultLimit is the maximum number of review apps that can run at once.
 const DefaultLimit = 10
@@ -55,6 +56,12 @@ type State struct {
 	CreatedAt      time.Time `json:"created_at"`
 	LastActivityAt time.Time `json:"last_activity_at"`
 	ExpiresAt      time.Time `json:"expires_at"`
+
+	// ExpiryWarnedAt is when gc warned that the TTL is near.
+	ExpiryWarnedAt time.Time `json:"expiry_warned_at,omitzero"`
+	// IdleWarnedAt is when gc last warned that the idle limit is near. A
+	// warning older than LastActivityAt is stale.
+	IdleWarnedAt time.Time `json:"idle_warned_at,omitzero"`
 
 	Manifest  ManifestRef    `json:"manifest"`
 	Config    map[string]Env `json:"config"`
@@ -162,6 +169,63 @@ func (s *State) Active() bool {
 // Expired reports whether the review app is past its TTL at now.
 func (s *State) Expired(now time.Time) bool {
 	return !now.Before(s.ExpiresAt)
+}
+
+// IdleDeadline is when a ready review app without requests is destroyed.
+func (s *State) IdleDeadline(idleTimeout time.Duration) time.Time {
+	return s.LastActivityAt.Add(idleTimeout)
+}
+
+// Reason says why gc destroys a review app.
+type Reason string
+
+const (
+	ReasonNone    Reason = ""
+	ReasonExpired Reason = "expired"
+	ReasonIdle    Reason = "idle"
+)
+
+// Lifetime is what gc does with a review app at one point in time.
+type Lifetime struct {
+	// Destroy is why the review app must be destroyed now, if it must.
+	Destroy Reason
+	// Warn is the limit to warn about on the PR, if a warning is due.
+	Warn Reason
+	// Deadline is when the warned limit is reached.
+	Deadline time.Time
+}
+
+// Lifetime applies the lifetime rules (RFC 0004, D7) at now. The TTL counts
+// wall-clock hours from creation, asleep or not. The idle limit applies only
+// to a ready review app, counting from its last activity, so a sleeping one
+// never dies of idleness. Each limit is warned once, Warning before it; the
+// one reached first wins. Call it after recording any new activity.
+func (s *State) Lifetime(now time.Time, idleTimeout time.Duration) Lifetime {
+	if idleTimeout <= 0 {
+		idleTimeout = DefaultIdleTimeout
+	}
+	if s.Expired(now) {
+		return Lifetime{Destroy: ReasonExpired}
+	}
+	idle := s.Status == StatusReady
+	if idle && !now.Before(s.IdleDeadline(idleTimeout)) {
+		return Lifetime{Destroy: ReasonIdle}
+	}
+
+	limit, deadline := ReasonExpired, s.ExpiresAt
+	if idle && s.IdleDeadline(idleTimeout).Before(deadline) {
+		limit, deadline = ReasonIdle, s.IdleDeadline(idleTimeout)
+	}
+	if deadline.Sub(now) > Warning {
+		return Lifetime{}
+	}
+	switch {
+	case limit == ReasonExpired && !s.ExpiryWarnedAt.IsZero():
+		return Lifetime{}
+	case limit == ReasonIdle && !s.IdleWarnedAt.IsZero() && !s.IdleWarnedAt.Before(s.LastActivityAt):
+		return Lifetime{}
+	}
+	return Lifetime{Warn: limit, Deadline: deadline}
 }
 
 // Record appends an action to the history, keeping the most recent entries.

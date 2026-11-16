@@ -16,12 +16,17 @@ import (
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 )
 
-func (c *Controller) idlePause() time.Duration {
-	if c.IdlePause > 0 {
-		return c.IdlePause
+func (c *Controller) idleTimeout() time.Duration {
+	if c.IdleTimeout > 0 {
+		return c.IdleTimeout
 	}
-	return state.DefaultIdlePause
+	return state.DefaultIdleTimeout
 }
+
+// metricLag is how far back each activity query reaches before the last
+// recorded activity: ALB metrics arrive a few minutes late, and a request
+// counted twice only extends the idle clock by one gc run.
+const metricLag = 5 * time.Minute
 
 // MetricNamespace is the CloudWatch namespace of the gc heartbeat.
 const MetricNamespace = "ReviewApps"
@@ -58,7 +63,8 @@ func (c *Controller) pauseState(ctx context.Context, t *tracked) error {
 	return c.save(ctx, t)
 }
 
-// PauseAll pauses every ready review app (an evening schedule).
+// PauseAll pauses (puts to sleep) every ready review app: the evening
+// schedule. Creating, failed and destroying review apps are left alone.
 func (c *Controller) PauseAll(ctx context.Context) error {
 	states, err := c.Store.List(ctx)
 	if err != nil {
@@ -77,8 +83,9 @@ func (c *Controller) PauseAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Unpause scales a paused review app back up and restarts its idle clock.
-// The TTL keeps counting while it is paused (D7).
+// Unpause (wake) scales a paused review app back up and restarts its idle
+// clock, so time asleep never counts as idle. The TTL keeps counting while
+// it is paused (D7).
 func (c *Controller) Unpause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
@@ -121,9 +128,9 @@ func (c *Controller) Run(ctx context.Context, pr int, unit string, command []str
 }
 
 // GC applies the lifetime rules to every review app (D7, SCRUM-4550):
-// destroy at the TTL, pause after the idle time, warn an hour before
-// expiry, and finish destroys that failed. It publishes the heartbeat only
-// when every review app was handled.
+// record activity, destroy at the TTL or after the idle time, warn an hour
+// before either, and finish destroys that failed. It publishes the heartbeat
+// only when every review app was handled.
 func (c *Controller) GC(ctx context.Context) error {
 	states, err := c.Store.List(ctx)
 	if err != nil {
@@ -162,13 +169,14 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 	}
 	t := &tracked{State: st, etag: etag}
 
-	if t.Status == state.StatusDestroying || t.Expired(now) {
-		c.logf("%s expired or half destroyed; destroying", t.ID)
+	if t.Status == state.StatusDestroying {
+		c.logf("%s is half destroyed; destroying", t.ID)
 		return c.Destroy(ctx, pr)
 	}
 
-	if t.Status == state.StatusReady {
-		active, err := c.hadRequests(ctx, t.Resources.TargetGroups, t.LastActivityAt, now)
+	// Activity first, so a review app in use is never destroyed as idle.
+	if t.Status == state.StatusReady && !t.Expired(now) {
+		active, err := c.hadRequests(ctx, c.activityTargetGroups(t.State), t.LastActivityAt.Add(-metricLag), now)
 		if err != nil {
 			return err
 		}
@@ -177,30 +185,69 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 			if err := c.save(ctx, t); err != nil {
 				return err
 			}
-		} else if now.Sub(t.LastActivityAt) >= c.idlePause() {
-			c.logf("%s idle since %s; pausing", t.ID, t.LastActivityAt.Format(time.RFC3339))
-			if err := c.pauseState(ctx, t); err != nil {
-				return err
+		}
+	}
+
+	idle := c.idleTimeout()
+	lt := t.Lifetime(now, idle)
+	switch lt.Destroy {
+	case state.ReasonExpired:
+		c.logf("%s expired at %s; destroying", t.ID, t.ExpiresAt.Format(time.RFC3339))
+		return c.destroy(ctx, pr, fmt.Sprintf("it reached its %s lifetime.", hours(state.TTL)))
+	case state.ReasonIdle:
+		c.logf("%s idle since %s; destroying", t.ID, t.LastActivityAt.Format(time.RFC3339))
+		return c.destroy(ctx, pr, fmt.Sprintf("it had no requests for %s.", hours(idle)))
+	}
+
+	switch lt.Warn {
+	case state.ReasonExpired:
+		c.comment(ctx, pr, fmt.Sprintf("Review app %s will be destroyed at %s, when it reaches its %s lifetime. Run the review app workflow with deploy after that to start a new one.",
+			t.URL, lt.Deadline.Format("15:04 UTC"), hours(state.TTL)))
+		t.ExpiryWarnedAt = now
+	case state.ReasonIdle:
+		c.comment(ctx, pr, fmt.Sprintf("Review app %s has had no requests since %s and will be destroyed at %s. Open it to keep it running.",
+			t.URL, t.LastActivityAt.Format("15:04 UTC"), lt.Deadline.Format("15:04 UTC")))
+		t.IdleWarnedAt = now
+	default:
+		return nil
+	}
+	c.record(t, "warn")
+	return c.save(ctx, t)
+}
+
+// hours formats a whole-hour duration, e.g. "48-hour".
+func hours(d time.Duration) string {
+	return fmt.Sprintf("%d-hour", int(d.Hours()))
+}
+
+// activityTargetGroups returns the target groups whose requests count as
+// activity: those of the unit the ALB serves at /* (the app people open).
+// Other units are reached by that app or by machines, so their requests say
+// little about whether anyone uses the review app. Without such a unit,
+// every target group counts.
+func (c *Controller) activityTargetGroups(st *state.State) []string {
+	var names []string
+	if c.Blueprint != nil {
+		for unit, route := range c.Blueprint.Routes {
+			for _, rule := range route.Rules {
+				if slices.Contains(rule, "/*") {
+					names = append(names, reviewapp.TargetGroup(st.PR, unit))
+				}
 			}
 		}
 	}
-
-	if t.ExpiresAt.Sub(now) <= state.ExpiryWarning && !warned(t.State) {
-		c.comment(ctx, pr, fmt.Sprintf("Review app %s expires at %s. Run the review app workflow with deploy to start a new one.",
-			t.URL, t.ExpiresAt.Format("15:04 UTC")))
-		c.record(t, "warn")
-		return c.save(ctx, t)
-	}
-	return nil
-}
-
-func warned(st *state.State) bool {
-	for _, h := range st.History {
-		if h.Action == "warn" {
-			return true
+	var arns []string
+	for _, arn := range st.Resources.TargetGroups {
+		for _, name := range names {
+			if strings.Contains(arn, ":targetgroup/"+name+"/") {
+				arns = append(arns, arn)
+			}
 		}
 	}
-	return false
+	if len(arns) == 0 {
+		return st.Resources.TargetGroups
+	}
+	return arns
 }
 
 // hadRequests reports whether the review app's target groups served any

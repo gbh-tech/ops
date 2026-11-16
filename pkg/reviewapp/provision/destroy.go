@@ -28,6 +28,11 @@ import (
 // deleted. Every step runs even when an earlier one fails; the state is
 // archived only when all of them succeed, so destroy can be run again.
 func (c *Controller) Destroy(ctx context.Context, pr int) error {
+	return c.destroy(ctx, pr, "")
+}
+
+// destroy is Destroy with the reason gc gives on the PR, if any.
+func (c *Controller) destroy(ctx context.Context, pr int, why string) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	var t *tracked
 	switch {
@@ -78,7 +83,11 @@ func (c *Controller) Destroy(ctx context.Context, pr int) error {
 		}
 		c.logf("Archived state to %s", key)
 	}
-	c.comment(ctx, pr, fmt.Sprintf("Review app %s destroyed.", state.ID(pr)))
+	msg := fmt.Sprintf("Review app %s destroyed.", state.ID(pr))
+	if why != "" {
+		msg = fmt.Sprintf("Review app %s destroyed: %s", state.ID(pr), why)
+	}
+	c.comment(ctx, pr, msg)
 	return nil
 }
 

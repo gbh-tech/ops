@@ -63,8 +63,8 @@ type Settings struct {
 	Region     string
 	// Repository (owner/name) is where the controller comments.
 	Repository string
-	// IdlePause, when set, is passed on so gc runs see the project's value.
-	IdlePause time.Duration
+	// IdleTimeout, when set, is passed on to the controller.
+	IdleTimeout time.Duration
 	// Actor and RunURL go into the review app's history.
 	Actor  string
 	RunURL string
@@ -167,8 +167,8 @@ func (c *Client) Command(r Run, ref *state.ManifestRef) []string {
 			cmd = append(cmd, kv[0], kv[1])
 		}
 	}
-	if c.Settings.IdlePause > 0 {
-		cmd = append(cmd, "--idle-pause", c.Settings.IdlePause.String())
+	if c.Settings.IdleTimeout > 0 {
+		cmd = append(cmd, "--idle-timeout", c.Settings.IdleTimeout.String())
 	}
 	// Arguments go last, after "--" when the caller passes one, so a
 	// command for a one-off task is never read as ops flags.
