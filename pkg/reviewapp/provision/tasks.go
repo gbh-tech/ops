@@ -90,6 +90,10 @@ func portName(port int) string {
 
 // unitTaskDefinition builds the task definition of one unit.
 func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image string, spec state.UnitSpec) (*awsecs.RegisterTaskDefinitionInput, error) {
+	// ECS needs unique container names in a task definition.
+	if len(spec.Files) > 0 && unit == FilesContainer {
+		return nil, fmt.Errorf("unit %s: its name is taken by the init container that copies its files; rename the unit or drop its files", unit)
+	}
 	facts, err := c.unit(ctx, unit)
 	if err != nil {
 		return nil, err

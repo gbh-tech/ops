@@ -653,3 +653,23 @@ func TestUnitTaskDefinitionWithoutFilesHasOneContainer(t *testing.T) {
 		t.Fatalf("task definition = %+v", def)
 	}
 }
+
+func TestUnitTaskDefinitionRefusesAUnitNamedLikeTheFilesContainer(t *testing.T) {
+	h := newHarness()
+	spec := state.UnitSpec{CPU: 256, Memory: 512, Files: map[string]string{"/data/x.json": "x.json"}}
+	if _, err := h.c.unitTaskDefinition(ctx, 7, FilesContainer, ecrHost+"/files:pr-1", spec); err == nil || !strings.Contains(err.Error(), "taken by the init container") {
+		t.Fatalf("err = %v", err)
+	}
+	// Another name with the same files is fine.
+	if _, err := h.c.unitTaskDefinition(ctx, 7, "shell", ecrHost+"/shell:pr-1", spec); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUnitTaskDefinitionLeavesAUnitNamedFilesWithoutFilesAlone(t *testing.T) {
+	h := newHarness()
+	h.aws.ssm["/reviewapp/units/"+FilesContainer] = `{"security_group":"sg-f","task_exec_role":"exec-f","task_role":"task-f","log_group":"/ecs/files"}`
+	if _, err := h.c.unitTaskDefinition(ctx, 7, FilesContainer, ecrHost+"/files:pr-1", state.UnitSpec{CPU: 256, Memory: 512}); err != nil {
+		t.Fatal(err)
+	}
+}
