@@ -130,6 +130,9 @@ type UnitSpec struct {
 	Environment map[string]string `json:"environment,omitempty"`
 	Secrets     map[string]string `json:"secrets,omitempty"`
 	HealthCheck []string          `json:"health_check,omitempty"`
+	// Files maps an absolute container path to an object key under the
+	// review app's data prefix, copied into the task before the unit starts.
+	Files map[string]string `json:"files,omitempty"`
 }
 
 // ID returns the review app id for a PR number, e.g. "pr-123".

@@ -1,6 +1,8 @@
 package app_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -299,5 +301,27 @@ func TestLoadFileUnsupportedExtension(t *testing.T) {
 	err := app.LoadFile("config.json", &out)
 	if err == nil {
 		t.Fatal("expected error for unsupported extension, got nil")
+	}
+}
+
+func TestLoadAppConfigReviewAppFiles(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `[global]
+name = "apollo-router"
+kind = "ecs"
+
+[reviewapp.files]
+"/supergraph/supergraph.graphql" = "supergraph.graphql"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := app.LoadAppConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg["reviewapp"].Files["/supergraph/supergraph.graphql"]; got != "supergraph.graphql" {
+		t.Fatalf("files = %v", cfg["reviewapp"].Files)
 	}
 }

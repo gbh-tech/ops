@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
 var ctx = context.Background()
@@ -583,5 +584,72 @@ func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), string(status)) {
 			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
 		}
+	}
+}
+
+func TestUnitTaskDefinitionCopiesFilesBeforeTheUnitStarts(t *testing.T) {
+	h := newHarness()
+	spec := state.UnitSpec{CPU: 256, Memory: 512, Ports: []int{4000}, Files: map[string]string{
+		"/supergraph/supergraph.graphql": "supergraph.graphql",
+		"/supergraph/extra.json":         "config/extra.json",
+		"/etc/app/flags.json":            "flags.json",
+	}}
+
+	def, err := h.c.unitTaskDefinition(ctx, 7, "shell", ecrHost+"/shell:pr-1", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(def.ContainerDefinitions) != 2 {
+		t.Fatalf("containers = %d", len(def.ContainerDefinitions))
+	}
+	unit, files := def.ContainerDefinitions[0], def.ContainerDefinitions[1]
+	if aws.ToString(unit.Name) != "shell" || aws.ToString(files.Name) != FilesContainer {
+		t.Fatalf("names = %s, %s", aws.ToString(unit.Name), aws.ToString(files.Name))
+	}
+	if aws.ToBool(files.Essential) || aws.ToString(files.Image) != FilesImage {
+		t.Fatalf("files container = essential %v, image %s", aws.ToBool(files.Essential), aws.ToString(files.Image))
+	}
+	wantCmd := "aws s3 cp --only-show-errors 's3://data/pr-7/flags.json' '/etc/app/flags.json'" +
+		" && aws s3 cp --only-show-errors 's3://data/pr-7/config/extra.json' '/supergraph/extra.json'" +
+		" && aws s3 cp --only-show-errors 's3://data/pr-7/supergraph.graphql' '/supergraph/supergraph.graphql'"
+	if !slices.Equal(files.EntryPoint, []string{"sh", "-c"}) || !slices.Equal(files.Command, []string{wantCmd}) {
+		t.Fatalf("files command = %v %v", files.EntryPoint, files.Command)
+	}
+	if files.LogConfiguration.Options["awslogs-stream-prefix"] != "pr-7" {
+		t.Fatal("files logs are not under pr-7")
+	}
+
+	// One volume per directory: written by the init container, read-only in
+	// the unit, which starts only after the copy succeeded.
+	if len(def.Volumes) != 2 || aws.ToString(def.Volumes[0].Name) != "files-0" || aws.ToString(def.Volumes[1].Name) != "files-1" {
+		t.Fatalf("volumes = %+v", def.Volumes)
+	}
+	mounts := func(c []ecstypes.MountPoint) []string {
+		var out []string
+		for _, m := range c {
+			out = append(out, aws.ToString(m.SourceVolume)+":"+aws.ToString(m.ContainerPath)+":"+strconv.FormatBool(aws.ToBool(m.ReadOnly)))
+		}
+		return out
+	}
+	if got := mounts(files.MountPoints); !slices.Equal(got, []string{"files-0:/etc/app:false", "files-1:/supergraph:false"}) {
+		t.Fatalf("files mounts = %v", got)
+	}
+	if got := mounts(unit.MountPoints); !slices.Equal(got, []string{"files-0:/etc/app:true", "files-1:/supergraph:true"}) {
+		t.Fatalf("unit mounts = %v", got)
+	}
+	if len(unit.DependsOn) != 1 || aws.ToString(unit.DependsOn[0].ContainerName) != FilesContainer || unit.DependsOn[0].Condition != ecstypes.ContainerConditionSuccess {
+		t.Fatalf("depends on = %+v", unit.DependsOn)
+	}
+}
+
+func TestUnitTaskDefinitionWithoutFilesHasOneContainer(t *testing.T) {
+	h := newHarness()
+	def, err := h.c.unitTaskDefinition(ctx, 7, "shell", ecrHost+"/shell:pr-1", state.UnitSpec{CPU: 256, Memory: 512})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(def.ContainerDefinitions) != 1 || len(def.Volumes) != 0 || len(def.ContainerDefinitions[0].DependsOn) != 0 {
+		t.Fatalf("task definition = %+v", def)
 	}
 }

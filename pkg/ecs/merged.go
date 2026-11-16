@@ -38,6 +38,11 @@ func ResolveConfig(base *BaseConfig, appCfg app.AppConfig, env string) (MergedCo
 	if err := validateGlobalVolumes(appCfg["global"].Volumes); err != nil {
 		return MergedConfig{}, err
 	}
+	if len(appCfg["global"].Files) > 0 {
+		return MergedConfig{}, fmt.Errorf(
+			"files is only for review apps; move it from [global] to the review app section",
+		)
+	}
 
 	defaultReplicas := base.Defaults.Replicas
 	merged := app.AppSection{

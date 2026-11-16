@@ -1,6 +1,7 @@
 package render
 
 import (
+	"strings"
 	"testing"
 
 	"ops/pkg/app"
@@ -45,5 +46,59 @@ func TestUnitNeedsTheSection(t *testing.T) {
 	cfg := app.AppConfig{"global": {Name: "shell", Kind: "app"}, "dev": {}}
 	if _, err := Unit(cfg, "reviewapp", pkgecs.BaseDefaults{}, prefix); err == nil {
 		t.Fatal("want an error for a unit without a [reviewapp] section")
+	}
+}
+
+func TestUnitCarriesTheFilesOfTheSection(t *testing.T) {
+	cfg := app.AppConfig{
+		"global":    {Name: "apollo-router", Kind: "ecs", Port: 4000},
+		"reviewapp": {Files: map[string]string{"/supergraph/supergraph.graphql": "supergraph.graphql"}},
+	}
+	spec, err := Unit(cfg, "reviewapp", pkgecs.BaseDefaults{CPU: 256, Memory: 512}, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Files) != 1 || spec.Files["/supergraph/supergraph.graphql"] != "supergraph.graphql" {
+		t.Fatalf("files = %v", spec.Files)
+	}
+}
+
+func TestUnitWithoutFiles(t *testing.T) {
+	cfg := app.AppConfig{"global": {Name: "shell", Kind: "ecs"}, "reviewapp": {}}
+	spec, err := Unit(cfg, "reviewapp", pkgecs.BaseDefaults{}, prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Files != nil {
+		t.Fatalf("files = %v", spec.Files)
+	}
+}
+
+func TestUnitRefusesFilesInGlobal(t *testing.T) {
+	cfg := app.AppConfig{
+		"global":    {Name: "apollo-router", Kind: "ecs", Files: map[string]string{"/supergraph/s.graphql": "s.graphql"}},
+		"reviewapp": {},
+	}
+	if _, err := Unit(cfg, "reviewapp", pkgecs.BaseDefaults{}, prefix); err == nil || !strings.Contains(err.Error(), "only for review apps") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestFilesRefusesBadPathsAndKeys(t *testing.T) {
+	for _, files := range []map[string]string{
+		{"supergraph.graphql": "supergraph.graphql"},        // relative path
+		{"/supergraph.graphql": "supergraph.graphql"},       // directly under /
+		{"/a/../supergraph.graphql": "supergraph.graphql"},  // not clean
+		{"/supergraph/": "supergraph.graphql"},              // a directory
+		{"/supergraph/s'g.graphql": "supergraph.graphql"},   // shell quote
+		{"/supergraph/s.graphql": "../pr-8/s.graphql"},      // leaves the prefix
+		{"/supergraph/s.graphql": "/pr-7/s.graphql"},        // absolute key
+		{"/supergraph/s.graphql": "a/./s.graphql"},          // dot segment
+		{"/supergraph/s.graphql": "s.graphql; rm -rf /tmp"}, // shell
+		{"/supergraph/s.graphql": ""},                       // empty
+	} {
+		if _, err := Files(files); err == nil {
+			t.Errorf("want an error for %v", files)
+		}
 	}
 }

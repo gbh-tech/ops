@@ -5,7 +5,10 @@ package render
 
 import (
 	"fmt"
+	"path"
+	"regexp"
 	"slices"
+	"strings"
 
 	"ops/pkg/app"
 	pkgecs "ops/pkg/ecs"
@@ -41,6 +44,11 @@ func Unit(appCfg app.AppConfig, env string, defaults pkgecs.BaseDefaults, secret
 			spec.Ports = append(spec.Ports, p)
 		}
 	}
+	files, err := Files(appCfg[env].Files)
+	if err != nil {
+		return state.UnitSpec{}, err
+	}
+	spec.Files = files
 	if len(secrets) > 0 {
 		spec.Secrets = make(map[string]string, len(secrets))
 		for _, s := range secrets {
@@ -48,4 +56,30 @@ func Unit(appCfg app.AppConfig, env string, defaults pkgecs.BaseDefaults, secret
 		}
 	}
 	return spec, nil
+}
+
+// fileKey is an object key under the data prefix. The charset keeps the key
+// safe in the init container's shell command.
+var fileKey = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
+
+// filePath is an absolute container path, with the same charset.
+var filePath = regexp.MustCompile(`^(/[A-Za-z0-9._-]+)+$`)
+
+// Files checks the [<env>.files] entries: absolute, clean container paths
+// below a directory, and keys that stay inside the review app's data prefix.
+func Files(files map[string]string) (map[string]string, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(files))
+	for dst, key := range files {
+		if !filePath.MatchString(dst) || path.Clean(dst) != dst || path.Dir(dst) == "/" || slices.Contains([]string{".", ".."}, path.Base(dst)) {
+			return nil, fmt.Errorf("files: %q is not an absolute file path below a directory", dst)
+		}
+		if !fileKey.MatchString(key) || slices.ContainsFunc(strings.Split(key, "/"), func(p string) bool { return p == "." || p == ".." }) {
+			return nil, fmt.Errorf("files: key %q of %s is not a key under the data prefix", key, dst)
+		}
+		out[dst] = key
+	}
+	return out, nil
 }

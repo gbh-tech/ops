@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -137,7 +138,7 @@ func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image
 		}
 	}
 
-	return &awsecs.RegisterTaskDefinitionInput{
+	def := &awsecs.RegisterTaskDefinitionInput{
 		Family:                  aws.String(reviewapp.Family(pr, unit)),
 		NetworkMode:             ecstypes.NetworkModeAwsvpc,
 		RequiresCompatibilities: []ecstypes.Compatibility{ecstypes.CompatibilityFargate},
@@ -147,7 +148,59 @@ func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image
 		TaskRoleArn:             aws.String(facts.TaskRole),
 		ContainerDefinitions:    []ecstypes.ContainerDefinition{container},
 		Tags:                    ecsTags(pr),
-	}, nil
+	}
+	if len(spec.Files) > 0 {
+		c.addFiles(def, pr, spec.Files)
+	}
+	return def, nil
+}
+
+// FilesContainer is the init container that copies a unit's files.
+const FilesContainer = "files"
+
+// FilesImage runs the copy with the task role's credentials. Pinned to the
+// awscli version of .tool-versions.
+const FilesImage = "public.ecr.aws/aws-cli/aws-cli:2.24.5"
+
+// addFiles copies each object of files (container path -> key under the
+// review app's data prefix) into the task before the unit's container starts:
+// an init container writes them to a task volume per directory, and the unit's
+// container waits for it to succeed and mounts the volumes read-only. A
+// missing object fails the init container, so the unit never starts without
+// its files. The keys are checked by render.Files.
+func (c *Controller) addFiles(def *awsecs.RegisterTaskDefinitionInput, pr int, files map[string]string) {
+	main := &def.ContainerDefinitions[0]
+	volumes := map[string]string{} // directory -> volume name
+	var copies []string
+	for _, dst := range slices.Sorted(maps.Keys(files)) {
+		dir := path.Dir(dst)
+		if _, ok := volumes[dir]; !ok {
+			volumes[dir] = "files-" + strconv.Itoa(len(volumes))
+		}
+		src := fmt.Sprintf("s3://%s/%s%s", c.Infra.Buckets.Data, reviewapp.DataPrefix(pr), files[dst])
+		copies = append(copies, fmt.Sprintf("aws s3 cp --only-show-errors '%s' '%s'", src, dst))
+	}
+
+	init := ecstypes.ContainerDefinition{
+		Name:             aws.String(FilesContainer),
+		Image:            aws.String(FilesImage),
+		Essential:        aws.Bool(false),
+		EntryPoint:       []string{"sh", "-c"},
+		Command:          []string{strings.Join(copies, " && ")},
+		Environment:      keyValues(map[string]string{"AWS_REGION": c.Region}),
+		LogConfiguration: main.LogConfiguration,
+	}
+	for _, dir := range slices.Sorted(maps.Keys(volumes)) {
+		name := aws.String(volumes[dir])
+		def.Volumes = append(def.Volumes, ecstypes.Volume{Name: name})
+		init.MountPoints = append(init.MountPoints, ecstypes.MountPoint{SourceVolume: name, ContainerPath: aws.String(dir), ReadOnly: aws.Bool(false)})
+		main.MountPoints = append(main.MountPoints, ecstypes.MountPoint{SourceVolume: name, ContainerPath: aws.String(dir), ReadOnly: aws.Bool(true)})
+	}
+	main.DependsOn = append(main.DependsOn, ecstypes.ContainerDependency{
+		ContainerName: aws.String(FilesContainer),
+		Condition:     ecstypes.ContainerConditionSuccess,
+	})
+	def.ContainerDefinitions = append(def.ContainerDefinitions, init)
 }
 
 // toolsTaskDefinition builds the helper task definition of a review app:

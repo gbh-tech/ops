@@ -185,6 +185,14 @@ type AppSection struct {
 	// overriding per-env.
 	ScheduledTasks []ScheduledTaskConfig `toml:"scheduled_tasks" yaml:"scheduled_tasks"`
 	Subgraph       *SubgraphConfig       `toml:"subgraph"        yaml:"subgraph"`
+
+	// Files is for the review app section only: each entry maps an absolute
+	// path in the container to an object key under the review app's data
+	// prefix (s3://<data bucket>/pr-<n>/<key>). ops reviewapp copies the
+	// objects into the task before the unit's container starts, on a volume
+	// mounted read-only at each file's directory, which hides whatever the
+	// image has there. ops ecs ignores it, and [global] may not set it.
+	Files map[string]string `toml:"files" yaml:"files"`
 }
 
 // SubgraphConfig identifies an Apollo subgraph and its SDL relative to the app root.
