@@ -94,6 +94,10 @@ func run(cmd *cobra.Command, _ []string) error {
 	if err := json.Unmarshal(data, &desired); err != nil {
 		return fmt.Errorf("parsing manifest %s: %w", manifestPath, err)
 	}
+	// Without it nothing would be compared, and a gate would pass unchecked.
+	if desired.Applications == nil {
+		return fmt.Errorf("manifest %s has no \"applications\" object", manifestPath)
+	}
 	if desired.Environment != "" && desired.Environment != env {
 		return fmt.Errorf("manifest %s is for environment %q, not %q", manifestPath, desired.Environment, env)
 	}

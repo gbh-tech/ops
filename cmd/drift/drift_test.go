@@ -151,7 +151,7 @@ func TestTableListsEveryComparedUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "api\tecs\tin-sync\t\n" +
-		"worker\tlambda\tout-of-sync\tfunction runs image \"" + registry + "/platform/worker@sha256:old\", tag 1.0.0 is sha256:new\n"
+		"worker\tlambda\tout-of-sync\tfunction runs image \"" + registry + "/platform/worker@sha256:old\", expected digest sha256:new\n"
 	if got != want {
 		t.Fatalf("output =\n%s\nwant\n%s", got, want)
 	}
@@ -202,6 +202,25 @@ func TestJSONCarriesEveryField(t *testing.T) {
 		results[0] != (pkgdrift.Result{ID: "api", Kind: "ecs", Tag: "1.0.0", Status: pkgdrift.InSync}) ||
 		results[1].ID != "worker" || results[1].Status != pkgdrift.OutOfSync || results[1].Reason == "" {
 		t.Fatalf("results = %+v", results)
+	}
+}
+
+func TestRefusesAManifestWithoutApplications(t *testing.T) {
+	for name, manifest := range map[string]string{
+		"missing":       `{"environment":"stage","images":{"api":"1.0.0"}}`,
+		"null":          `{"environment":"stage","applications":null}`,
+		"null document": `null`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			repository(t, manifest)
+			// A gate must not pass on a manifest that names nothing to compare.
+			exitCode = true
+
+			_, err := runCommand(t)
+			if err == nil || !strings.Contains(err.Error(), `has no "applications" object`) {
+				t.Fatalf("err = %v, want the missing applications reported", err)
+			}
+		})
 	}
 }
 
