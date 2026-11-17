@@ -12,8 +12,18 @@ import (
 	pkgecs "ops/pkg/ecs"
 )
 
-// ecrHost matches the account of an ECR registry host.
-var ecrHost = regexp.MustCompile(`^(\d{12})\.dkr\.ecr\.`)
+// ecrHost matches the account and region of an ECR registry host.
+var ecrHost = regexp.MustCompile(`^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.`)
+
+// RegistryRegion returns the region of an ECR registry, or "" when registry is
+// not an ECR host. A registry can live in another region than the workloads,
+// and its images have to be looked up there.
+func RegistryRegion(registry string) string {
+	if match := ecrHost.FindStringSubmatch(registry); match != nil {
+		return match[2]
+	}
+	return ""
+}
 
 // Targets resolves the catalog units that tags names into comparison targets
 // for env, sorted by ID. tags maps unit IDs to image tags.
@@ -33,12 +43,20 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 	var targets []Target
 	for _, unit := range units {
 		tag, named := tags[unit.ID]
-		if !named {
+		if !named || (unit.Kind != KindECS && unit.Kind != KindLambda) {
 			continue
+		}
+		// Deploying an empty tag falls back to another one, so it could never
+		// be brought in sync.
+		if tag == "" {
+			return nil, fmt.Errorf("the manifest names no tag for unit %q", unit.ID)
 		}
 		target := Target{ID: unit.ID, Kind: unit.Kind, Tag: tag, RegistryID: registryID}
 		switch unit.Kind {
 		case KindECS:
+			if base.ECS.Cluster == "" {
+				return nil, fmt.Errorf("ecs.cluster is not set in the ops config; it names the cluster of unit %q", unit.ID)
+			}
 			appCfg, err := app.LoadAppConfig(unit.Config)
 			if err != nil {
 				return nil, err
@@ -52,7 +70,6 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 			target.Cluster = base.ECS.Cluster
 			target.Service = pkgecs.ComputeNames(merged, env, base.ECS.Cluster).Service
 			target.Container = merged.Name
-			target.Replicas = *merged.Replicas
 		case KindLambda:
 			target.Function = cfg.Lambda.ResolvedFunctionName(unit.ID, env)
 			if target.Function == "" {
@@ -61,8 +78,6 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 			// A function image lives where a service image of the same name would.
 			image := pkgecs.ImageURI(base, pkgecs.MergedConfig{AppSection: app.AppSection{Name: unit.ID}}, env, tag)
 			target.Repository, target.ImageTag, target.ImageDigest = reference(image, registry)
-		default:
-			continue
 		}
 		targets = append(targets, target)
 	}

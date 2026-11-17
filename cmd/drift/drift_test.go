@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -63,6 +65,10 @@ func (f *fakeAWS) DescribeTasks(context.Context, *awsecs.DescribeTasksInput, ...
 
 func (f *fakeAWS) DescribeImages(context.Context, *awsecr.DescribeImagesInput, ...func(*awsecr.Options)) (*awsecr.DescribeImagesOutput, error) {
 	return &awsecr.DescribeImagesOutput{ImageDetails: []ecrtypes.ImageDetail{{ImageDigest: aws.String(newDigest)}}}, nil
+}
+
+func (f *fakeAWS) BatchGetImage(context.Context, *awsecr.BatchGetImageInput, ...func(*awsecr.Options)) (*awsecr.BatchGetImageOutput, error) {
+	return nil, errors.New("no image is an index")
 }
 
 func (f *fakeAWS) GetFunction(_ context.Context, in *awslambda.GetFunctionInput, _ ...func(*awslambda.Options)) (*awslambda.GetFunctionOutput, error) {
@@ -118,16 +124,12 @@ func repository(t *testing.T, manifest string) *fakeAWS {
 	newChecker = func(context.Context, *config.OpsConfig) pkgdrift.Checker {
 		return pkgdrift.Checker{ECS: fake, ECR: fake, Lambda: fake}
 	}
-	oldEnv, oldManifest, oldFormat, oldExitCode := env, manifestPath, format, exitCode
-	env, manifestPath, format, exitCode = "stage", "manifest.json", "table", false
 	viper.Reset()
 	t.Cleanup(func() {
 		if err := os.Chdir(oldDir); err != nil {
 			t.Errorf("restore working directory: %v", err)
 		}
 		newChecker = oldChecker
-		env, manifestPath, format, exitCode = oldEnv, oldManifest, oldFormat, oldExitCode
-		Command.SetOut(nil)
 		viper.Reset()
 	})
 	return fake
@@ -135,18 +137,36 @@ func repository(t *testing.T, manifest string) *fakeAWS {
 
 const stageManifest = `{"schemaVersion":3,"environment":"stage","applications":{"api":"1.0.0","worker":"1.0.0","migrate":"1.0.0","removed-unit":"1.0.0"}}`
 
-func runCommand(t *testing.T) (string, error) {
+// runCommand runs ops drift with args, through the flag parser, against the
+// stage manifest of the repository, and returns what it printed.
+func runCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	// The command is a package variable, so flags keep the last run's values.
+	Command.Flags().VisitAll(func(flag *pflag.Flag) {
+		if err := flag.Value.Set(flag.DefValue); err != nil {
+			t.Fatal(err)
+		}
+		flag.Changed = false
+	})
 	var output bytes.Buffer
 	Command.SetOut(&output)
-	err := Command.RunE(Command, nil)
+	Command.SetErr(&bytes.Buffer{})
+	Command.SetArgs(args)
+	t.Cleanup(func() {
+		Command.SetOut(nil)
+		Command.SetErr(nil)
+		Command.SetArgs(nil)
+	})
+	err := Command.ExecuteContext(context.Background())
 	return output.String(), err
 }
+
+var stage = []string{"--env", "stage", "--manifest", "manifest.json"}
 
 func TestTableListsEveryComparedUnit(t *testing.T) {
 	fake := repository(t, stageManifest)
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, stage...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,9 +182,8 @@ func TestTableListsEveryComparedUnit(t *testing.T) {
 
 func TestIDsListsOnlyWhatIsNotInSync(t *testing.T) {
 	repository(t, stageManifest)
-	format = "ids"
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, append(stage, "--format", "ids")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,9 +194,8 @@ func TestIDsListsOnlyWhatIsNotInSync(t *testing.T) {
 
 func TestIDsIsAnEmptyLineWhenEverythingIsInSync(t *testing.T) {
 	repository(t, `{"environment":"stage","applications":{"api":"1.0.0"}}`)
-	format, exitCode = "ids", true
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, append(stage, "--format", "ids", "--exit-code")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,9 +206,8 @@ func TestIDsIsAnEmptyLineWhenEverythingIsInSync(t *testing.T) {
 
 func TestJSONCarriesEveryField(t *testing.T) {
 	repository(t, stageManifest)
-	format = "json"
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, "-e", "stage", "-m", "manifest.json", "--format", "json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,10 +230,9 @@ func TestRefusesAManifestWithoutApplications(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			repository(t, manifest)
-			// A gate must not pass on a manifest that names nothing to compare.
-			exitCode = true
 
-			_, err := runCommand(t)
+			// A gate must not pass on a manifest that names nothing to compare.
+			_, err := runCommand(t, append(stage, "--exit-code")...)
 			if err == nil || !strings.Contains(err.Error(), `has no "applications" object`) {
 				t.Fatalf("err = %v, want the missing applications reported", err)
 			}
@@ -225,10 +241,9 @@ func TestRefusesAManifestWithoutApplications(t *testing.T) {
 }
 
 func TestJSONIsAnEmptyArrayWhenTheManifestNamesNoUnit(t *testing.T) {
-	repository(t, `{"applications":{}}`)
-	format = "json"
+	repository(t, `{"applications":{"migrate":"1.0.0","removed-unit":"1.0.0"}}`)
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, append(stage, "--format", "json")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +252,19 @@ func TestJSONIsAnEmptyArrayWhenTheManifestNamesNoUnit(t *testing.T) {
 	}
 }
 
+func TestExitCodeFailsWhenNothingWasCompared(t *testing.T) {
+	repository(t, `{"applications":{"migrate":"1.0.0","removed-unit":"1.0.0"}}`)
+
+	_, err := runCommand(t, append(stage, "--exit-code")...)
+	if err == nil || !strings.Contains(err.Error(), "nothing was compared") {
+		t.Fatalf("err = %v, want a gate that compared nothing to fail", err)
+	}
+}
+
 func TestExitCodeFailsAfterPrintingWhenAUnitIsNotInSync(t *testing.T) {
 	repository(t, stageManifest)
-	exitCode = true
 
-	got, err := runCommand(t)
+	got, err := runCommand(t, append(stage, "--exit-code")...)
 	if err == nil || err.Error() != "1 of 2 units do not run their manifest image in stage: worker" {
 		t.Fatalf("err = %v, want the unit that is not in sync named", err)
 	}
@@ -256,7 +279,7 @@ func TestExitCodeFailsAfterPrintingWhenAUnitIsNotInSync(t *testing.T) {
 func TestRefusesAManifestOfAnotherEnvironment(t *testing.T) {
 	repository(t, `{"environment":"dev","applications":{"api":"1.0.0"}}`)
 
-	_, err := runCommand(t)
+	_, err := runCommand(t, stage...)
 	if err == nil || !strings.Contains(err.Error(), `is for environment "dev", not "stage"`) {
 		t.Fatalf("err = %v, want the environment mismatch reported", err)
 	}
@@ -264,32 +287,27 @@ func TestRefusesAManifestOfAnotherEnvironment(t *testing.T) {
 
 func TestReportsBadInputs(t *testing.T) {
 	tests := []struct {
-		name   string
-		change func()
-		want   string
+		name string
+		args []string
+		want string
 	}{
-		{name: "format", change: func() { format = "yaml" }, want: `unsupported format "yaml"`},
-		{name: "missing manifest", change: func() { manifestPath = "nope.json" }, want: "reading manifest"},
-		{name: "invalid manifest", change: func() { manifestPath = ".ops/config.yaml" }, want: "parsing manifest"},
+		{name: "format", args: append(stage, "--format", "yaml"), want: `unsupported format "yaml"`},
+		{name: "missing manifest", args: []string{"--env", "stage", "--manifest", "nope.json"}, want: "reading manifest"},
+		{name: "invalid manifest", args: []string{"--env", "stage", "--manifest", ".ops/config.yaml"}, want: "parsing manifest"},
+		{name: "empty tag", args: []string{"--env", "stage", "--manifest", "empty-tag.json"}, want: `names no tag for unit "api"`},
+		{name: "no env", args: []string{"--manifest", "manifest.json"}, want: `required flag(s) "env" not set`},
+		{name: "no manifest", args: []string{"--env", "stage"}, want: `required flag(s) "manifest" not set`},
+		{name: "argument", args: append(stage, "extra"), want: "unknown command"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repository(t, stageManifest)
-			tt.change()
+			write(t, "empty-tag.json", `{"applications":{"api":""}}`)
 
-			_, err := runCommand(t)
+			_, err := runCommand(t, tt.args...)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("err = %v, want it to contain %q", err, tt.want)
 			}
 		})
-	}
-}
-
-func TestEnvAndManifestAreRequired(t *testing.T) {
-	for _, name := range []string{"env", "manifest"} {
-		flag := Command.Flags().Lookup(name)
-		if flag == nil || flag.Annotations["cobra_annotation_bash_completion_one_required_flag"] == nil {
-			t.Fatalf("flag --%s is not required", name)
-		}
 	}
 }

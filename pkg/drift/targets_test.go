@@ -53,7 +53,7 @@ func TestTargetsResolvesECSAndLambdaUnits(t *testing.T) {
 			ID: "api", Kind: KindECS, Tag: "1.0.0-abc1234",
 			Image:      "111122223333.dkr.ecr.us-east-1.amazonaws.com/platform/api:1.0.0-abc1234",
 			Repository: "platform/api", ImageTag: "1.0.0-abc1234",
-			Cluster: "platform-stage", Service: "api", Container: "api", Replicas: 2,
+			Cluster: "platform-stage", Service: "api", Container: "api",
 		},
 		{
 			ID: "worker", Kind: KindLambda, Tag: "2.0.0-def5678",
@@ -84,24 +84,66 @@ func TestTargetsLeavesOutWhatHasNothingToCompare(t *testing.T) {
 	}
 }
 
-func TestTargetsFollowsTheServiceNameAndReplicasOfTheEnvironment(t *testing.T) {
+func TestTargetsFollowsTheServiceNameOfTheEnvironment(t *testing.T) {
 	units := []catalog.Unit{unit(t, "api", "ecs",
-		"[global]\nname = \"api\"\nkind = \"ecs\"\n[stage]\nappend_environment = true\nreplicas = 0\n")}
+		"[global]\nname = \"api\"\nkind = \"ecs\"\n[stage]\nappend_environment = true\n")}
 
 	got, err := Targets(testConfig(), units, map[string]string{"api": "1"}, "stage")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Service != "api-stage" || got[0].Replicas != 0 {
-		t.Fatalf("service, replicas = %q, %d, want api-stage, 0", got[0].Service, got[0].Replicas)
+	if got[0].Service != "api-stage" || got[0].Cluster != "platform-stage" {
+		t.Fatalf("service, cluster = %q, %q, want api-stage, platform-stage", got[0].Service, got[0].Cluster)
 	}
 
+	// An environment without a section of its own uses [global], as a deployment does.
 	got, err = Targets(testConfig(), units, map[string]string{"api": "1"}, "dev")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0].Service != "api" || got[0].Replicas != 1 || got[0].Cluster != "platform-dev" {
-		t.Fatalf("dev target = %+v, want service api with the default replica in platform-dev", got[0])
+	if got[0].Service != "api" || got[0].Cluster != "platform-dev" {
+		t.Fatalf("dev target = %+v, want service api in platform-dev", got[0])
+	}
+}
+
+func TestTargetsRefusesAnEmptyTag(t *testing.T) {
+	units := []catalog.Unit{
+		unit(t, "api", "ecs", "[global]\nname = \"api\"\nkind = \"ecs\"\n"),
+		unit(t, "migrate", "migrator", "[global]\nname = \"migrate\"\nkind = \"migrator\"\n"),
+	}
+
+	_, err := Targets(testConfig(), units, map[string]string{"api": ""}, "stage")
+	if err == nil || !strings.Contains(err.Error(), `names no tag for unit "api"`) {
+		t.Fatalf("err = %v, want the unit without a tag named", err)
+	}
+	// A unit that is not compared may have any entry.
+	if _, err := Targets(testConfig(), units, map[string]string{"migrate": ""}, "stage"); err != nil {
+		t.Fatalf("err = %v, want none for a unit that is not compared", err)
+	}
+}
+
+func TestTargetsRequiresTheClusterForECSUnits(t *testing.T) {
+	cfg := testConfig()
+	cfg.ECS.Cluster = ""
+	units := []catalog.Unit{unit(t, "api", "ecs", "[global]\nname = \"api\"\nkind = \"ecs\"\n")}
+
+	_, err := Targets(cfg, units, map[string]string{"api": "1"}, "stage")
+	if err == nil || !strings.Contains(err.Error(), "ecs.cluster is not set") {
+		t.Fatalf("err = %v, want it to name ecs.cluster", err)
+	}
+}
+
+func TestRegistryRegion(t *testing.T) {
+	tests := map[string]string{
+		"111122223333.dkr.ecr.eu-west-1.amazonaws.com":     "eu-west-1",
+		"111122223333.dkr.ecr.us-gov-west-1.amazonaws.com": "us-gov-west-1",
+		"registry.example.com":                             "",
+		"":                                                 "",
+	}
+	for registry, want := range tests {
+		if got := RegistryRegion(registry); got != want {
+			t.Fatalf("RegistryRegion(%q) = %q, want %q", registry, got, want)
+		}
 	}
 }
 

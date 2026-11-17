@@ -5,8 +5,10 @@ package drift
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -25,7 +27,8 @@ type Status string
 const (
 	// InSync: the unit runs the image the manifest names.
 	InSync Status = "in-sync"
-	// OutOfSync: the unit exists and runs another image, or is still rolling.
+	// OutOfSync: the unit exists and runs another image, or a rollout is not
+	// complete. A deployment at the manifest tag is what brings it in sync.
 	OutOfSync Status = "out-of-sync"
 	// Missing: the service, function or image repository does not exist in
 	// this environment. Deploying cannot fix that; its infrastructure must be
@@ -74,9 +77,6 @@ type Target struct {
 	Cluster   string
 	Service   string
 	Container string
-	// Replicas is the configured replica count. A unit kept at zero has no
-	// running task to compare, so only its task definition is.
-	Replicas int
 
 	// Lambda units.
 	Function string
@@ -102,6 +102,13 @@ type ECSAPI interface {
 // ECRAPI is the subset of the ECR client the comparison uses.
 type ECRAPI interface {
 	DescribeImages(ctx context.Context, in *awsecr.DescribeImagesInput, opts ...func(*awsecr.Options)) (*awsecr.DescribeImagesOutput, error)
+	BatchGetImage(ctx context.Context, in *awsecr.BatchGetImageInput, opts ...func(*awsecr.Options)) (*awsecr.BatchGetImageOutput, error)
+}
+
+// Media types of an image index, which names one image per platform.
+var indexMediaTypes = []string{
+	"application/vnd.oci.image.index.v1+json",
+	"application/vnd.docker.distribution.manifest.list.v2+json",
 }
 
 // LambdaAPI is the subset of the Lambda client the comparison uses.
@@ -136,11 +143,8 @@ func missing(format string, args ...any) verdict {
 	return verdict{status: Missing, reason: fmt.Sprintf(format, args...)}
 }
 
-// unreadable keeps the first line of the error: SDK errors carry the request
-// details on the lines after it.
 func unreadable(err error) verdict {
-	reason, _, _ := strings.Cut(err.Error(), "\n")
-	return verdict{status: Unreadable, reason: reason}
+	return verdict{status: Unreadable, reason: err.Error()}
 }
 
 // Check compares every target and returns one result per target, in the order
@@ -181,37 +185,70 @@ func (c Checker) check(ctx context.Context, target Target) verdict {
 	}
 }
 
-// expectedDigest returns the digest the unit must run: the one its
-// configuration pins, or the one the registry holds for its image tag. The
-// second value reports whether a digest was resolved; when it is false the
-// verdict says why.
-func (c Checker) expectedDigest(ctx context.Context, target Target) (string, bool, verdict) {
+// expectedDigests returns the digests the unit may run: the one its
+// configuration pins, or the one the registry holds for its image tag. A tag
+// of a multi-platform image names an index, and a workload runs one of the
+// images the index lists, so those count too. The second value reports whether
+// the digests were resolved; when it is false the verdict says why.
+func (c Checker) expectedDigests(ctx context.Context, target Target) ([]string, bool, verdict) {
 	if target.ImageDigest != "" {
-		return target.ImageDigest, true, verdict{}
+		return []string{target.ImageDigest}, true, verdict{}
 	}
-	in := &awsecr.DescribeImagesInput{
-		RepositoryName: aws.String(target.Repository),
-		ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(target.ImageTag)}},
-	}
+	imageID := ecrtypes.ImageIdentifier{ImageTag: aws.String(target.ImageTag)}
+	var registryID *string
 	if target.RegistryID != "" {
-		in.RegistryId = aws.String(target.RegistryID)
+		registryID = aws.String(target.RegistryID)
 	}
-	out, err := c.ECR.DescribeImages(ctx, in)
+	noImage := outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
+
+	out, err := c.ECR.DescribeImages(ctx, &awsecr.DescribeImagesInput{
+		RegistryId:     registryID,
+		RepositoryName: aws.String(target.Repository),
+		ImageIds:       []ecrtypes.ImageIdentifier{imageID},
+	})
 	if err != nil {
 		var noRepository *ecrtypes.RepositoryNotFoundException
 		if errors.As(err, &noRepository) {
-			return "", false, missing("image repository %s does not exist", target.Repository)
+			return nil, false, missing("image repository %s does not exist", target.Repository)
 		}
-		var noImage *ecrtypes.ImageNotFoundException
-		if errors.As(err, &noImage) {
-			return "", false, outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
+		var notFound *ecrtypes.ImageNotFoundException
+		if errors.As(err, &notFound) {
+			return nil, false, noImage
 		}
-		return "", false, unreadable(err)
+		return nil, false, unreadable(err)
 	}
 	if len(out.ImageDetails) == 0 || aws.ToString(out.ImageDetails[0].ImageDigest) == "" {
-		return "", false, outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
+		return nil, false, noImage
 	}
-	return aws.ToString(out.ImageDetails[0].ImageDigest), true, verdict{}
+	digests := []string{aws.ToString(out.ImageDetails[0].ImageDigest)}
+	if !slices.Contains(indexMediaTypes, aws.ToString(out.ImageDetails[0].ImageManifestMediaType)) {
+		return digests, true, verdict{}
+	}
+
+	index, err := c.ECR.BatchGetImage(ctx, &awsecr.BatchGetImageInput{
+		RegistryId:         registryID,
+		RepositoryName:     aws.String(target.Repository),
+		ImageIds:           []ecrtypes.ImageIdentifier{imageID},
+		AcceptedMediaTypes: indexMediaTypes,
+	})
+	if err != nil {
+		return nil, false, unreadable(err)
+	}
+	if len(index.Images) == 0 {
+		return nil, false, noImage
+	}
+	var listed struct {
+		Manifests []struct {
+			Digest string `json:"digest"`
+		} `json:"manifests"`
+	}
+	if err := json.Unmarshal([]byte(aws.ToString(index.Images[0].ImageManifest)), &listed); err != nil {
+		return nil, false, unreadable(fmt.Errorf("parsing the image index of %s:%s: %w", target.Repository, target.ImageTag, err))
+	}
+	for _, image := range listed.Manifests {
+		digests = append(digests, image.Digest)
+	}
+	return digests, true, verdict{}
 }
 
 func (c Checker) checkECS(ctx context.Context, target Target) verdict {
@@ -250,7 +287,9 @@ func (c Checker) checkECS(ctx context.Context, target Target) verdict {
 	if deployed != target.Image {
 		return outOfSync("task definition has image %q, expected %q", deployed, target.Image)
 	}
-	if target.Replicas == 0 {
+	// A service scaled to zero, by its configuration or by anything else, has
+	// no task to compare, and its task definition is what its next task runs.
+	if service.DesiredCount == 0 && service.RunningCount == 0 && service.PendingCount == 0 {
 		return inSync()
 	}
 
@@ -281,7 +320,7 @@ func (c Checker) checkECS(ctx context.Context, target Target) verdict {
 		return inSync()
 	}
 
-	digest, ok, v := c.expectedDigest(ctx, target)
+	digests, ok, v := c.expectedDigests(ctx, target)
 	if !ok {
 		return v
 	}
@@ -306,8 +345,8 @@ func (c Checker) checkECS(ctx context.Context, target Target) verdict {
 					running = aws.ToString(container.ImageDigest)
 				}
 			}
-			if running != digest {
-				return outOfSync("a task runs digest %q, expected %s", running, digest)
+			if !slices.Contains(digests, running) {
+				return outOfSync("a task runs digest %q, expected %s", running, digests[0])
 			}
 		}
 	}
@@ -329,7 +368,7 @@ func (c Checker) checkLambda(ctx context.Context, target Target) verdict {
 		return outOfSync("the last update of function %s is not complete", target.Function)
 	}
 
-	digest, ok, v := c.expectedDigest(ctx, target)
+	digests, ok, v := c.expectedDigests(ctx, target)
 	if !ok {
 		return v
 	}
@@ -337,8 +376,9 @@ func (c Checker) checkLambda(ctx context.Context, target Target) verdict {
 	if function.Code != nil {
 		deployed = aws.ToString(function.Code.ResolvedImageUri)
 	}
-	if !strings.HasSuffix(deployed, "@"+digest) {
-		return outOfSync("function runs image %q, expected digest %s", deployed, digest)
+	_, running, _ := strings.Cut(deployed, "@")
+	if !slices.Contains(digests, running) {
+		return outOfSync("function runs image %q, expected digest %s", deployed, digests[0])
 	}
 	return inSync()
 }

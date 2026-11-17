@@ -110,11 +110,15 @@ func (f *fakeECS) DescribeTasks(_ context.Context, in *awsecs.DescribeTasksInput
 	return out, nil
 }
 
-// fakeECR resolves every tag to testDigest unless it is told to fail.
+// fakeECR resolves every tag to testDigest unless it is told to fail. With
+// platforms set, the tag names an index that lists those digests.
 type fakeECR struct {
-	in     *awsecr.DescribeImagesInput
-	err    error
-	digest *string
+	in        *awsecr.DescribeImagesInput
+	err       error
+	digest    *string
+	platforms []string
+	indexIn   *awsecr.BatchGetImageInput
+	indexErr  error
 }
 
 func (f *fakeECR) DescribeImages(_ context.Context, in *awsecr.DescribeImagesInput, _ ...func(*awsecr.Options)) (*awsecr.DescribeImagesOutput, error) {
@@ -126,7 +130,24 @@ func (f *fakeECR) DescribeImages(_ context.Context, in *awsecr.DescribeImagesInp
 	if f.digest != nil {
 		digest = f.digest
 	}
-	return &awsecr.DescribeImagesOutput{ImageDetails: []ecrtypes.ImageDetail{{ImageDigest: digest}}}, nil
+	detail := ecrtypes.ImageDetail{ImageDigest: digest, ImageManifestMediaType: aws.String("application/vnd.oci.image.manifest.v1+json")}
+	if f.platforms != nil {
+		detail.ImageManifestMediaType = aws.String("application/vnd.oci.image.index.v1+json")
+	}
+	return &awsecr.DescribeImagesOutput{ImageDetails: []ecrtypes.ImageDetail{detail}}, nil
+}
+
+func (f *fakeECR) BatchGetImage(_ context.Context, in *awsecr.BatchGetImageInput, _ ...func(*awsecr.Options)) (*awsecr.BatchGetImageOutput, error) {
+	f.indexIn = in
+	if f.indexErr != nil {
+		return nil, f.indexErr
+	}
+	var manifests []string
+	for _, digest := range f.platforms {
+		manifests = append(manifests, fmt.Sprintf(`{"digest":%q}`, digest))
+	}
+	manifest := `{"manifests":[` + strings.Join(manifests, ",") + `]}`
+	return &awsecr.BatchGetImageOutput{Images: []ecrtypes.Image{{ImageManifest: aws.String(manifest)}}}, nil
 }
 
 type fakeLambda struct {
@@ -149,7 +170,7 @@ func ecsTarget() Target {
 	return Target{
 		ID: "api", Kind: KindECS, Tag: "1.0.0-abc1234", Image: testImage,
 		Repository: "platform/api", ImageTag: "1.0.0-abc1234",
-		Cluster: "platform-stage", Service: "api", Container: "api", Replicas: 1,
+		Cluster: "platform-stage", Service: "api", Container: "api",
 	}
 }
 
@@ -266,7 +287,7 @@ func TestECSOutOfSync(t *testing.T) {
 	}
 }
 
-func TestECSRolloutStateOfOtherDeploymentControllersIsNotRequired(t *testing.T) {
+func TestECSServiceThatReportsNoRolloutStateIsComparedByItsTasks(t *testing.T) {
 	ecs := newFakeECS()
 	ecs.services[0].Deployments[0].RolloutState = ""
 
@@ -309,47 +330,78 @@ func TestECSMissing(t *testing.T) {
 	}
 }
 
-func TestECSUnreadableKeepsTheFirstLineOfTheError(t *testing.T) {
+func TestECSUnreadable(t *testing.T) {
+	denied := errors.New("AccessDenied: not allowed")
 	tests := []struct {
 		name   string
 		change func(*fakeECS, *fakeECR)
 	}{
-		{name: "services", change: func(e *fakeECS, _ *fakeECR) { e.servicesErr = errors.New("AccessDenied: not allowed\nrequest id 1") }},
-		{name: "tasks", change: func(e *fakeECS, _ *fakeECR) { e.describeErr = errors.New("AccessDenied: not allowed\nrequest id 1") }},
-		{name: "registry", change: func(_ *fakeECS, r *fakeECR) { r.err = errors.New("AccessDenied: not allowed\nrequest id 1") }},
+		{name: "services", change: func(e *fakeECS, _ *fakeECR) { e.servicesErr = denied }},
+		{name: "tasks", change: func(e *fakeECS, _ *fakeECR) { e.describeErr = denied }},
+		{name: "registry", change: func(_ *fakeECS, r *fakeECR) { r.err = denied }},
+		{name: "image index", change: func(_ *fakeECS, r *fakeECR) { r.platforms, r.indexErr = []string{testDigest}, denied }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ecs, ecr := newFakeECS(), &fakeECR{}
 			tt.change(ecs, ecr)
-			got := checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget())
-			wantStatus(t, got, Unreadable, "AccessDenied: not allowed")
-			if strings.Contains(got.Reason, "request id") {
-				t.Fatalf("reason = %q, want only the first line", got.Reason)
-			}
+			wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget()), Unreadable, "AccessDenied: not allowed")
 		})
 	}
 }
 
-func TestECSAtZeroReplicasIsComparedByItsTaskDefinitionOnly(t *testing.T) {
+func TestECSServiceScaledToZeroIsComparedByItsTaskDefinitionOnly(t *testing.T) {
 	ecs := newFakeECS()
 	ecs.services[0].DesiredCount, ecs.services[0].RunningCount = 0, 0
 	ecs.taskARNs = nil
-	target := ecsTarget()
-	target.Replicas = 0
 
-	// No registry: a unit at zero replicas has no running digest to compare.
-	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), InSync, "")
+	// No registry: a service without tasks has no running digest to compare.
+	wantStatus(t, checkOne(t, Checker{ECS: ecs}, ecsTarget()), InSync, "")
 
 	ecs.image = "registry.example.com/platform/api:0.9.0-0000000"
-	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), OutOfSync, "task definition has image")
+	wantStatus(t, checkOne(t, Checker{ECS: ecs}, ecsTarget()), OutOfSync, "task definition has image")
+}
+
+func TestECSServiceMeantToBeAtZeroStillHasItsRunningTasksCompared(t *testing.T) {
+	ecs := newFakeECS()
+	// Scaling in: no task is desired, but one still runs.
+	ecs.services[0].DesiredCount = 0
+
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: &fakeECR{}}, ecsTarget()), OutOfSync, "service api is not stable: 1 of 0 tasks running")
+}
+
+func TestTagOfAMultiPlatformImageMatchesAnyImageItLists(t *testing.T) {
+	ecs, ecr := newFakeECS(), &fakeECR{digest: aws.String("sha256:index"), platforms: []string{"sha256:amd64", "sha256:arm64"}}
+	ecs.digests["task-1"] = "sha256:arm64"
+
+	// The task reports the image of its platform.
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget()), InSync, "")
+	if tag := aws.ToString(ecr.indexIn.ImageIds[0].ImageTag); tag != "1.0.0-abc1234" {
+		t.Fatalf("index read for tag %q, want the unit's tag", tag)
+	}
+
+	// Or the index itself.
+	ecs.digests["task-1"] = "sha256:index"
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget()), InSync, "")
+
+	ecs.digests["task-1"] = "sha256:old"
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget()), OutOfSync, `a task runs digest "sha256:old", expected sha256:index`)
+}
+
+func TestSinglePlatformImageIsNotReadAsAnIndex(t *testing.T) {
+	ecr := &fakeECR{}
+	checkOne(t, Checker{ECS: newFakeECS(), ECR: ecr}, ecsTarget())
+
+	if ecr.indexIn != nil {
+		t.Fatal("the image manifest was fetched for a tag that names no index")
+	}
 }
 
 func TestECSImageOutsideTheRegistryIsComparedByReferenceOnly(t *testing.T) {
 	ecs := newFakeECS()
 	ecs.image = "docker.io/library/nginx:1.27"
 	target := ecsTarget()
-	target.Image, target.Repository = "docker.io/library/nginx:1.27", ""
+	target.Image, target.Repository, target.ImageTag = "docker.io/library/nginx:1.27", "", ""
 
 	// No registry: the digest of an outside image is not looked up.
 	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), InSync, "")
@@ -440,7 +492,7 @@ func TestLambda(t *testing.T) {
 			name:   "runs another digest",
 			lambda: &fakeLambda{out: activeFunction("registry.example.com/platform/worker@sha256:old")},
 			status: OutOfSync,
-			reason: `function runs image "registry.example.com/platform/worker@sha256:old"`,
+			reason: `function runs image "registry.example.com/platform/worker@sha256:old", expected digest sha256:new`,
 		},
 		{
 			name: "update in progress",

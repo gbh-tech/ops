@@ -37,8 +37,13 @@ type manifest struct {
 var newChecker = func(ctx context.Context, cfg *config.OpsConfig) pkgdrift.Checker {
 	awsCfg := aws.NewAWSConfig(ctx, cfg.AWS.Region, cfg.AWS.Profile)
 	return pkgdrift.Checker{
-		ECS:    awsecs.NewFromConfig(awsCfg),
-		ECR:    awsecr.NewFromConfig(awsCfg),
+		ECS: awsecs.NewFromConfig(awsCfg),
+		ECR: awsecr.NewFromConfig(awsCfg, func(o *awsecr.Options) {
+			// registry.url can name a registry in another region.
+			if region := pkgdrift.RegistryRegion(cfg.RegistryURL()); region != "" {
+				o.Region = region
+			}
+		}),
 		Lambda: awslambda.NewFromConfig(awsCfg),
 	}
 }
@@ -53,20 +58,22 @@ functions and changes nothing.
 Each unit of kind "ecs" or "lambda" that the manifest names gets one status:
 
   in-sync      it runs the image of its manifest tag
-  out-of-sync  it runs another image, or a rollout is not complete
+  out-of-sync  it runs another image, or a rollout is not complete; a
+               deployment at the manifest tag brings it in sync
   missing      its service, function or image repository does not exist in the
-               environment, so its infrastructure has to be provisioned first
+               environment; a deployment fails until it is provisioned
   unreadable   its state could not be read
 
-An ECS unit is in sync when its task definition names the manifest image, its
-rollout is complete and every running task has that tag's digest. A unit kept
-at zero replicas is compared by its task definition alone. A Lambda unit is in
-sync when its last update succeeded and it runs that tag's digest; set
+An ECS unit is in sync when the task definition of its service names the
+manifest image, its rollout is complete and every running task has that tag's
+digest. A service scaled to zero is compared by its task definition alone. Its
+scheduled tasks are not compared. A Lambda unit is in sync when its last update
+succeeded and its unpublished version runs that tag's digest; set
 lambda.function_name in the ops config to tell ops how functions are named.`,
 	Example: `  # Show every unit of an environment
   ops drift --env stage --manifest deploy/environments/stage.json
 
-  # The IDs to deploy, comma-separated
+  # The IDs that are not in sync, comma-separated
   ops drift --env stage --manifest deploy/environments/stage.json --format ids
 
   # Fail when the environment does not match, for a gate
@@ -115,10 +122,12 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
+	// A gate that compared nothing would pass without having checked anything.
+	if exitCode && len(targets) == 0 {
+		return fmt.Errorf("manifest %s names no ecs or lambda unit of the catalog, so nothing was compared", manifestPath)
 	}
+
+	ctx := cmd.Context()
 	results := newChecker(ctx, cfg).Check(ctx, targets)
 
 	var drifted []string
@@ -131,9 +140,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	switch format {
 	case "json":
-		if results == nil {
-			results = []pkgdrift.Result{}
-		}
 		if err := json.NewEncoder(out).Encode(results); err != nil {
 			return err
 		}
@@ -159,7 +165,7 @@ func init() {
 	Command.Flags().StringVarP(&env, "env", "e", "", "Environment to compare")
 	Command.Flags().StringVarP(&manifestPath, "manifest", "m", "", "Manifest that names the image tag of each unit")
 	Command.Flags().StringVar(&format, "format", "table", "Output format: table, json or ids (the comma-separated IDs that are not in sync)")
-	Command.Flags().BoolVar(&exitCode, "exit-code", false, "Exit with status 1 when a unit is not in sync")
+	Command.Flags().BoolVar(&exitCode, "exit-code", false, "Exit with status 1 when a unit is not in sync, or when no unit was compared")
 	for _, flag := range []string{"env", "manifest"} {
 		if err := Command.MarkFlagRequired(flag); err != nil {
 			panic(err)

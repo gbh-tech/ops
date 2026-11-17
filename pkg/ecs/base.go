@@ -36,9 +36,9 @@ type BaseConfig struct {
 	Defaults BaseDefaults `toml:"defaults" yaml:"defaults"`
 }
 
-// defaultReplicas returns the effective replica count from ECSDefaults,
+// baseReplicas returns the effective replica count from ECSDefaults,
 // preferring the new replicas key over the deprecated desired_count fallback.
-func defaultReplicas(d config.ECSDefaults) int {
+func baseReplicas(d config.ECSDefaults) int {
 	if d.Replicas != 0 {
 		return d.Replicas
 	}
@@ -66,7 +66,7 @@ func BaseConfigFor(cfg *config.OpsConfig, env string) *BaseConfig {
 		Defaults: BaseDefaults{
 			CPU:         cfg.ECS.Defaults.CPU,
 			Memory:      cfg.ECS.Defaults.Memory,
-			Replicas:    defaultReplicas(cfg.ECS.Defaults),
+			Replicas:    baseReplicas(cfg.ECS.Defaults),
 			NetworkMode: cfg.ECS.Defaults.NetworkMode,
 			LaunchType:  cfg.ECS.Defaults.LaunchType,
 			LogDriver:   cfg.ECS.Defaults.LogDriver,

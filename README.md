@@ -292,15 +292,19 @@ verify the resolved service target and append setting before deploying.
 
 ### `drift`
 
-Compares an environment with a manifest and lists the catalog units that do not
-run the image the manifest names. It only reads; deciding what to deploy, and
-deploying it, stay with the caller. A deployment pipeline can use it to roll
-everything that differs from the manifest, not only what one commit changed, so
-a deployment that failed is caught up by the next one.
+Compares an environment with a manifest and lists the units that do not run the
+image the manifest names. It only reads; deciding what to deploy, and deploying
+it, stay with the caller. A deployment pipeline can use it to roll every unit
+whose image differs from the manifest, not only what one commit changed, so the
+units a failed deployment left behind are picked up by the next one.
 
-The manifest is a JSON file whose `applications` object maps catalog unit IDs
-to image tags. An `environment` field, when present, must match `--env`. Other
-fields are ignored.
+A unit is an app that `ops catalog` discovers: a directory under `app_dirs`
+with a `deploy/config.toml`, whose `[global]` section sets its `name` (the unit
+ID) and its `kind`.
+
+The manifest is a JSON file whose `applications` object maps unit IDs to image
+tags. The object is required and a tag cannot be empty. An `environment` field,
+when present, must match `--env`. Other fields are ignored.
 
 ```json
 {
@@ -322,31 +326,48 @@ ops drift --env stage --manifest deploy/environments/stage.json --format ids
 # Every unit as JSON
 ops drift --env stage --manifest deploy/environments/stage.json --format json
 
-# Exit with status 1 when a unit is not in sync, for a gate
+# Exit with status 1 when a unit is not in sync, or when nothing was compared,
+# for a gate
 ops drift --env stage --manifest deploy/environments/stage.json --exit-code
 ```
 
 Each unit of kind `ecs` or `lambda` that the manifest names gets one status:
 
-| Status        | Meaning                                                                                                          |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `in-sync`     | It runs the image of its manifest tag                                                                            |
-| `out-of-sync` | It runs another image, or a rollout is not complete                                                              |
-| `missing`     | Its service, function or image repository does not exist in the environment; provision its infrastructure first  |
-| `unreadable`  | Its state could not be read. It is listed with the units that are not in sync, so a caller never skips it        |
+| Status        | Meaning                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------- |
+| `in-sync`     | It runs the image of its manifest tag                                                                       |
+| `out-of-sync` | It runs another image, or a rollout is not complete. A deployment at the manifest tag brings it in sync      |
+| `missing`     | Its service, function or image repository does not exist in the environment. Provision it; a deployment fails until then |
+| `unreadable`  | Its state could not be read                                                                                 |
+
+`--format ids` lists every unit that is not `in-sync`, so a caller that deploys
+the list never skips a unit it could not read. A `missing` unit is in the list
+too, and its deployment fails until its infrastructure exists; read the
+statuses from `--format json` to stop before deploying.
 
 - An ECS unit is in sync when the task definition of its service names the
   image a deployment at that tag would, its rollout is complete, and every
-  running task has that tag's digest. A unit kept at `replicas = 0` is compared
-  by its task definition alone. An image outside the registry is compared by
-  its reference, without a digest.
-- A Lambda unit is in sync when its last update succeeded and it runs that
-  tag's digest. ops does not deploy Lambda functions, so tell it how they are
-  named with `lambda.function_name` in `.ops/config.yaml`, for example
+  running task has that tag's digest. A service scaled to zero is compared by
+  its task definition alone. An image outside the registry is compared by its
+  reference, without a digest, and an image the unit's config pins to its own
+  tag or digest is compared with that one.
+- Only the service is compared. The scheduled tasks of a unit and the
+  schedules that run them are not, so a deployment that updated the service and
+  then failed to update the schedules still reads as in sync.
+- A Lambda unit is in sync when its last update succeeded and its unpublished
+  version (`$LATEST`) runs that tag's digest. ops does not deploy Lambda
+  functions, so tell it how they are named with `lambda.function_name` in
+  `.ops/config.yaml`, for example
   `lambda.function_name: my-platform-{service}-{env}`. Its image is looked up
   in the same registry repository a service of that name would use.
+- The tag of a multi-platform image names an index. A unit that runs any image
+  the index lists is in sync.
+- The registry is read where `registry.url` points, which can be another
+  account or region. The caller needs `ecr:DescribeImages` and
+  `ecr:BatchGetImage` there.
 - Units of any other kind have no running state and are left out, as are
-  manifest entries that are not in the catalog.
+  manifest entries that are not in the catalog and catalog units the manifest
+  does not name.
 
 ### `git`
 
