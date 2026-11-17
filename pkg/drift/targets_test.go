@@ -52,13 +52,13 @@ func TestTargetsResolvesECSAndLambdaUnits(t *testing.T) {
 		{
 			ID: "api", Kind: KindECS, Tag: "1.0.0-abc1234",
 			Image:      "111122223333.dkr.ecr.us-east-1.amazonaws.com/platform/api:1.0.0-abc1234",
-			Repository: "platform/api",
-			Cluster:    "platform-stage", Service: "api", Container: "api", Replicas: 2,
+			Repository: "platform/api", ImageTag: "1.0.0-abc1234",
+			Cluster: "platform-stage", Service: "api", Container: "api", Replicas: 2,
 		},
 		{
 			ID: "worker", Kind: KindLambda, Tag: "2.0.0-def5678",
-			Repository: "platform/worker",
-			Function:   "platform-worker-stage",
+			Repository: "platform/worker", ImageTag: "2.0.0-def5678",
+			Function: "platform-worker-stage",
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -115,6 +115,34 @@ func TestTargetsComparesAnOutsideImageByReference(t *testing.T) {
 	}
 	if got[0].Image != "docker.io/library/nginx:1.27" || got[0].Repository != "" {
 		t.Fatalf("image, repository = %q, %q, want the configured image and no repository", got[0].Image, got[0].Repository)
+	}
+}
+
+func TestTargetsResolvesAnImagePinnedInTheRegistryFromItsOwnReference(t *testing.T) {
+	const registry = "111122223333.dkr.ecr.us-east-1.amazonaws.com"
+	tests := []struct {
+		name            string
+		image           string
+		repository, tag string
+		digest          string
+	}{
+		{name: "tag", image: registry + "/platform/api:stable", repository: "platform/api", tag: "stable"},
+		{name: "digest", image: registry + "/platform/api@sha256:abc", repository: "platform/api", digest: "sha256:abc"},
+		{name: "tag and digest", image: registry + "/platform/api:stable@sha256:abc", repository: "platform/api", digest: "sha256:abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// resolveImage keeps a tagged image as it is; a digest counts as a tag for it.
+			units := []catalog.Unit{unit(t, "api", "ecs", "[global]\nname = \"api\"\nkind = \"ecs\"\nimage = \""+tt.image+"\"\n")}
+
+			got, err := Targets(testConfig(), units, map[string]string{"api": "9.9.9"}, "stage")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got[0].Image != tt.image || got[0].Repository != tt.repository || got[0].ImageTag != tt.tag || got[0].ImageDigest != tt.digest {
+				t.Fatalf("target = %+v, want image %q in %q at tag %q, digest %q", got[0], tt.image, tt.repository, tt.tag, tt.digest)
+			}
+		})
 	}
 }
 

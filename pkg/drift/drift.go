@@ -63,6 +63,12 @@ type Target struct {
 	// its reference only, with no digest.
 	Repository string
 	RegistryID string
+	// ImageTag is the tag the running digest is resolved from. It is Tag,
+	// unless the unit's configuration pins its image to a tag of its own.
+	// ImageDigest is set instead when the configuration pins a digest, which
+	// needs no lookup.
+	ImageTag    string
+	ImageDigest string
 
 	// ECS units.
 	Cluster   string
@@ -175,13 +181,17 @@ func (c Checker) check(ctx context.Context, target Target) verdict {
 	}
 }
 
-// expectedDigest resolves the manifest tag to the digest the registry holds
-// for it. The second value reports whether a digest was resolved; when it is
-// false the verdict says why.
+// expectedDigest returns the digest the unit must run: the one its
+// configuration pins, or the one the registry holds for its image tag. The
+// second value reports whether a digest was resolved; when it is false the
+// verdict says why.
 func (c Checker) expectedDigest(ctx context.Context, target Target) (string, bool, verdict) {
+	if target.ImageDigest != "" {
+		return target.ImageDigest, true, verdict{}
+	}
 	in := &awsecr.DescribeImagesInput{
 		RepositoryName: aws.String(target.Repository),
-		ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(target.Tag)}},
+		ImageIds:       []ecrtypes.ImageIdentifier{{ImageTag: aws.String(target.ImageTag)}},
 	}
 	if target.RegistryID != "" {
 		in.RegistryId = aws.String(target.RegistryID)
@@ -194,12 +204,12 @@ func (c Checker) expectedDigest(ctx context.Context, target Target) (string, boo
 		}
 		var noImage *ecrtypes.ImageNotFoundException
 		if errors.As(err, &noImage) {
-			return "", false, outOfSync("tag %s has no image in %s", target.Tag, target.Repository)
+			return "", false, outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
 		}
 		return "", false, unreadable(err)
 	}
 	if len(out.ImageDetails) == 0 || aws.ToString(out.ImageDetails[0].ImageDigest) == "" {
-		return "", false, outOfSync("tag %s has no image in %s", target.Tag, target.Repository)
+		return "", false, outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
 	}
 	return aws.ToString(out.ImageDetails[0].ImageDigest), true, verdict{}
 }
@@ -276,12 +286,18 @@ func (c Checker) checkECS(ctx context.Context, target Target) verdict {
 		return v
 	}
 	for start := 0; start < len(taskARNs); start += describeTasksLimit {
+		batch := taskARNs[start:min(start+describeTasksLimit, len(taskARNs))]
 		tasks, err := c.ECS.DescribeTasks(ctx, &awsecs.DescribeTasksInput{
 			Cluster: aws.String(target.Cluster),
-			Tasks:   taskARNs[start:min(start+describeTasksLimit, len(taskARNs))],
+			Tasks:   batch,
 		})
 		if err != nil {
 			return unreadable(err)
+		}
+		// A task that stopped since it was listed comes back as a failure, not
+		// as a task, and its digest was not seen.
+		if len(tasks.Tasks) != len(batch) {
+			return unreadable(fmt.Errorf("%d of %d running tasks of service %s could not be described", len(batch)-len(tasks.Tasks), len(batch), target.Service))
 		}
 		for _, task := range tasks.Tasks {
 			running := ""
@@ -291,7 +307,7 @@ func (c Checker) checkECS(ctx context.Context, target Target) verdict {
 				}
 			}
 			if running != digest {
-				return outOfSync("a task runs digest %q, tag %s is %s", running, target.Tag, digest)
+				return outOfSync("a task runs digest %q, expected %s", running, digest)
 			}
 		}
 	}
@@ -322,7 +338,7 @@ func (c Checker) checkLambda(ctx context.Context, target Target) verdict {
 		deployed = aws.ToString(function.Code.ResolvedImageUri)
 	}
 	if !strings.HasSuffix(deployed, "@"+digest) {
-		return outOfSync("function runs image %q, tag %s is %s", deployed, target.Tag, digest)
+		return outOfSync("function runs image %q, expected digest %s", deployed, digest)
 	}
 	return inSync()
 }

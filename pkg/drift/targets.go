@@ -48,7 +48,7 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 				return nil, fmt.Errorf("%s: %w", unit.Config, err)
 			}
 			target.Image = pkgecs.ImageURI(base, merged, env, tag)
-			target.Repository = repository(target.Image, registry)
+			target.Repository, target.ImageTag, target.ImageDigest = reference(target.Image, registry)
 			target.Cluster = base.ECS.Cluster
 			target.Service = pkgecs.ComputeNames(merged, env, base.ECS.Cluster).Service
 			target.Container = merged.Name
@@ -60,7 +60,7 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 			}
 			// A function image lives where a service image of the same name would.
 			image := pkgecs.ImageURI(base, pkgecs.MergedConfig{AppSection: app.AppSection{Name: unit.ID}}, env, tag)
-			target.Repository = repository(image, registry)
+			target.Repository, target.ImageTag, target.ImageDigest = reference(image, registry)
 		default:
 			continue
 		}
@@ -70,13 +70,20 @@ func Targets(cfg *config.OpsConfig, units []catalog.Unit, tags map[string]string
 	return targets, nil
 }
 
-// repository returns the registry repository of image, or "" when the image
-// does not live in the registry.
-func repository(image, registry string) string {
+// reference splits an image of the registry into its repository and the tag
+// or digest it names. The repository is "" when the image does not live in the
+// registry. A unit's configuration can pin its image to a tag or a digest of
+// its own, so these come from the image and not from the manifest tag.
+func reference(image, registry string) (repository, tag, digest string) {
 	path, inRegistry := strings.CutPrefix(image, registry+"/")
 	if registry == "" || !inRegistry {
-		return ""
+		return "", "", ""
 	}
-	name, _, _ := strings.Cut(path, ":")
-	return name
+	// The digest goes first: it holds a colon of its own.
+	path, digest, _ = strings.Cut(path, "@")
+	repository, tag, _ = strings.Cut(path, ":")
+	if digest != "" {
+		tag = ""
+	}
+	return repository, tag, digest
 }

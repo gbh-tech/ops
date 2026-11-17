@@ -35,6 +35,7 @@ type fakeECS struct {
 	digests      map[string]string
 	described    [][]string
 	describeErr  error
+	stopped      string
 }
 
 func stableService() ecstypes.Service {
@@ -96,6 +97,11 @@ func (f *fakeECS) DescribeTasks(_ context.Context, in *awsecs.DescribeTasksInput
 	f.described = append(f.described, in.Tasks)
 	out := &awsecs.DescribeTasksOutput{}
 	for _, arn := range in.Tasks {
+		// A task that stopped since it was listed is a failure, not a task.
+		if arn == f.stopped {
+			out.Failures = append(out.Failures, ecstypes.Failure{Arn: aws.String(arn), Reason: aws.String("MISSING")})
+			continue
+		}
 		out.Tasks = append(out.Tasks, ecstypes.Task{Containers: []ecstypes.Container{
 			{Name: aws.String("sidecar"), ImageDigest: aws.String("sha256:sidecar")},
 			{Name: aws.String("api"), ImageDigest: aws.String(f.digests[arn])},
@@ -142,12 +148,16 @@ func (f *fakeLambda) GetFunction(context.Context, *awslambda.GetFunctionInput, .
 func ecsTarget() Target {
 	return Target{
 		ID: "api", Kind: KindECS, Tag: "1.0.0-abc1234", Image: testImage,
-		Repository: "platform/api", Cluster: "platform-stage", Service: "api", Container: "api", Replicas: 1,
+		Repository: "platform/api", ImageTag: "1.0.0-abc1234",
+		Cluster: "platform-stage", Service: "api", Container: "api", Replicas: 1,
 	}
 }
 
 func lambdaTarget() Target {
-	return Target{ID: "worker", Kind: KindLambda, Tag: "1.0.0-abc1234", Repository: "platform/worker", Function: "platform-worker-stage"}
+	return Target{
+		ID: "worker", Kind: KindLambda, Tag: "1.0.0-abc1234",
+		Repository: "platform/worker", ImageTag: "1.0.0-abc1234", Function: "platform-worker-stage",
+	}
 }
 
 func checkOne(t *testing.T, c Checker, target Target) Result {
@@ -343,6 +353,43 @@ func TestECSImageOutsideTheRegistryIsComparedByReferenceOnly(t *testing.T) {
 
 	// No registry: the digest of an outside image is not looked up.
 	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), InSync, "")
+}
+
+func TestECSTaskThatStoppedWhileItWasReadIsUnreadable(t *testing.T) {
+	ecs := newFakeECS()
+	ecs.taskARNs = []string{"task-1", "task-2"}
+	ecs.digests["task-2"] = testDigest
+	ecs.services[0].DesiredCount, ecs.services[0].RunningCount = 2, 2
+	ecs.stopped = "task-2"
+
+	// The task that was described matches, but the other was never seen.
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: &fakeECR{}}, ecsTarget()), Unreadable,
+		"1 of 2 running tasks of service api could not be described")
+}
+
+func TestECSImagePinnedToItsOwnTagIsResolvedFromThatTag(t *testing.T) {
+	ecs, ecr := newFakeECS(), &fakeECR{}
+	ecs.image = "registry.example.com/platform/api:stable"
+	target := ecsTarget()
+	target.Image, target.ImageTag = "registry.example.com/platform/api:stable", "stable"
+
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, target), InSync, "")
+	if tag := aws.ToString(ecr.in.ImageIds[0].ImageTag); tag != "stable" {
+		t.Fatalf("tag looked up = %q, want the tag the image is pinned to", tag)
+	}
+}
+
+func TestECSImagePinnedToADigestNeedsNoLookup(t *testing.T) {
+	ecs := newFakeECS()
+	ecs.image = "registry.example.com/platform/api@" + testDigest
+	target := ecsTarget()
+	target.Image, target.ImageTag, target.ImageDigest = ecs.image, "", testDigest
+
+	// No registry: the expected digest is the pinned one.
+	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), InSync, "")
+
+	ecs.digests["task-1"] = "sha256:old"
+	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), OutOfSync, `a task runs digest "sha256:old", expected sha256:new`)
 }
 
 func TestECSReadsEveryPageOfTasksAndChecksEachOne(t *testing.T) {
