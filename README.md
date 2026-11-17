@@ -296,8 +296,9 @@ Compares an environment with a manifest and lists the units that do not run the
 image the manifest names. It only reads; deciding what to deploy, and deploying
 it, stay with the caller. A deployment pipeline can use it to roll every unit
 whose image differs from the manifest, not only what one commit changed, so a
-unit that a failed deployment left on an older image is picked up by the next
-one.
+unit that a failed deployment left on the image of an older manifest tag is
+picked up by the next one. The rules below say what is compared; what they
+leave out, drift cannot see.
 
 A unit is an app that `ops catalog` discovers: a directory under `app_dirs`
 with a `deploy/config.toml`, whose `[global]` section sets its `name` (the unit
