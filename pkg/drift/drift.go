@@ -68,8 +68,7 @@ type Target struct {
 	RegistryID string
 	// ImageTag is the tag the running digest is resolved from. It is Tag,
 	// unless the unit's configuration pins its image to a tag of its own.
-	// ImageDigest is set instead when the configuration pins a digest, which
-	// needs no lookup.
+	// ImageDigest is set instead when the configuration pins a digest.
 	ImageTag    string
 	ImageDigest string
 
@@ -185,21 +184,23 @@ func (c Checker) check(ctx context.Context, target Target) verdict {
 	}
 }
 
-// expectedDigests returns the digests the unit may run: the one its
-// configuration pins, or the one the registry holds for its image tag. A tag
-// of a multi-platform image names an index, and a workload runs one of the
-// images the index lists, so those count too. The second value reports whether
-// the digests were resolved; when it is false the verdict says why.
+// expectedDigests returns the digests the unit may run: the digest of the
+// image its configuration pins, or of its image tag. A multi-platform image is
+// an index, and a workload runs one of the images the index lists, so those
+// count too. The second value reports whether the digests were resolved; when
+// it is false the verdict says why.
 func (c Checker) expectedDigests(ctx context.Context, target Target) ([]string, bool, verdict) {
-	if target.ImageDigest != "" {
-		return []string{target.ImageDigest}, true, verdict{}
-	}
+	name := "tag " + target.ImageTag
 	imageID := ecrtypes.ImageIdentifier{ImageTag: aws.String(target.ImageTag)}
+	if target.ImageDigest != "" {
+		name = "digest " + target.ImageDigest
+		imageID = ecrtypes.ImageIdentifier{ImageDigest: aws.String(target.ImageDigest)}
+	}
 	var registryID *string
 	if target.RegistryID != "" {
 		registryID = aws.String(target.RegistryID)
 	}
-	noImage := outOfSync("tag %s has no image in %s", target.ImageTag, target.Repository)
+	noImage := outOfSync("%s has no image in %s", name, target.Repository)
 
 	out, err := c.ECR.DescribeImages(ctx, &awsecr.DescribeImagesInput{
 		RegistryId:     registryID,
@@ -220,15 +221,17 @@ func (c Checker) expectedDigests(ctx context.Context, target Target) ([]string, 
 	if len(out.ImageDetails) == 0 || aws.ToString(out.ImageDetails[0].ImageDigest) == "" {
 		return nil, false, noImage
 	}
-	digests := []string{aws.ToString(out.ImageDetails[0].ImageDigest)}
+	digest := aws.ToString(out.ImageDetails[0].ImageDigest)
 	if !slices.Contains(indexMediaTypes, aws.ToString(out.ImageDetails[0].ImageManifestMediaType)) {
-		return digests, true, verdict{}
+		return []string{digest}, true, verdict{}
 	}
 
+	// By the digest just resolved, not by the tag again: a tag that moved in
+	// between would mix the images of two versions.
 	index, err := c.ECR.BatchGetImage(ctx, &awsecr.BatchGetImageInput{
 		RegistryId:         registryID,
 		RepositoryName:     aws.String(target.Repository),
-		ImageIds:           []ecrtypes.ImageIdentifier{imageID},
+		ImageIds:           []ecrtypes.ImageIdentifier{{ImageDigest: aws.String(digest)}},
 		AcceptedMediaTypes: indexMediaTypes,
 	})
 	if err != nil {
@@ -243,8 +246,9 @@ func (c Checker) expectedDigests(ctx context.Context, target Target) ([]string, 
 		} `json:"manifests"`
 	}
 	if err := json.Unmarshal([]byte(aws.ToString(index.Images[0].ImageManifest)), &listed); err != nil {
-		return nil, false, unreadable(fmt.Errorf("parsing the image index of %s:%s: %w", target.Repository, target.ImageTag, err))
+		return nil, false, unreadable(fmt.Errorf("parsing the image index %s of %s: %w", digest, target.Repository, err))
 	}
+	digests := []string{digest}
 	for _, image := range listed.Manifests {
 		digests = append(digests, image.Digest)
 	}

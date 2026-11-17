@@ -130,6 +130,10 @@ func (f *fakeECR) DescribeImages(_ context.Context, in *awsecr.DescribeImagesInp
 	if f.digest != nil {
 		digest = f.digest
 	}
+	// An image looked up by its digest is that image.
+	if in.ImageIds[0].ImageDigest != nil {
+		digest = in.ImageIds[0].ImageDigest
+	}
 	detail := ecrtypes.ImageDetail{ImageDigest: digest, ImageManifestMediaType: aws.String("application/vnd.oci.image.manifest.v1+json")}
 	if f.platforms != nil {
 		detail.ImageManifestMediaType = aws.String("application/vnd.oci.image.index.v1+json")
@@ -376,8 +380,10 @@ func TestTagOfAMultiPlatformImageMatchesAnyImageItLists(t *testing.T) {
 
 	// The task reports the image of its platform.
 	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, ecsTarget()), InSync, "")
-	if tag := aws.ToString(ecr.indexIn.ImageIds[0].ImageTag); tag != "1.0.0-abc1234" {
-		t.Fatalf("index read for tag %q, want the unit's tag", tag)
+	// The index is read by the digest the tag resolved to, so a tag that moves
+	// in between cannot mix two versions.
+	if id := ecr.indexIn.ImageIds[0]; aws.ToString(id.ImageDigest) != "sha256:index" || id.ImageTag != nil {
+		t.Fatalf("index read by %+v, want the resolved digest and no tag", id)
 	}
 
 	// Or the index itself.
@@ -431,17 +437,32 @@ func TestECSImagePinnedToItsOwnTagIsResolvedFromThatTag(t *testing.T) {
 	}
 }
 
-func TestECSImagePinnedToADigestNeedsNoLookup(t *testing.T) {
-	ecs := newFakeECS()
+func TestECSImagePinnedToADigestIsLookedUpByThatDigest(t *testing.T) {
+	ecs, ecr := newFakeECS(), &fakeECR{}
 	ecs.image = "registry.example.com/platform/api@" + testDigest
 	target := ecsTarget()
 	target.Image, target.ImageTag, target.ImageDigest = ecs.image, "", testDigest
 
-	// No registry: the expected digest is the pinned one.
-	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), InSync, "")
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, target), InSync, "")
+	if id := ecr.in.ImageIds[0]; aws.ToString(id.ImageDigest) != testDigest || id.ImageTag != nil {
+		t.Fatalf("image looked up = %+v, want the pinned digest and no tag", id)
+	}
 
 	ecs.digests["task-1"] = "sha256:old"
-	wantStatus(t, checkOne(t, Checker{ECS: ecs}, target), OutOfSync, `a task runs digest "sha256:old", expected sha256:new`)
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, target), OutOfSync, `a task runs digest "sha256:old", expected sha256:new`)
+
+	ecr.err = &ecrtypes.ImageNotFoundException{}
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, target), OutOfSync, "digest sha256:new has no image in platform/api")
+}
+
+func TestECSImagePinnedToAnIndexDigestMatchesAnyImageItLists(t *testing.T) {
+	ecs, ecr := newFakeECS(), &fakeECR{platforms: []string{"sha256:amd64", "sha256:arm64"}}
+	ecs.image = "registry.example.com/platform/api@sha256:index"
+	ecs.digests["task-1"] = "sha256:arm64"
+	target := ecsTarget()
+	target.Image, target.ImageTag, target.ImageDigest = ecs.image, "", "sha256:index"
+
+	wantStatus(t, checkOne(t, Checker{ECS: ecs, ECR: ecr}, target), InSync, "")
 }
 
 func TestECSReadsEveryPageOfTasksAndChecksEachOne(t *testing.T) {

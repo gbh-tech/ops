@@ -295,8 +295,9 @@ verify the resolved service target and append setting before deploying.
 Compares an environment with a manifest and lists the units that do not run the
 image the manifest names. It only reads; deciding what to deploy, and deploying
 it, stay with the caller. A deployment pipeline can use it to roll every unit
-whose image differs from the manifest, not only what one commit changed, so the
-units a failed deployment left behind are picked up by the next one.
+whose image differs from the manifest, not only what one commit changed, so a
+unit that a failed deployment left on an older image is picked up by the next
+one.
 
 A unit is an app that `ops catalog` discovers: a directory under `app_dirs`
 with a `deploy/config.toml`, whose `[global]` section sets its `name` (the unit
