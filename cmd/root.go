@@ -4,6 +4,7 @@ import (
 	"ops/cmd/catalog"
 	configcmd "ops/cmd/config"
 	"ops/cmd/deploy"
+	"ops/cmd/drift"
 	ecscmd "ops/cmd/ecs"
 	"ops/cmd/env"
 	"ops/cmd/git"
@@ -43,6 +44,7 @@ func init() {
 	rootCmd.AddCommand(git.TagCleanerCommand)
 	rootCmd.AddCommand(registry.LoginCommand)
 	rootCmd.AddCommand(deploy.Command)
+	rootCmd.AddCommand(drift.Command)
 	rootCmd.AddCommand(ecscmd.Command)
 	rootCmd.AddCommand(secrets.Command)
 	rootCmd.AddCommand(imagecmd.BuildCommand)

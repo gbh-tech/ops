@@ -77,14 +77,7 @@ type buildTaskDefinitionInputOptions struct {
 // mappings and the container health check are included.
 func buildTaskDefinitionInput(opts buildTaskDefinitionInputOptions) awsecs.RegisterTaskDefinitionInput {
 	appName := opts.Merged.Name
-	image := resolveImage(resolveImageOptions{
-		ECRURL:             opts.Base.AWS.ECRUrl,
-		RegistryRepository: opts.Base.AWS.RegistryRepository,
-		Env:                opts.Env,
-		ImageField:         opts.Merged.Image,
-		AppName:            appName,
-		ImageTag:           opts.ImageTag,
-	})
+	image := ImageURI(opts.Base, opts.Merged, opts.Env, opts.ImageTag)
 
 	taskVolumes, mountPoints := buildVolumes(opts.Merged.Volumes)
 	container := buildContainer(buildContainerOptions{
@@ -255,6 +248,19 @@ func ExpandSchedulerTemplate(s, cluster, env string) string {
 	s = strings.ReplaceAll(s, "{cluster}", cluster)
 	s = strings.ReplaceAll(s, "{env}", env)
 	return s
+}
+
+// ImageURI returns the image a deployment of the app at tag runs: the one
+// BuildTaskDefinition puts in the task definition.
+func ImageURI(base *BaseConfig, merged MergedConfig, env, tag string) string {
+	return resolveImage(resolveImageOptions{
+		ECRURL:             base.AWS.ECRUrl,
+		RegistryRepository: base.AWS.RegistryRepository,
+		Env:                env,
+		ImageField:         merged.Image,
+		AppName:            merged.Name,
+		ImageTag:           tag,
+	})
 }
 
 // resolveImageOptions bundles the inputs for resolveImage.

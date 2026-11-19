@@ -1,5 +1,7 @@
 package ecs
 
+import "ops/pkg/config"
+
 // BaseAWS holds AWS-level settings from base.toml.
 type BaseAWS struct {
 	AccountID          string `toml:"account_id"          yaml:"account_id"`
@@ -32,4 +34,42 @@ type BaseConfig struct {
 	AWS      BaseAWS      `toml:"aws"      yaml:"aws"`
 	ECS      BaseECS      `toml:"ecs"      yaml:"ecs"`
 	Defaults BaseDefaults `toml:"defaults" yaml:"defaults"`
+}
+
+// baseReplicas returns the effective replica count from ECSDefaults,
+// preferring the new replicas key over the deprecated desired_count fallback.
+func baseReplicas(d config.ECSDefaults) int {
+	if d.Replicas != 0 {
+		return d.Replicas
+	}
+	return d.DesiredCount
+}
+
+// BaseConfigFor assembles a BaseConfig from the ops config. This is the single
+// place that maps OpsConfig fields to BaseConfig fields, so additions only
+// need one edit.
+func BaseConfigFor(cfg *config.OpsConfig, env string) *BaseConfig {
+	return &BaseConfig{
+		AWS: BaseAWS{
+			AccountID:          cfg.AWS.AccountId,
+			Region:             cfg.AWS.Region,
+			ECRUrl:             cfg.RegistryURL(),
+			RegistryRepository: cfg.RegistryRepository(),
+		},
+		ECS: BaseECS{
+			Cluster:          cfg.ECS.ResolvedCluster(env),
+			SecretArnPrefix:  cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS),
+			ExecutionRole:    cfg.ECS.ResolvedExecutionRole(cfg.AWS),
+			TaskRole:         cfg.ECS.ResolvedTaskRole(cfg.AWS),
+			CapacityProvider: cfg.ECS.CapacityProvider,
+		},
+		Defaults: BaseDefaults{
+			CPU:         cfg.ECS.Defaults.CPU,
+			Memory:      cfg.ECS.Defaults.Memory,
+			Replicas:    baseReplicas(cfg.ECS.Defaults),
+			NetworkMode: cfg.ECS.Defaults.NetworkMode,
+			LaunchType:  cfg.ECS.Defaults.LaunchType,
+			LogDriver:   cfg.ECS.Defaults.LogDriver,
+		},
+	}
 }

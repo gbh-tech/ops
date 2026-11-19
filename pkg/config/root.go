@@ -52,6 +52,10 @@ type OpsConfig struct {
 	ECS  ECSConfig  `mapstructure:"ecs"`
 	Werf WerfConfig `mapstructure:"werf"`
 
+	// Lambda holds the settings for units of kind "lambda". It is not a
+	// deployment provider: defining it does not change the active one.
+	Lambda LambdaConfig `mapstructure:"lambda"`
+
 	// Registry holds optional overrides; the registry kind and URL are
 	// otherwise derived from the active cloud provider.
 	Registry RegistryConfig `mapstructure:"registry"`

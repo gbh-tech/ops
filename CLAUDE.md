@@ -85,6 +85,11 @@ changesets / commitlint tooling).
   and `werf.values_files` in config, layered with per-env files discovered
   under those directories.
 - `pkg/github` — go-github client (used by `git tag-cleaner`).
+- `pkg/drift` — read-only comparison of an environment with a manifest of
+  image tags, behind `ops drift`. `Targets` resolves catalog units of kind
+  `ecs` and `lambda` from the repository config; `Checker` reads ECS, ECR and
+  Lambda through narrow interfaces and reports each unit as in sync, out of
+  sync, missing or unreadable. It never deploys.
 - `pkg/reviewapp/state` — S3 registry of review apps (RFC 0004):
   `reviewapps/pr-<n>/state.json` and `manifest.json`, `archive/` after
   destroy. Writes are conditional (If-None-Match / If-Match), so a losing
