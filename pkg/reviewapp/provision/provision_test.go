@@ -615,18 +615,44 @@ func TestDeployGivesTheHelperTaskItsUnitConfig(t *testing.T) {
 	}
 }
 
-func TestDeployRefusesAHelperSecretOpsSets(t *testing.T) {
-	h := newHarness()
-	ref := h.manifest(7, "abc1234")
-	h.store.manifests[ref.VersionID].Tools = &state.UnitSpec{
-		Secrets: map[string]string{"ADMIN_DATABASE_URL": "arn:secret:reviewapp-tools/reviewapp:ADMIN_DATABASE_URL::"},
-	}
+func TestDeployRefusesHelperSettingsThatCollide(t *testing.T) {
+	for name, tc := range map[string]struct {
+		spec state.UnitSpec
+		want string
+	}{
+		"a secret ops sets": {
+			spec: state.UnitSpec{Secrets: map[string]string{"ADMIN_DATABASE_URL": "arn:secret:reviewapp-tools/reviewapp:ADMIN_DATABASE_URL::"}},
+			want: "secret ADMIN_DATABASE_URL is already set",
+		},
+		"a variable ops sets": {
+			spec: state.UnitSpec{Environment: map[string]string{"DATABASE_NAME": "reviewapp_pr_8"}},
+			want: "variable DATABASE_NAME is set by ops",
+		},
+		"a secret named like a variable ops sets": {
+			spec: state.UnitSpec{Secrets: map[string]string{"S3_KEY_PREFIX": "arn:secret:reviewapp-tools/reviewapp:S3_KEY_PREFIX::"}},
+			want: "secret S3_KEY_PREFIX is already set",
+		},
+		"a secret named like a project variable": {
+			spec: state.UnitSpec{
+				Environment: map[string]string{"GRAPH_REF": "graph@pr-{pr}"},
+				Secrets:     map[string]string{"GRAPH_REF": "arn:secret:reviewapp-tools/reviewapp:GRAPH_REF::"},
+			},
+			want: "secret GRAPH_REF is already set",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness()
+			ref := h.manifest(7, "abc1234")
+			spec := tc.spec
+			h.store.manifests[ref.VersionID].Tools = &spec
 
-	err := h.c.Deploy(ctx, 7, ref)
-	if err == nil || !strings.Contains(err.Error(), "ADMIN_DATABASE_URL is set by ops") {
-		t.Fatalf("err = %v", err)
-	}
-	if len(h.aws.runs) != 0 {
-		t.Fatalf("helper task ran: %v", h.aws.runs)
+			err := h.c.Deploy(ctx, 7, ref)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v", err)
+			}
+			if len(h.aws.runs) != 0 {
+				t.Fatalf("helper task ran: %v", h.aws.runs)
+			}
+		})
 	}
 }

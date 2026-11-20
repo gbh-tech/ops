@@ -154,19 +154,26 @@ func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image
 // the project's tools image with the review app's database, topics and data
 // prefix. ops only passes bootstrap, migrate or teardown as its command.
 // spec, when the project declares the helper unit's review app section, adds
-// its environment (with the same placeholders as any unit) and its secrets.
+// its environment (with the same placeholders as any unit) and its secrets. It
+// cannot replace what ops sets, and a name is either a variable or a secret.
 func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image string, spec *state.UnitSpec) (*awsecs.RegisterTaskDefinitionInput, error) {
 	facts, err := c.unit(ctx, ToolsUnit)
 	if err != nil {
 		return nil, err
 	}
-	var vars map[string]string
-	if spec != nil {
-		vars = spec.Environment
-	}
-	env, err := c.environment(pr, vars)
+	env, err := c.environment(pr, nil)
 	if err != nil {
 		return nil, err
+	}
+	if spec != nil {
+		for name := range spec.Environment {
+			if _, taken := env[name]; taken {
+				return nil, fmt.Errorf("%s variable %s is set by ops; rename it", ToolsUnit, name)
+			}
+		}
+		if env, err = c.environment(pr, spec.Environment); err != nil {
+			return nil, err
+		}
 	}
 	secrets := map[string]string{
 		"ADMIN_DATABASE_URL": c.Infra.SecretRef(c.Infra.Secrets.DB, "ADMIN_DATABASE_URL"),
@@ -177,8 +184,9 @@ func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image stri
 	}
 	if spec != nil {
 		for name, ref := range spec.Secrets {
-			if _, taken := secrets[name]; taken {
-				return nil, fmt.Errorf("%s secret %s is set by ops; rename it", ToolsUnit, name)
+			_, inEnv := env[name]
+			if _, taken := secrets[name]; taken || inEnv {
+				return nil, fmt.Errorf("%s secret %s is already set for the helper task; rename it", ToolsUnit, name)
 			}
 			secrets[name] = ref
 		}
