@@ -103,7 +103,10 @@ changesets / commitlint tooling).
   the client passes the `reviewapps:` values as flags.
 - `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
   review app section into the `UnitSpec` that travels in the manifest. The
-  client renders; the controller never reads the repository.
+  client renders; the controller never reads the repository. The helper unit
+  (`reviewapp-tools`) is rendered too when its config has a review app
+  section: its environment (same placeholders as any unit) and secrets go to
+  the helper task, on top of the ones ops sets, which it cannot replace.
 - `pkg/reviewapp/provision` — in-cluster mode: `Deploy`, `Destroy`,
   `Pause`, `Unpause`, `Run`, `GC`. `Deploy` creates the review app when it has
   no state and updates it when it does. Every step is idempotent and saves
