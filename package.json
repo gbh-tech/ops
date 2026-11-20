@@ -8,6 +8,6 @@
     "changeset:publish": "changeset publish && git push --follow-tags"
   },
   "devDependencies": {
-    "@changesets/cli": "2.30.0"
+    "@changesets/cli": "3.0.0"
   }
 }
