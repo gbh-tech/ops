@@ -215,6 +215,9 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 	t.Status = state.StatusReady
+	// The idle clock counts ready time only, as wake does: provisioning
+	// (a long bootstrap or migration) is not idle time.
+	t.LastActivityAt = c.now()
 	c.record(t, string(t.Status))
 	return c.save(ctx, t)
 }

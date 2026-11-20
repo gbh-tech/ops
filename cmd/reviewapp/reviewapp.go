@@ -87,6 +87,13 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Created:       %s\n", st.CreatedAt.Format(time.RFC3339))
 		fmt.Printf("Last activity: %s (%s)\n", st.LastActivityAt.Format(time.RFC3339), ago(st.LastActivityAt))
 		fmt.Printf("Expires:       %s (%s)\n", st.ExpiresAt.Format(time.RFC3339), until(st.ExpiresAt))
+		if st.Status == state.StatusReady {
+			idle := rc.settings.idleTimeout
+			if idle <= 0 {
+				idle = state.DefaultIdleTimeout
+			}
+			fmt.Printf("Idle limit:    %s (%s, without requests)\n", st.IdleDeadline(idle).Format(time.RFC3339), until(st.IdleDeadline(idle)))
+		}
 
 		if len(st.Resources.Services) > 0 {
 			ecsClient := awsecs.NewFromConfig(rc.aws)
@@ -137,7 +144,7 @@ func init() {
 	pf.String("infra-ssm", "", "SSM parameter with the review app infrastructure (default: reviewapps.infra_ssm)")
 	pf.String("tools-image", "", "Helper image of the project (default: reviewapps.tools_image)")
 	pf.String("region", "", "AWS region (default: aws.region, then AWS_REGION)")
-	pf.Duration("idle-pause", 0, "Time without requests before gc pauses a review app (default: reviewapps.idle_pause, then 2h)")
+	pf.Duration("idle-timeout", 0, "Awake time without requests before gc destroys a review app (default: reviewapps.idle_timeout, then 8h)")
 
 	listCmd.Flags().Bool("json", false, "Print JSON")
 	statusCmd.Flags().Bool("json", false, "Print JSON")
@@ -154,13 +161,13 @@ func init() {
 // project's ops config (.ops/config.yaml or .ops/config.toml). The controller task has no repository, so it
 // gets every value as a flag.
 type settings struct {
-	domain     string
-	infraSSM   string
-	toolsImage string
-	region     string
-	profile    string
-	limit      int
-	idlePause  time.Duration
+	domain      string
+	infraSSM    string
+	toolsImage  string
+	region      string
+	profile     string
+	limit       int
+	idleTimeout time.Duration
 }
 
 func resolveSettings(cmd *cobra.Command) settings {
@@ -177,7 +184,7 @@ func resolveSettings(cmd *cobra.Command) settings {
 		s.infraSSM = cfg.ReviewApps.InfraSSM
 		s.toolsImage = cfg.ReviewApps.ToolsImage
 		s.limit = cfg.ReviewApps.ResolvedLimit()
-		s.idlePause = cfg.ReviewApps.IdlePause
+		s.idleTimeout = cfg.ReviewApps.IdleTimeout
 		s.region = cfg.AWS.Region
 		s.profile = cfg.AWS.Profile
 	}
@@ -191,8 +198,8 @@ func resolveSettings(cmd *cobra.Command) settings {
 			*dst = v
 		}
 	}
-	if v, _ := cmd.Flags().GetDuration("idle-pause"); v > 0 {
-		s.idlePause = v
+	if v, _ := cmd.Flags().GetDuration("idle-timeout"); v > 0 {
+		s.idleTimeout = v
 	}
 	if s.region == "" {
 		s.region = os.Getenv("AWS_REGION")

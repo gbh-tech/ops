@@ -146,7 +146,7 @@ func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image
 		ExecutionRoleArn:        aws.String(facts.TaskExecRole),
 		TaskRoleArn:             aws.String(facts.TaskRole),
 		ContainerDefinitions:    []ecstypes.ContainerDefinition{container},
-		Tags:                    ecsTags(pr),
+		Tags:                    c.ecsTags(pr),
 	}, nil
 }
 
@@ -213,7 +213,7 @@ func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image stri
 				},
 			},
 		}},
-		Tags: ecsTags(pr),
+		Tags: c.ecsTags(pr),
 	}, nil
 }
 
@@ -267,7 +267,7 @@ func (c *Controller) runOneOff(ctx context.Context, o oneOff) error {
 		LaunchType:           ecstypes.LaunchTypeFargate,
 		NetworkConfiguration: network,
 		StartedBy:            aws.String(state.ID(o.PR)),
-		Tags:                 ecsTags(o.PR),
+		Tags:                 c.ecsTags(o.PR),
 	}
 	if len(o.Command) > 0 {
 		in.Overrides = &ecstypes.TaskOverride{ContainerOverrides: []ecstypes.ContainerOverride{{

@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
 var ctx = context.Background()
@@ -443,40 +444,55 @@ func TestRun(t *testing.T) {
 
 func TestGC(t *testing.T) {
 	h := newHarness()
-	for _, pr := range []int{1, 2, 3, 4} {
+	for _, pr := range []int{1, 2, 3, 4, 5, 6} {
 		if err := h.c.Deploy(ctx, pr, h.manifest(pr, "sha"+strconv.Itoa(pr))); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := h.c.Pause(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
 	created := h.now
 
-	// pr-1 expires, pr-2 has been idle 9 hours, pr-3 had requests, pr-4 is
-	// idle but too recently active to pause.
+	// pr-1 expires, pr-2 has been idle 9 hours, pr-3 had requests on its
+	// shell, pr-4 is idle but too recently active, pr-5 sleeps (asleep
+	// time is not idle time), and pr-6 had requests only on an API unit,
+	// which do not count as activity.
 	h.store.states[1].ExpiresAt = created.Add(time.Hour)
-	h.store.states[2].LastActivityAt = created
 	h.store.states[4].LastActivityAt = created.Add(8 * time.Hour)
 	h.now = created.Add(9 * time.Hour)
-
-	// Requests only reach pr-3.
-	h.c.Metrics = &perPRMetrics{fakeAWS: h.aws, active: "pr-3-"}
+	h.c.Metrics = &perPRMetrics{fakeAWS: h.aws, active: []string{"pr-3-shell", "pr-6-subgraph-users"}}
+	before := len(h.comments.bodies)
 
 	if err := h.c.GC(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := h.store.states[1]; ok {
-		t.Fatal("expired pr-1 not destroyed")
-	}
-	if h.store.states[2].Status != state.StatusPaused {
-		t.Fatalf("idle pr-2 is %s", h.store.states[2].Status)
+	for _, pr := range []int{1, 2, 6} {
+		if _, ok := h.store.states[pr]; ok {
+			t.Fatalf("pr-%d not destroyed", pr)
+		}
 	}
 	if st := h.store.states[3]; st.Status != state.StatusReady || !st.LastActivityAt.Equal(h.now) {
 		t.Fatalf("active pr-3: %s last=%s", st.Status, st.LastActivityAt)
 	}
 	if h.store.states[4].Status != state.StatusReady {
-		t.Fatal("pr-4 paused too early")
+		t.Fatal("pr-4 destroyed too early")
+	}
+	if h.store.states[5].Status != state.StatusPaused {
+		t.Fatalf("sleeping pr-5 is %s", h.store.states[5].Status)
 	}
 	if !slices.Equal(h.aws.metrics, []string{MetricGcSuccess}) {
 		t.Fatalf("metrics = %v", h.aws.metrics)
+	}
+	got := strings.Join(h.comments.bodies[before:], "\n")
+	for _, want := range []string{
+		"pr-1 destroyed: it reached its 48-hour lifetime",
+		"pr-2 destroyed: it had no requests for 8-hour",
+		"pr-6 destroyed: it had no requests",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("comments lack %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -494,8 +510,204 @@ func TestGCWarnsOnceBeforeExpiry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(h.comments.bodies) != before+1 || !strings.Contains(h.comments.bodies[before], "expires") {
+	if len(h.comments.bodies) != before+1 || !strings.Contains(h.comments.bodies[before], "48-hour lifetime") {
 		t.Fatalf("comments = %v", h.comments.bodies[before:])
+	}
+	if st := h.store.states[7]; !st.ExpiryWarnedAt.Equal(h.now) || st.Status != state.StatusReady {
+		t.Fatalf("expiry_warned_at = %s, status %s", st.ExpiryWarnedAt, st.Status)
+	}
+}
+
+func TestGCWarnsBeforeIdleAndAgainAfterNewActivity(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	created := h.now
+	before := len(h.comments.bodies)
+
+	// 7h30m without requests: one warning, however many runs.
+	h.now = created.Add(7*time.Hour + 30*time.Minute)
+	for range 2 {
+		if err := h.c.GC(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(h.comments.bodies) != before+1 || !strings.Contains(h.comments.bodies[before], "no requests since 12:00 UTC and will be destroyed at 20:00 UTC") {
+		t.Fatalf("comments = %v", h.comments.bodies[before:])
+	}
+
+	// Someone opens it: the clock restarts and nothing is destroyed.
+	h.aws.requests = 1
+	h.now = created.Add(7*time.Hour + 45*time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.store.states[7]; st.Status != state.StatusReady || !st.LastActivityAt.Equal(h.now) {
+		t.Fatalf("after activity: %s last=%s", st.Status, st.LastActivityAt)
+	}
+
+	// Idle again: a new warning, then the destroy.
+	h.aws.requests = 0
+	h.now = h.store.states[7].LastActivityAt.Add(7*time.Hour + 30*time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.comments.bodies) != before+2 {
+		t.Fatalf("want a second idle warning, comments = %v", h.comments.bodies[before:])
+	}
+	// At the deadline a request can still be unpublished, so the run waits;
+	// the next one destroys.
+	h.now = h.now.Add(30 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; !ok {
+		t.Fatal("pr-7 destroyed at its idle deadline, before the metric lag")
+	}
+	h.now = h.now.Add(30 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; ok {
+		t.Fatal("idle pr-7 not destroyed")
+	}
+}
+
+func TestGCKeepsAReviewAppWhoseLastRequestIsPublishedLate(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := h.store.states[7].IdleDeadline(state.DefaultIdleTimeout)
+
+	// A request at 19:59:55 is not published yet when gc runs at 20:00.
+	h.now = deadline
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; !ok {
+		t.Fatal("destroyed at the deadline")
+	}
+
+	// The next run sees it.
+	h.aws.requests = 1
+	h.now = deadline.Add(30 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := h.store.states[7]; !ok || !st.LastActivityAt.Equal(h.now) {
+		t.Fatalf("late request not counted: %+v", st)
+	}
+}
+
+func TestGCRetriesAWarningThatWasNotDelivered(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.store.states[7].IdleDeadline(state.DefaultIdleTimeout).Add(-30 * time.Minute)
+	before := len(h.comments.bodies)
+
+	h.comments.fail = true
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatalf("a failed comment fails gc: %v", err)
+	}
+	if !h.store.states[7].IdleWarnedAt.IsZero() || !slices.Equal(h.aws.metrics, []string{MetricGcSuccess}) {
+		t.Fatalf("warned_at = %s, metrics = %v", h.store.states[7].IdleWarnedAt, h.aws.metrics)
+	}
+
+	h.comments.fail = false
+	h.now = h.now.Add(10 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.comments.bodies) != before+1 || !h.store.states[7].IdleWarnedAt.Equal(h.now) {
+		t.Fatalf("warning not retried: %v, warned_at = %s", h.comments.bodies[before:], h.store.states[7].IdleWarnedAt)
+	}
+}
+
+func TestDeployStartsTheIdleClockWhenReady(t *testing.T) {
+	h := newHarness()
+	started := h.now
+	h.aws.onRun = func() { h.now = h.now.Add(3 * time.Hour) } // a slow bootstrap
+
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.store.states[7]; !st.LastActivityAt.Equal(started.Add(3 * time.Hour)) {
+		t.Fatalf("idle clock started at %s, want the ready time %s", st.LastActivityAt, started.Add(3*time.Hour))
+	}
+}
+
+func TestGCWarnsAboutTheLimitReachedFirst(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	// Active until 47h: the TTL comes before the idle limit.
+	h.store.states[7].LastActivityAt = h.store.states[7].ExpiresAt.Add(-time.Hour)
+	h.now = h.store.states[7].ExpiresAt.Add(-30 * time.Minute)
+	before := len(h.comments.bodies)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.comments.bodies) != before+1 || !strings.Contains(h.comments.bodies[before], "lifetime") {
+		t.Fatalf("comments = %v", h.comments.bodies[before:])
+	}
+	if !h.store.states[7].IdleWarnedAt.IsZero() {
+		t.Fatal("warned about idleness too")
+	}
+}
+
+func TestGCNeverCountsSleepAsIdle(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	created := h.now
+	h.now = created.Add(time.Hour)
+	if err := h.c.Pause(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+
+	// Asleep overnight: no warning, no destroy.
+	before := len(h.comments.bodies)
+	h.now = created.Add(20 * time.Hour)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.store.states[7]; st.Status != state.StatusPaused || len(h.comments.bodies) != before {
+		t.Fatalf("asleep: %s, comments %v", st.Status, h.comments.bodies[before:])
+	}
+
+	// Wake restarts the idle clock.
+	if err := h.c.Unpause(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	h.now = created.Add(21 * time.Hour)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.store.states[7]; st.Status != state.StatusReady {
+		t.Fatalf("an hour after wake: %s", st.Status)
+	}
+}
+
+func TestGCDestroysASleepingReviewAppAtTheTTL(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.c.Pause(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.store.states[7].CreatedAt.Add(state.TTL)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; ok {
+		t.Fatal("sleeping pr-7 survived its 48 hours")
 	}
 }
 
@@ -548,27 +760,27 @@ func TestDeployRefusesAReviewAppBeingDestroyed(t *testing.T) {
 	}
 }
 
-func TestGCUsesTheConfiguredIdlePause(t *testing.T) {
+func TestGCUsesTheConfiguredIdleTimeout(t *testing.T) {
 	h := newHarness()
 	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
 		t.Fatal(err)
 	}
 	h.now = h.now.Add(45 * time.Minute)
 
-	// The 2h default leaves it running.
+	// The 8h default leaves it running.
 	if err := h.c.GC(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if h.store.states[7].Status != state.StatusReady {
-		t.Fatalf("paused after 45m with the 2h default: %s", h.store.states[7].Status)
+		t.Fatalf("after 45m with the 8h default: %s", h.store.states[7].Status)
 	}
 
-	h.c.IdlePause = 30 * time.Minute
+	h.c.IdleTimeout = 30 * time.Minute
 	if err := h.c.GC(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if h.store.states[7].Status != state.StatusPaused {
-		t.Fatalf("not paused after 45m with a 30m idle pause: %s", h.store.states[7].Status)
+	if _, ok := h.store.states[7]; ok {
+		t.Fatal("not destroyed after 45m with a 30m idle timeout")
 	}
 }
 
@@ -582,6 +794,38 @@ func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
 		err := h.c.Pause(ctx, 7)
 		if err == nil || !strings.Contains(err.Error(), string(status)) {
 			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
+		}
+	}
+}
+
+func TestDeployAddsTheInfraTags(t *testing.T) {
+	h := newHarness()
+	// reviewapp in the infra tags cannot replace the tag destroy finds by.
+	h.c.Infra.Tags = map[string]string{"Environment": "reviewapp", "reviewapp": "nope"}
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Environment=reviewapp", "reviewapp=pr-7"}
+	ecsTags := func(tags []ecstypes.Tag) []string {
+		var out []string
+		for _, tag := range tags {
+			out = append(out, aws.ToString(tag.Key)+"="+aws.ToString(tag.Value))
+		}
+		return out
+	}
+	for _, in := range h.aws.created {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) || in.PropagateTags != ecstypes.PropagateTagsService {
+			t.Fatalf("service %s tags = %v, propagate %s", aws.ToString(in.ServiceName), got, in.PropagateTags)
+		}
+	}
+	for _, in := range h.aws.registered {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) {
+			t.Fatalf("task definition %s tags = %v", aws.ToString(in.Family), got)
+		}
+	}
+	for _, in := range h.aws.tasks {
+		if got := ecsTags(in.Tags); !slices.Equal(got, want) {
+			t.Fatalf("task tags = %v", got)
 		}
 	}
 }
@@ -658,5 +902,57 @@ func TestDeployRefusesHelperSettingsThatCollide(t *testing.T) {
 				t.Fatalf("helper task ran: %v", h.aws.runs)
 			}
 		})
+	}
+}
+
+func TestGCKeepsAReviewAppUsedAfterItsRead(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.store.states[7].IdleDeadline(state.DefaultIdleTimeout).Add(time.Hour)
+	services := len(h.aws.services)
+
+	// gc reads an idle app; before destroy reloads it, a wake saves new activity.
+	h.store.gets = 0
+	h.store.onGet = func(gets int) {
+		if gets == 2 {
+			h.store.states[7].LastActivityAt = h.now
+			h.store.etags[7]++
+		}
+	}
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := h.store.states[7]; !ok || st.Status != state.StatusReady {
+		t.Fatalf("pr-7 destroyed after it was used: %+v", st)
+	}
+	if len(h.aws.services) != services {
+		t.Fatalf("services deleted: %d -> %d", services, len(h.aws.services))
+	}
+}
+
+func TestGCQueriesEachAppUpToItsOwnTime(t *testing.T) {
+	h := newHarness()
+	for _, pr := range []int{1, 2} {
+		if err := h.c.Deploy(ctx, pr, h.manifest(pr, "sha"+strconv.Itoa(pr))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := h.now.Add(time.Hour)
+	h.now = start
+	// pr-1 expires, and its destroy (the helper teardown) takes ten minutes.
+	h.store.states[1].ExpiresAt = start.Add(-time.Minute)
+	h.aws.onRun = func() { h.now = h.now.Add(10 * time.Minute) }
+	h.aws.metricQueries = nil
+
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.aws.metricQueries) != 1 {
+		t.Fatalf("activity queries = %d, want 1 (pr-2)", len(h.aws.metricQueries))
+	}
+	if end := aws.ToTime(h.aws.metricQueries[0].EndTime); !end.Equal(start.Add(10 * time.Minute)) {
+		t.Fatalf("pr-2 queried up to %s, want %s", end, start.Add(10*time.Minute))
 	}
 }

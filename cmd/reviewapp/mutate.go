@@ -75,14 +75,19 @@ var destroyCmd = &cobra.Command{
 }
 
 var pauseCmd = &cobra.Command{
-	Use:   "pause",
-	Short: "Scale a review app to zero and keep its data; --all pauses every ready one",
-	Args:  cobra.NoArgs,
+	Use:     "sleep",
+	Aliases: []string{"pause"},
+	Short:   "Scale a review app to zero and keep its data; --all puts every ready one to sleep",
+	Long: `Sleep scales every service of a review app to zero. The database, routes
+and state stay, so wake brings it back as it was. The 48-hour lifetime keeps
+counting while it sleeps; the idle limit does not. The evening schedule runs
+sleep --all in the controller task.`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		all, _ := cmd.Flags().GetBool("all")
 		if all {
 			if !inCluster(cmd) {
-				log.Fatal("pause --all runs only in the controller task (--in-cluster)")
+				log.Fatal("sleep --all runs only in the controller task (--in-cluster)")
 			}
 			c := controller(cmd)
 			must(c.PauseAll(c.ctx))
@@ -99,9 +104,10 @@ var pauseCmd = &cobra.Command{
 }
 
 var unpauseCmd = &cobra.Command{
-	Use:   "unpause",
-	Short: "Scale a paused review app back up",
-	Args:  cobra.NoArgs,
+	Use:     "wake",
+	Aliases: []string{"unpause"},
+	Short:   "Scale a sleeping review app back up and restart its idle clock",
+	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pr := prFlag(cmd)
 		if inCluster(cmd) {
@@ -130,8 +136,19 @@ var runCmd = &cobra.Command{
 
 var gcCmd = &cobra.Command{
 	Use:   "gc",
-	Short: "Destroy expired review apps and pause idle ones (scheduled)",
-	Args:  cobra.NoArgs,
+	Short: "Record activity, warn, and destroy expired or idle review apps (scheduled)",
+	Long: `gc runs every 30 minutes in the controller task. For each review app it:
+
+  - records activity when the app's /* target group served requests;
+  - destroys it 48 wall-clock hours after creation, asleep or not;
+  - destroys a ready one after 8 hours without requests (--idle-timeout);
+    time asleep does not count, because wake restarts the clock;
+  - comments on the PR one hour before either limit, and when it destroys;
+  - finishes destroys that failed.
+
+It publishes the ReviewAppGcSuccess metric only when every review app was
+handled, so an alarm on its absence catches failed or missing runs.`,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if !inCluster(cmd) {
 			log.Fatal("gc runs only in the controller task (--in-cluster)")
@@ -158,7 +175,7 @@ func init() {
 		c.Flags().Int("pr", 0, "Pull request number")
 	}
 	deployCmd.Flags().String("manifest", "", "Manifest file: {pr, sha, tag, images: {unit: image}} (client mode)")
-	pauseCmd.Flags().Bool("all", false, "Pause every ready review app (in-cluster only)")
+	pauseCmd.Flags().Bool("all", false, "Put every ready review app to sleep (in-cluster only)")
 
 	Command.AddCommand(deployCmd, destroyCmd, pauseCmd, unpauseCmd, runCmd, gcCmd)
 }
@@ -229,14 +246,14 @@ func runClient(rc *runContext, cmd *cobra.Command, run client.Run) {
 		Infra:      rc.infra,
 		Controller: controllerUnit,
 		Settings: client.Settings{
-			Domain:     rc.settings.domain,
-			InfraSSM:   rc.settings.infraSSM,
-			ToolsImage: rc.settings.toolsImage,
-			Region:     rc.settings.region,
-			Repository: repository,
-			Actor:      actor,
-			RunURL:     runURL,
-			IdlePause:  rc.settings.idlePause,
+			Domain:      rc.settings.domain,
+			InfraSSM:    rc.settings.infraSSM,
+			ToolsImage:  rc.settings.toolsImage,
+			Region:      rc.settings.region,
+			Repository:  repository,
+			Actor:       actor,
+			RunURL:      runURL,
+			IdleTimeout: rc.settings.idleTimeout,
 		},
 		Out: os.Stdout,
 	}
@@ -411,27 +428,27 @@ func controller(cmd *cobra.Command) *ctlContext {
 	secrets := secretsmanager.NewFromConfig(rc.aws)
 
 	c := &provision.Controller{
-		ECS:       awsecs.NewFromConfig(rc.aws),
-		ELB:       elb.NewFromConfig(rc.aws),
-		Discovery: sd.NewFromConfig(rc.aws),
-		Secrets:   secrets,
-		ECR:       ecr.NewFromConfig(rc.aws),
-		Data:      s3.NewFromConfig(rc.aws),
-		Metrics:   cloudwatch.NewFromConfig(rc.aws),
-		Logs:      cwlogs.NewFromConfig(rc.aws),
-		Tagging:   resourcegroupstaggingapi.NewFromConfig(rc.aws),
-		SSM:       ssmClient,
-		Store:     rc.store(),
-		Connect:   provision.PgxConnect,
-		Infra:     rc.infra,
-		Blueprint: bp,
-		Domain:    rc.settings.domain,
-		Region:    rc.settings.region,
-		Limit:     rc.settings.limit,
-		IdlePause: rc.settings.idlePause,
-		Actor:     actor,
-		RunURL:    runURL,
-		Out:       os.Stdout,
+		ECS:         awsecs.NewFromConfig(rc.aws),
+		ELB:         elb.NewFromConfig(rc.aws),
+		Discovery:   sd.NewFromConfig(rc.aws),
+		Secrets:     secrets,
+		ECR:         ecr.NewFromConfig(rc.aws),
+		Data:        s3.NewFromConfig(rc.aws),
+		Metrics:     cloudwatch.NewFromConfig(rc.aws),
+		Logs:        cwlogs.NewFromConfig(rc.aws),
+		Tagging:     resourcegroupstaggingapi.NewFromConfig(rc.aws),
+		SSM:         ssmClient,
+		Store:       rc.store(),
+		Connect:     provision.PgxConnect,
+		Infra:       rc.infra,
+		Blueprint:   bp,
+		Domain:      rc.settings.domain,
+		Region:      rc.settings.region,
+		Limit:       rc.settings.limit,
+		IdleTimeout: rc.settings.idleTimeout,
+		Actor:       actor,
+		RunURL:      runURL,
+		Out:         os.Stdout,
 	}
 	if repository != "" && rc.infra.Secrets.GitHubApp != "" {
 		commenter, err := githubCommenter(rc, secrets, repository)

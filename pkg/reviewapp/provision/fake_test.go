@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -69,8 +70,10 @@ type fakeAWS struct {
 	data   map[string]bool
 	tagged []string
 
-	requests float64
-	metrics  []string
+	requests      float64
+	onRun         func() // runs inside RunTask, e.g. to move the clock
+	metricQueries []*cloudwatch.GetMetricDataInput
+	metrics       []string
 
 	streams map[string][]string // group -> stream names
 	ssm     map[string]string
@@ -222,6 +225,9 @@ func (f *fakeAWS) RunTask(_ context.Context, in *awsecs.RunTaskInput, _ ...func(
 		cmd = in.Overrides.ContainerOverrides[0].Command
 	}
 	f.runs = append(f.runs, cmd)
+	if f.onRun != nil {
+		f.onRun()
+	}
 	return &awsecs.RunTaskOutput{Tasks: []ecstypes.Task{{TaskArn: aws.String(arn)}}}, nil
 }
 
@@ -424,7 +430,8 @@ func (f *fakeAWS) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput, _ 
 	return &s3.DeleteObjectsOutput{}, nil
 }
 
-func (f *fakeAWS) GetMetricData(context.Context, *cloudwatch.GetMetricDataInput, ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+func (f *fakeAWS) GetMetricData(_ context.Context, in *cloudwatch.GetMetricDataInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+	f.metricQueries = append(f.metricQueries, in)
 	return &cloudwatch.GetMetricDataOutput{MetricDataResults: []cwtypes.MetricDataResult{{Values: []float64{f.requests}}}}, nil
 }
 
@@ -477,6 +484,8 @@ type fakeStore struct {
 	etags     map[int]int
 	manifests map[string]*state.Manifest
 	archived  []int
+	gets      int
+	onGet     func(gets int) // runs before each Get, e.g. to save another writer's change
 }
 
 func newFakeStore() *fakeStore {
@@ -491,6 +500,10 @@ func clone(st *state.State) *state.State {
 }
 
 func (s *fakeStore) Get(_ context.Context, pr int) (*state.State, string, error) {
+	s.gets++
+	if s.onGet != nil {
+		s.onGet(s.gets)
+	}
 	st, ok := s.states[pr]
 	if !ok {
 		return nil, "", fmt.Errorf("%w: %s", state.ErrNotFound, state.ID(pr))
@@ -604,9 +617,15 @@ func (d *fakeDB) QueryString(_ context.Context, sql string, args ...any) (string
 
 func (d *fakeDB) Close(context.Context) error { d.closed++; return nil }
 
-type fakeComments struct{ bodies []string }
+type fakeComments struct {
+	bodies []string
+	fail   bool
+}
 
 func (c *fakeComments) Comment(_ context.Context, _ int, body string) error {
+	if c.fail {
+		return errors.New("github is down")
+	}
 	c.bodies = append(c.bodies, body)
 	return nil
 }
@@ -701,11 +720,10 @@ func (h *harness) manifest(pr int, sha string, missing ...string) state.Manifest
 
 var ecstypesService = ecstypes.Service{ServiceName: aws.String("pr-7-shell"), Status: aws.String("ACTIVE")}
 
-// perPRMetrics reports requests only for target groups whose name starts
-// with active.
+// perPRMetrics reports requests only for the target groups named in active.
 type perPRMetrics struct {
 	*fakeAWS
-	active string
+	active []string
 }
 
 func (m *perPRMetrics) GetMetricData(_ context.Context, in *cloudwatch.GetMetricDataInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
@@ -713,8 +731,10 @@ func (m *perPRMetrics) GetMetricData(_ context.Context, in *cloudwatch.GetMetric
 	for _, q := range in.MetricDataQueries {
 		v := 0.0
 		for _, d := range q.MetricStat.Metric.Dimensions {
-			if aws.ToString(d.Name) == "TargetGroup" && strings.HasPrefix(aws.ToString(d.Value), "targetgroup/"+m.active) {
-				v = 5
+			for _, name := range m.active {
+				if aws.ToString(d.Name) == "TargetGroup" && strings.HasPrefix(aws.ToString(d.Value), "targetgroup/"+name+"/") {
+					v = 5
+				}
 			}
 		}
 		out.MetricDataResults = append(out.MetricDataResults, cwtypes.MetricDataResult{Values: []float64{v}})

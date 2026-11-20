@@ -82,10 +82,21 @@ func TestMutatingCommandsAreRegistered(t *testing.T) {
 	for _, c := range Command.Commands() {
 		names[c.Name()] = true
 	}
-	for _, name := range []string{"deploy", "destroy", "pause", "unpause", "run", "gc"} {
+	for _, name := range []string{"deploy", "destroy", "sleep", "wake", "run", "gc"} {
 		if !names[name] {
 			t.Fatalf("%s not registered", name)
 		}
+	}
+	// The RFC 0004 names, with the earlier ones kept as aliases: the client
+	// sends pause and unpause, which every controller version knows.
+	for alias, name := range map[string]string{"pause": "sleep", "unpause": "wake"} {
+		c, _, err := Command.Find([]string{alias})
+		if err != nil || c.Name() != name {
+			t.Fatalf("%s does not resolve to %s: %v", alias, name, err)
+		}
+	}
+	if pauseCmd.Flags().Lookup("all") == nil {
+		t.Fatal("sleep has no --all")
 	}
 	if names["create"] {
 		t.Fatal("create is registered; deploy creates or updates")

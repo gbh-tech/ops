@@ -28,10 +28,23 @@ import (
 // deleted. Every step runs even when an earlier one fails; the state is
 // archived only when all of them succeed, so destroy can be run again.
 func (c *Controller) Destroy(ctx context.Context, pr int) error {
+	return c.destroy(ctx, pr, "", nil)
+}
+
+// destroy is Destroy with the reason gc gives on the PR, if any. due, when
+// set, decides again on the state destroy reloads: gc decided on an earlier
+// read, and a wake or deploy may have saved since. The destroying status is
+// saved with that reload's ETag, so a write after the recheck makes the save
+// fail instead of destroying a review app someone just used.
+func (c *Controller) destroy(ctx context.Context, pr int, why string, due func(*state.State) bool) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	var t *tracked
 	switch {
 	case err == nil:
+		if due != nil && !due(st) {
+			c.logf("%s changed since gc read it; keeping it", st.ID)
+			return nil
+		}
 		t = &tracked{State: st, etag: etag}
 		t.Status = state.StatusDestroying
 		c.record(t, "destroy")
@@ -78,7 +91,11 @@ func (c *Controller) Destroy(ctx context.Context, pr int) error {
 		}
 		c.logf("Archived state to %s", key)
 	}
-	c.comment(ctx, pr, fmt.Sprintf("Review app %s destroyed.", state.ID(pr)))
+	msg := fmt.Sprintf("Review app %s destroyed.", state.ID(pr))
+	if why != "" {
+		msg = fmt.Sprintf("Review app %s destroyed: %s", state.ID(pr), why)
+	}
+	c.comment(ctx, pr, msg)
 	return nil
 }
 
