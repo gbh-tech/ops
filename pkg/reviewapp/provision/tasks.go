@@ -153,12 +153,18 @@ func (c *Controller) unitTaskDefinition(ctx context.Context, pr int, unit, image
 // toolsTaskDefinition builds the helper task definition of a review app:
 // the project's tools image with the review app's database, topics and data
 // prefix. ops only passes bootstrap, migrate or teardown as its command.
-func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image string) (*awsecs.RegisterTaskDefinitionInput, error) {
+// spec, when the project declares the helper unit's review app section, adds
+// its environment (with the same placeholders as any unit) and its secrets.
+func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image string, spec *state.UnitSpec) (*awsecs.RegisterTaskDefinitionInput, error) {
 	facts, err := c.unit(ctx, ToolsUnit)
 	if err != nil {
 		return nil, err
 	}
-	env, err := c.environment(pr, nil)
+	var vars map[string]string
+	if spec != nil {
+		vars = spec.Environment
+	}
+	env, err := c.environment(pr, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +174,14 @@ func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image stri
 	}
 	if c.Infra.Secrets.SeedUsers != "" {
 		secrets["SEED_USERS"] = c.Infra.SecretRef(c.Infra.Secrets.SeedUsers, "SEED_USERS")
+	}
+	if spec != nil {
+		for name, ref := range spec.Secrets {
+			if _, taken := secrets[name]; taken {
+				return nil, fmt.Errorf("%s secret %s is set by ops; rename it", ToolsUnit, name)
+			}
+			secrets[name] = ref
+		}
 	}
 	return &awsecs.RegisterTaskDefinitionInput{
 		Family:                  aws.String(reviewapp.ToolsFamily(pr)),

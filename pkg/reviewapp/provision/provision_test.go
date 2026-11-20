@@ -585,3 +585,48 @@ func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
 		}
 	}
 }
+
+func TestDeployGivesTheHelperTaskItsUnitConfig(t *testing.T) {
+	h := newHarness()
+	ref := h.manifest(7, "abc1234")
+	h.store.manifests[ref.VersionID].Tools = &state.UnitSpec{
+		Environment: map[string]string{"GRAPH_REF": "graph@pr-{pr}"},
+		Secrets:     map[string]string{"API_KEY": "arn:secret:reviewapp-tools/reviewapp:API_KEY::"},
+	}
+
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
+		t.Fatal(err)
+	}
+
+	def := registered(h, "reviewapp-pr-7-tools").ContainerDefinitions[0]
+	env := map[string]string{}
+	for _, kv := range def.Environment {
+		env[aws.ToString(kv.Name)] = aws.ToString(kv.Value)
+	}
+	if env["GRAPH_REF"] != "graph@pr-7" || env["DATABASE_NAME"] != "reviewapp_pr_7" {
+		t.Fatalf("environment = %v", env)
+	}
+	secrets := map[string]string{}
+	for _, s := range def.Secrets {
+		secrets[aws.ToString(s.Name)] = aws.ToString(s.ValueFrom)
+	}
+	if secrets["API_KEY"] != "arn:secret:reviewapp-tools/reviewapp:API_KEY::" || secrets["ADMIN_DATABASE_URL"] == "" {
+		t.Fatalf("secrets = %v", secrets)
+	}
+}
+
+func TestDeployRefusesAHelperSecretOpsSets(t *testing.T) {
+	h := newHarness()
+	ref := h.manifest(7, "abc1234")
+	h.store.manifests[ref.VersionID].Tools = &state.UnitSpec{
+		Secrets: map[string]string{"ADMIN_DATABASE_URL": "arn:secret:reviewapp-tools/reviewapp:ADMIN_DATABASE_URL::"},
+	}
+
+	err := h.c.Deploy(ctx, 7, ref)
+	if err == nil || !strings.Contains(err.Error(), "ADMIN_DATABASE_URL is set by ops") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(h.aws.runs) != 0 {
+		t.Fatalf("helper task ran: %v", h.aws.runs)
+	}
+}
