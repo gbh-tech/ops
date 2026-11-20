@@ -165,16 +165,6 @@ func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image stri
 	if err != nil {
 		return nil, err
 	}
-	if spec != nil {
-		for name := range spec.Environment {
-			if _, taken := env[name]; taken {
-				return nil, fmt.Errorf("%s variable %s is set by ops; rename it", ToolsUnit, name)
-			}
-		}
-		if env, err = c.environment(pr, spec.Environment); err != nil {
-			return nil, err
-		}
-	}
 	secrets := map[string]string{
 		"ADMIN_DATABASE_URL": c.Infra.SecretRef(c.Infra.Secrets.DB, "ADMIN_DATABASE_URL"),
 		"RLS_DATABASE_URL":   c.Infra.SecretRef(c.Infra.Secrets.DB, "RLS_DATABASE_URL"),
@@ -183,6 +173,15 @@ func (c *Controller) toolsTaskDefinition(ctx context.Context, pr int, image stri
 		secrets["SEED_USERS"] = c.Infra.SecretRef(c.Infra.Secrets.SeedUsers, "SEED_USERS")
 	}
 	if spec != nil {
+		for name := range spec.Environment {
+			_, isSecret := secrets[name]
+			if _, taken := env[name]; taken || isSecret {
+				return nil, fmt.Errorf("%s variable %s is set by ops; rename it", ToolsUnit, name)
+			}
+		}
+		if env, err = c.environment(pr, spec.Environment); err != nil {
+			return nil, err
+		}
 		for name, ref := range spec.Secrets {
 			_, inEnv := env[name]
 			if _, taken := secrets[name]; taken || inEnv {

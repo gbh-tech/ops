@@ -628,6 +628,10 @@ func TestDeployRefusesHelperSettingsThatCollide(t *testing.T) {
 			spec: state.UnitSpec{Environment: map[string]string{"DATABASE_NAME": "reviewapp_pr_8"}},
 			want: "variable DATABASE_NAME is set by ops",
 		},
+		"a variable named like a secret ops sets": {
+			spec: state.UnitSpec{Environment: map[string]string{"ADMIN_DATABASE_URL": "postgresql://other/database"}},
+			want: "variable ADMIN_DATABASE_URL is set by ops",
+		},
 		"a secret named like a variable ops sets": {
 			spec: state.UnitSpec{Secrets: map[string]string{"S3_KEY_PREFIX": "arn:secret:reviewapp-tools/reviewapp:S3_KEY_PREFIX::"}},
 			want: "secret S3_KEY_PREFIX is already set",
