@@ -89,7 +89,7 @@ func newFakeAWS() *fakeAWS {
 		taskExit:     func(*awsecs.RunTaskInput) int32 { return 0 },
 		secrets: map[string]string{
 			"reviewapp/rds-admin": `{"username":"admin","password":"x","DATABASE_URL":"postgres://admin:x@db:5432/postgres"}`,
-			"reviewapp/db":        `{"ADMIN_DATABASE_URL":"u","RLS_DATABASE_URL":"u","REVIEWAPP_OWNER_PASSWORD":"o","LEOPARD_APP_PASSWORD":"a","LEOPARD_PII_PASSWORD":"p"}`,
+			"reviewapp/db":        `{"ADMIN_DATABASE_URL":"u","RLS_DATABASE_URL":"u","REVIEWAPP_OWNER_PASSWORD":"o","ACME_APP_PASSWORD":"a","ACME_PII_PASSWORD":"p"}`,
 		},
 		ssm: map[string]string{},
 	}

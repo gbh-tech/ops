@@ -2,8 +2,8 @@ package config
 
 import "time"
 
-// Defaults of the reviewapps: section. A project overrides them in the same
-// section; leopard-platform needs none.
+// Defaults of the reviewapps: section. A project overrides any of them in the
+// same section.
 const (
 	DefaultReviewAppsEnv   = "reviewapp"
 	DefaultReviewAppsLimit = 10

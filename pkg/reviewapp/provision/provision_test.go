@@ -47,7 +47,7 @@ func TestDeployCreatesTheReviewApp(t *testing.T) {
 	}
 
 	// Database: shared roles created, database owned by the owner role.
-	for _, role := range []string{"reviewapp_owner", "leopard_app", "leopard_pii"} {
+	for _, role := range []string{"reviewapp_owner", "acme_app", "acme_pii"} {
 		if !h.db.roles[role] {
 			t.Fatalf("role %s not created", role)
 		}
@@ -317,7 +317,7 @@ func TestDestroy(t *testing.T) {
 	if got := h.aws.runs[len(h.aws.runs)-1]; !slices.Equal(got, []string{"teardown"}) {
 		t.Fatalf("last helper run = %v, want teardown", got)
 	}
-	if h.db.dbs["reviewapp_pr_7"] || !h.db.roles["leopard_app"] {
+	if h.db.dbs["reviewapp_pr_7"] || !h.db.roles["acme_app"] {
 		t.Fatal("database not dropped, or a shared role removed")
 	}
 	for _, arn := range h.aws.deregs {
