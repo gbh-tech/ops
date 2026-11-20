@@ -931,3 +931,28 @@ func TestGCKeepsAReviewAppUsedAfterItsRead(t *testing.T) {
 		t.Fatalf("services deleted: %d -> %d", services, len(h.aws.services))
 	}
 }
+
+func TestGCQueriesEachAppUpToItsOwnTime(t *testing.T) {
+	h := newHarness()
+	for _, pr := range []int{1, 2} {
+		if err := h.c.Deploy(ctx, pr, h.manifest(pr, "sha"+strconv.Itoa(pr))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := h.now.Add(time.Hour)
+	h.now = start
+	// pr-1 expires, and its destroy (the helper teardown) takes ten minutes.
+	h.store.states[1].ExpiresAt = start.Add(-time.Minute)
+	h.aws.onRun = func() { h.now = h.now.Add(10 * time.Minute) }
+	h.aws.metricQueries = nil
+
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.aws.metricQueries) != 1 {
+		t.Fatalf("activity queries = %d, want 1 (pr-2)", len(h.aws.metricQueries))
+	}
+	if end := aws.ToTime(h.aws.metricQueries[0].EndTime); !end.Equal(start.Add(10 * time.Minute)) {
+		t.Fatalf("pr-2 queried up to %s, want %s", end, start.Add(10*time.Minute))
+	}
+}

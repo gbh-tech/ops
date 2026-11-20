@@ -139,7 +139,10 @@ func (c *Controller) GC(ctx context.Context) error {
 	now := c.now()
 	var errs []error
 	for _, st := range states {
-		if err := c.gcOne(ctx, st.PR, now); err != nil {
+		// Each app is judged at its own time: an earlier app's destroy can take
+		// minutes, and a query ending at the start of the run would miss requests
+		// made meanwhile.
+		if err := c.gcOne(ctx, st.PR, c.now()); err != nil {
 			c.logf("ERROR: %s: %v", st.ID, err)
 			errs = append(errs, fmt.Errorf("%s: %w", st.ID, err))
 		}

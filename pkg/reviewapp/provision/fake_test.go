@@ -70,9 +70,10 @@ type fakeAWS struct {
 	data   map[string]bool
 	tagged []string
 
-	requests float64
-	onRun    func() // runs inside RunTask, e.g. to move the clock
-	metrics  []string
+	requests      float64
+	onRun         func() // runs inside RunTask, e.g. to move the clock
+	metricQueries []*cloudwatch.GetMetricDataInput
+	metrics       []string
 
 	streams map[string][]string // group -> stream names
 	ssm     map[string]string
@@ -429,7 +430,8 @@ func (f *fakeAWS) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput, _ 
 	return &s3.DeleteObjectsOutput{}, nil
 }
 
-func (f *fakeAWS) GetMetricData(context.Context, *cloudwatch.GetMetricDataInput, ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+func (f *fakeAWS) GetMetricData(_ context.Context, in *cloudwatch.GetMetricDataInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.GetMetricDataOutput, error) {
+	f.metricQueries = append(f.metricQueries, in)
 	return &cloudwatch.GetMetricDataOutput{MetricDataResults: []cwtypes.MetricDataResult{{Values: []float64{f.requests}}}}, nil
 }
 
