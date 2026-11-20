@@ -62,7 +62,7 @@ func TestFindConfig(t *testing.T) {
 
 func TestReadConfigTOMLAndYAMLMatch(t *testing.T) {
 	const toml = `
-project = "leopard"
+project = "acme"
 
 [aws]
 region = "us-east-1"
@@ -79,7 +79,7 @@ limit = 5
 idle_pause = "90m"
 `
 	const yaml = `
-project: leopard
+project: acme
 aws:
   region: us-east-1
 ecs:
@@ -106,7 +106,7 @@ reviewapps:
 	if r.Domain != "reviewapps.example.com" || r.InfraSSM != "/reviewapp/infra" || r.ToolsImage != "repo/reviewapp-tools" || r.ResolvedLimit() != 5 || r.IdlePause != 90*time.Minute {
 		t.Fatalf("reviewapps from TOML = %+v", r)
 	}
-	if fromTOML.AWS.Region != "us-east-1" || fromTOML.ECS.Defaults.CPU != 256 || fromTOML.Project != "leopard" {
+	if fromTOML.AWS.Region != "us-east-1" || fromTOML.ECS.Defaults.CPU != 256 || fromTOML.Project != "acme" {
 		t.Fatalf("other blocks from TOML = %+v", fromTOML)
 	}
 	if fromTOML.ReviewApps != fromYAML.ReviewApps || fromTOML.ECS.Defaults != fromYAML.ECS.Defaults || fromTOML.AWS.Region != fromYAML.AWS.Region {

@@ -115,13 +115,13 @@ var now = time.Date(2026, 10, 29, 15, 0, 0, 0, time.UTC)
 
 func newTestStore() (*Store, *fakeS3) {
 	f := newFakeS3()
-	s := NewStore(f, "leopardai-reviewapp-state")
+	s := NewStore(f, "acme-reviewapp-state")
 	s.now = func() time.Time { return now }
 	return s, f
 }
 
 func TestNewSetsWallClockTTL(t *testing.T) {
-	st := New(42, "abc123", "octocat", "https://pr-42.reviewapps.coventry.ai", now)
+	st := New(42, "abc123", "octocat", "https://pr-42.reviewapps.example.com", now)
 
 	if st.ID != "pr-42" || st.Status != StatusCreating {
 		t.Fatalf("id, status = %q, %q", st.ID, st.Status)
@@ -138,7 +138,7 @@ func TestCreateGetUpdate(t *testing.T) {
 	ctx := context.Background()
 	s, _ := newTestStore()
 
-	st := New(7, "abc", "octocat", "https://pr-7.reviewapps.coventry.ai", now)
+	st := New(7, "abc", "octocat", "https://pr-7.reviewapps.example.com", now)
 	etag, err := s.Create(ctx, st)
 	if err != nil {
 		t.Fatalf("create: %v", err)
