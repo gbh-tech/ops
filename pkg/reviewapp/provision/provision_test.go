@@ -904,3 +904,30 @@ func TestDeployRefusesHelperSettingsThatCollide(t *testing.T) {
 		})
 	}
 }
+
+func TestGCKeepsAReviewAppUsedAfterItsRead(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.store.states[7].IdleDeadline(state.DefaultIdleTimeout).Add(time.Hour)
+	services := len(h.aws.services)
+
+	// gc reads an idle app; before destroy reloads it, a wake saves new activity.
+	h.store.gets = 0
+	h.store.onGet = func(gets int) {
+		if gets == 2 {
+			h.store.states[7].LastActivityAt = h.now
+			h.store.etags[7]++
+		}
+	}
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := h.store.states[7]; !ok || st.Status != state.StatusReady {
+		t.Fatalf("pr-7 destroyed after it was used: %+v", st)
+	}
+	if len(h.aws.services) != services {
+		t.Fatalf("services deleted: %d -> %d", services, len(h.aws.services))
+	}
+}

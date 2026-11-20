@@ -189,22 +189,28 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 	}
 
 	idle := c.idleTimeout()
-	lt := t.Lifetime(now, idle)
-	switch lt.Destroy {
+	// destroyReason is the limit a state has reached, if any. An idle one
+	// counts only after metricLag past the deadline: a request just before it
+	// can still be unpublished, and a later run's activity query covers it.
+	destroyReason := func(s *state.State, at time.Time) state.Reason {
+		lt := s.Lifetime(at, idle)
+		if lt.Destroy == state.ReasonIdle && at.Before(s.IdleDeadline(idle).Add(metricLag)) {
+			return ""
+		}
+		return lt.Destroy
+	}
+	still := func(s *state.State) bool { return destroyReason(s, c.now()) != "" }
+
+	switch destroyReason(t.State, now) {
 	case state.ReasonExpired:
 		c.logf("%s expired at %s; destroying", t.ID, t.ExpiresAt.Format(time.RFC3339))
-		return c.destroy(ctx, pr, fmt.Sprintf("it reached its %s lifetime.", hours(state.TTL)))
+		return c.destroy(ctx, pr, fmt.Sprintf("it reached its %s lifetime.", hours(state.TTL)), still)
 	case state.ReasonIdle:
-		// A request just before the deadline can still be unpublished: wait
-		// until the deadline plus metricLag, so a later run's activity query
-		// covers it before the review app is destroyed.
-		if now.Before(t.IdleDeadline(idle).Add(metricLag)) {
-			return nil
-		}
 		c.logf("%s idle since %s; destroying", t.ID, t.LastActivityAt.Format(time.RFC3339))
-		return c.destroy(ctx, pr, fmt.Sprintf("it had no requests for %s.", hours(idle)))
+		return c.destroy(ctx, pr, fmt.Sprintf("it had no requests for %s.", hours(idle)), still)
 	}
 
+	lt := t.Lifetime(now, idle)
 	// A warning counts only once it is delivered: on a failed comment, the
 	// next run tries again. The error is not returned, so failing comments
 	// do not withhold the gc heartbeat.

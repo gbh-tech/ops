@@ -482,6 +482,8 @@ type fakeStore struct {
 	etags     map[int]int
 	manifests map[string]*state.Manifest
 	archived  []int
+	gets      int
+	onGet     func(gets int) // runs before each Get, e.g. to save another writer's change
 }
 
 func newFakeStore() *fakeStore {
@@ -496,6 +498,10 @@ func clone(st *state.State) *state.State {
 }
 
 func (s *fakeStore) Get(_ context.Context, pr int) (*state.State, string, error) {
+	s.gets++
+	if s.onGet != nil {
+		s.onGet(s.gets)
+	}
 	st, ok := s.states[pr]
 	if !ok {
 		return nil, "", fmt.Errorf("%w: %s", state.ErrNotFound, state.ID(pr))
