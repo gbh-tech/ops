@@ -122,6 +122,10 @@ type Manifest struct {
 	Images map[string]string `json:"images"`
 	// ToolsImage is the URI of the helper image (bootstrap, migrate, teardown).
 	ToolsImage string `json:"tools_image,omitempty"`
+	// Tools is the helper unit's config rendered for the review app
+	// environment, when the project declares one. Its environment and
+	// secrets go to the helper task on top of the ones ops sets.
+	Tools *UnitSpec `json:"tools,omitempty"`
 	// Units is each unit's config rendered for the review app environment.
 	Units map[string]UnitSpec `json:"units,omitempty"`
 }

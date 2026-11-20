@@ -363,10 +363,38 @@ func buildManifest(f manifestFile, cfg *config.OpsConfig, toolsImage, secretPref
 		}
 		m.Units[unit] = spec
 	}
+	if tools, err := toolsSpec(configs, env, defaults, secretPrefix); err != nil {
+		errs = append(errs, err.Error())
+	} else {
+		m.Tools = tools
+	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 	return m, nil
+}
+
+// toolsSpec renders the helper unit (provision.ToolsUnit) for the review app
+// section, so the project can give the helper task its own environment and
+// secrets. A project without that unit, or whose unit has no review app
+// section, gets nil: the helper task then has only what ops sets.
+func toolsSpec(configs map[string]string, env string, defaults pkgecs.BaseDefaults, secretPrefix string) (*state.UnitSpec, error) {
+	path, ok := configs[provision.ToolsUnit]
+	if !ok {
+		return nil, nil
+	}
+	appCfg, err := app.LoadAppConfig(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", provision.ToolsUnit, err)
+	}
+	if _, ok := appCfg[env]; !ok {
+		return nil, nil
+	}
+	spec, err := render.Unit(appCfg, env, defaults, secretPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", provision.ToolsUnit, err)
+	}
+	return &spec, nil
 }
 
 func sortedUnits(images map[string]string) []string {

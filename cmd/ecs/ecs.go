@@ -84,44 +84,6 @@ func migrationExecutionPolicy(invocation migrationInvocation, enabled bool, comm
 	return true, nil
 }
 
-// ecsDefaultReplicas returns the effective replica count from ECSDefaults,
-// preferring the new replicas key over the deprecated desired_count fallback.
-func ecsDefaultReplicas(d config.ECSDefaults) int {
-	if d.Replicas != 0 {
-		return d.Replicas
-	}
-	return d.DesiredCount
-}
-
-// buildBaseConfig assembles a pkgecs.BaseConfig from the ops config. This is
-// the single place that maps OpsConfig fields to BaseConfig fields; both
-// loadECSCtx and loadAppForInspect call it so additions only need one edit.
-func buildBaseConfig(cfg *config.OpsConfig, env string) *pkgecs.BaseConfig {
-	return &pkgecs.BaseConfig{
-		AWS: pkgecs.BaseAWS{
-			AccountID:          cfg.AWS.AccountId,
-			Region:             cfg.AWS.Region,
-			ECRUrl:             cfg.RegistryURL(),
-			RegistryRepository: cfg.RegistryRepository(),
-		},
-		ECS: pkgecs.BaseECS{
-			Cluster:          cfg.ECS.ResolvedCluster(env),
-			SecretArnPrefix:  cfg.ECS.ResolvedSecretArnPrefix(cfg.AWS),
-			ExecutionRole:    cfg.ECS.ResolvedExecutionRole(cfg.AWS),
-			TaskRole:         cfg.ECS.ResolvedTaskRole(cfg.AWS),
-			CapacityProvider: cfg.ECS.CapacityProvider,
-		},
-		Defaults: pkgecs.BaseDefaults{
-			CPU:         cfg.ECS.Defaults.CPU,
-			Memory:      cfg.ECS.Defaults.Memory,
-			Replicas:    ecsDefaultReplicas(cfg.ECS.Defaults),
-			NetworkMode: cfg.ECS.Defaults.NetworkMode,
-			LaunchType:  cfg.ECS.Defaults.LaunchType,
-			LogDriver:   cfg.ECS.Defaults.LogDriver,
-		},
-	}
-}
-
 func ensureEcsOnAws(cfg *config.OpsConfig) {
 	if cfg.DeploymentProvider() == "ecs" && cfg.CloudProvider() == "aws" {
 		return
@@ -145,7 +107,7 @@ func loadECSCtx(env string) *ecsCtx {
 
 	return &ecsCtx{
 		cfg:         cfg,
-		base:        buildBaseConfig(cfg, env),
+		base:        pkgecs.BaseConfigFor(cfg, env),
 		ecsClient:   awsecs.NewFromConfig(awsCfg),
 		cwClient:    cwlogs.NewFromConfig(awsCfg),
 		schedClient: scheduler.NewFromConfig(awsCfg),
@@ -203,7 +165,7 @@ func loadAppForInspect(app, env, appConfigOverride string) (pkgapp.AppConfig, pk
 	if err != nil {
 		log.Fatal("Failed to load app config", "path", path, "err", err)
 	}
-	merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg, env), appCfg, env)
+	merged, err := pkgecs.ResolveConfig(pkgecs.BaseConfigFor(cfg, env), appCfg, env)
 	if err != nil {
 		log.Fatal("Invalid app config", "path", path, "err", err)
 	}
@@ -581,7 +543,7 @@ var ecsRenderCmd = &cobra.Command{
 		cfg := config.LoadConfig()
 		ensureEcsOnAws(cfg)
 		requireAppInMonoRepo(cfg, app)
-		base := buildBaseConfig(cfg, env)
+		base := pkgecs.BaseConfigFor(cfg, env)
 
 		path, err := cfg.ResolveAppConfigPath(app, appConfigOverride)
 		if err != nil {
@@ -901,7 +863,7 @@ With --format dotenv, use --output/-o to control the destination:
 		if err != nil {
 			log.Fatal("Failed to load app config", "path", path, "err", err)
 		}
-		merged, err := pkgecs.ResolveConfig(buildBaseConfig(cfg, env), appCfg, env)
+		merged, err := pkgecs.ResolveConfig(pkgecs.BaseConfigFor(cfg, env), appCfg, env)
 		if err != nil {
 			log.Fatal("Invalid app config", "path", path, "err", err)
 		}

@@ -110,3 +110,48 @@ func TestMutatingCommandsAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildManifestRendersTheHelperUnit(t *testing.T) {
+	root := t.TempDir()
+	writeUnit(t, root, "shell", "[global]\nname = \"shell\"\nkind = \"app\"\n\n[reviewapp]\n")
+	writeUnit(t, root, "reviewapp-tools", `
+[global]
+name = "reviewapp-tools"
+kind = "image-only"
+
+[reviewapp.environment]
+GRAPH_REF = "graph@pr-{pr}"
+
+[reviewapp.secrets]
+API_KEY = "API_KEY"
+`)
+	f := manifestFile{PR: 7, Tag: "pr-7-abc", Images: map[string]string{"shell": "repo/shell:pr-7-abc"}}
+
+	m, err := buildManifest(f, testConfig(root), "repo/tools", prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Tools == nil || m.Tools.Environment["GRAPH_REF"] != "graph@pr-{pr}" {
+		t.Fatalf("tools = %+v", m.Tools)
+	}
+	if m.Tools.Secrets["API_KEY"] != prefix+":reviewapp-tools/reviewapp:API_KEY::" {
+		t.Fatalf("secret = %s", m.Tools.Secrets["API_KEY"])
+	}
+	if _, ok := m.Units["reviewapp-tools"]; ok {
+		t.Fatal("the helper unit is not a service")
+	}
+}
+
+func TestBuildManifestWithoutHelperSection(t *testing.T) {
+	root := t.TempDir()
+	writeUnit(t, root, "shell", "[global]\nname = \"shell\"\nkind = \"app\"\n\n[reviewapp]\n")
+	writeUnit(t, root, "reviewapp-tools", "[global]\nname = \"reviewapp-tools\"\nkind = \"image-only\"\n")
+
+	m, err := buildManifest(manifestFile{PR: 7, Tag: "t", Images: map[string]string{"shell": "s"}}, testConfig(root), "repo/tools", prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Tools != nil {
+		t.Fatalf("tools = %+v", m.Tools)
+	}
+}

@@ -130,7 +130,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
-	toolsDef, err := c.toolsTaskDefinition(ctx, pr, m.ToolsImage)
+	toolsDef, err := c.toolsTaskDefinition(ctx, pr, m.ToolsImage, m.Tools)
 	if err != nil {
 		return err
 	}

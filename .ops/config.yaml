@@ -45,6 +45,12 @@ aws:
   account_id: "091791791455"
   region: "us-east-1"
 
+# Settings for catalog units of kind "lambda". ops does not deploy Lambda
+# functions; `ops drift` reads them, and needs to know how they are named.
+# Supports {service} and {env}. It is not a deployment provider block.
+# lambda:
+#   function_name: "gbh-{service}-{env}"
+
 # Werf deployment provider block. Its presence makes "werf" the active
 # deployment provider.
 werf:

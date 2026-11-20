@@ -85,6 +85,11 @@ changesets / commitlint tooling).
   and `werf.values_files` in config, layered with per-env files discovered
   under those directories.
 - `pkg/github` — go-github client (used by `git tag-cleaner`).
+- `pkg/drift` — read-only comparison of an environment with a manifest of
+  image tags, behind `ops drift`. `Targets` resolves catalog units of kind
+  `ecs` and `lambda` from the repository config; `Checker` reads ECS, ECR and
+  Lambda through narrow interfaces and reports each unit as in sync, out of
+  sync, missing or unreadable. It never deploys.
 - `pkg/reviewapp/state` — S3 registry of review apps (RFC 0004):
   `reviewapps/pr-<n>/state.json` and `manifest.json`, `archive/` after
   destroy. Writes are conditional (If-None-Match / If-Match), so a losing
@@ -98,7 +103,10 @@ changesets / commitlint tooling).
   the client passes the `reviewapps:` values as flags.
 - `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
   review app section into the `UnitSpec` that travels in the manifest. The
-  client renders; the controller never reads the repository.
+  client renders; the controller never reads the repository. The helper unit
+  (`reviewapp-tools`) is rendered too when its config has a review app
+  section: its environment (same placeholders as any unit) and secrets go to
+  the helper task, on top of the ones ops sets, which it cannot replace.
 - `pkg/reviewapp/provision` — in-cluster mode: `Deploy`, `Destroy`,
   `Pause`, `Unpause`, `Run`, `GC`. `Deploy` creates the review app when it has
   no state and updates it when it does. Every step is idempotent and saves

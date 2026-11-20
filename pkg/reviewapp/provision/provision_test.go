@@ -48,7 +48,7 @@ func TestDeployCreatesTheReviewApp(t *testing.T) {
 	}
 
 	// Database: shared roles created, database owned by the owner role.
-	for _, role := range []string{"reviewapp_owner", "leopard_app", "leopard_pii"} {
+	for _, role := range []string{"reviewapp_owner", "acme_app", "acme_pii"} {
 		if !h.db.roles[role] {
 			t.Fatalf("role %s not created", role)
 		}
@@ -318,7 +318,7 @@ func TestDestroy(t *testing.T) {
 	if got := h.aws.runs[len(h.aws.runs)-1]; !slices.Equal(got, []string{"teardown"}) {
 		t.Fatalf("last helper run = %v, want teardown", got)
 	}
-	if h.db.dbs["reviewapp_pr_7"] || !h.db.roles["leopard_app"] {
+	if h.db.dbs["reviewapp_pr_7"] || !h.db.roles["acme_app"] {
 		t.Fatal("database not dropped, or a shared role removed")
 	}
 	for _, arn := range h.aws.deregs {
@@ -827,5 +827,80 @@ func TestDeployAddsTheInfraTags(t *testing.T) {
 		if got := ecsTags(in.Tags); !slices.Equal(got, want) {
 			t.Fatalf("task tags = %v", got)
 		}
+	}
+}
+
+func TestDeployGivesTheHelperTaskItsUnitConfig(t *testing.T) {
+	h := newHarness()
+	ref := h.manifest(7, "abc1234")
+	h.store.manifests[ref.VersionID].Tools = &state.UnitSpec{
+		Environment: map[string]string{"GRAPH_REF": "graph@pr-{pr}"},
+		Secrets:     map[string]string{"API_KEY": "arn:secret:reviewapp-tools/reviewapp:API_KEY::"},
+	}
+
+	if err := h.c.Deploy(ctx, 7, ref); err != nil {
+		t.Fatal(err)
+	}
+
+	def := registered(h, "reviewapp-pr-7-tools").ContainerDefinitions[0]
+	env := map[string]string{}
+	for _, kv := range def.Environment {
+		env[aws.ToString(kv.Name)] = aws.ToString(kv.Value)
+	}
+	if env["GRAPH_REF"] != "graph@pr-7" || env["DATABASE_NAME"] != "reviewapp_pr_7" {
+		t.Fatalf("environment = %v", env)
+	}
+	secrets := map[string]string{}
+	for _, s := range def.Secrets {
+		secrets[aws.ToString(s.Name)] = aws.ToString(s.ValueFrom)
+	}
+	if secrets["API_KEY"] != "arn:secret:reviewapp-tools/reviewapp:API_KEY::" || secrets["ADMIN_DATABASE_URL"] == "" {
+		t.Fatalf("secrets = %v", secrets)
+	}
+}
+
+func TestDeployRefusesHelperSettingsThatCollide(t *testing.T) {
+	for name, tc := range map[string]struct {
+		spec state.UnitSpec
+		want string
+	}{
+		"a secret ops sets": {
+			spec: state.UnitSpec{Secrets: map[string]string{"ADMIN_DATABASE_URL": "arn:secret:reviewapp-tools/reviewapp:ADMIN_DATABASE_URL::"}},
+			want: "secret ADMIN_DATABASE_URL is already set",
+		},
+		"a variable ops sets": {
+			spec: state.UnitSpec{Environment: map[string]string{"DATABASE_NAME": "reviewapp_pr_8"}},
+			want: "variable DATABASE_NAME is set by ops",
+		},
+		"a variable named like a secret ops sets": {
+			spec: state.UnitSpec{Environment: map[string]string{"ADMIN_DATABASE_URL": "postgresql://other/database"}},
+			want: "variable ADMIN_DATABASE_URL is set by ops",
+		},
+		"a secret named like a variable ops sets": {
+			spec: state.UnitSpec{Secrets: map[string]string{"S3_KEY_PREFIX": "arn:secret:reviewapp-tools/reviewapp:S3_KEY_PREFIX::"}},
+			want: "secret S3_KEY_PREFIX is already set",
+		},
+		"a secret named like a project variable": {
+			spec: state.UnitSpec{
+				Environment: map[string]string{"GRAPH_REF": "graph@pr-{pr}"},
+				Secrets:     map[string]string{"GRAPH_REF": "arn:secret:reviewapp-tools/reviewapp:GRAPH_REF::"},
+			},
+			want: "secret GRAPH_REF is already set",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness()
+			ref := h.manifest(7, "abc1234")
+			spec := tc.spec
+			h.store.manifests[ref.VersionID].Tools = &spec
+
+			err := h.c.Deploy(ctx, 7, ref)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v", err)
+			}
+			if len(h.aws.runs) != 0 {
+				t.Fatalf("helper task ran: %v", h.aws.runs)
+			}
+		})
 	}
 }
