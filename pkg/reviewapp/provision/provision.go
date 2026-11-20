@@ -234,13 +234,17 @@ func (c *Controller) fail(ctx context.Context, t *tracked, err error) error {
 	return err
 }
 
-func (c *Controller) comment(ctx context.Context, pr int, body string) {
+// comment posts body on the PR and reports whether it was delivered. A
+// failure is logged, never returned: comments are best effort.
+func (c *Controller) comment(ctx context.Context, pr int, body string) bool {
 	if c.Comments == nil {
-		return
+		return true
 	}
 	if err := c.Comments.Comment(ctx, pr, body); err != nil {
 		c.logf("WARNING: could not comment on PR %d: %v", pr, err)
+		return false
 	}
+	return true
 }
 
 func tagValue(pr int) string {

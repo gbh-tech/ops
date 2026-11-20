@@ -63,7 +63,10 @@ type Settings struct {
 	Region     string
 	// Repository (owner/name) is where the controller comments.
 	Repository string
-	// IdleTimeout, when set, is passed on to the controller.
+	// IdleTimeout, when set, is passed on to the controller as
+	// --idle-timeout. A controller image from an older ops release has no
+	// such flag, so the project sets it only after updating that image; ops
+	// does not check the controller's version.
 	IdleTimeout time.Duration
 	// Actor and RunURL go into the review app's history.
 	Actor  string

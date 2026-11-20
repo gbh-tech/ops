@@ -195,18 +195,31 @@ func (c *Controller) gcOne(ctx context.Context, pr int, now time.Time) error {
 		c.logf("%s expired at %s; destroying", t.ID, t.ExpiresAt.Format(time.RFC3339))
 		return c.destroy(ctx, pr, fmt.Sprintf("it reached its %s lifetime.", hours(state.TTL)))
 	case state.ReasonIdle:
+		// A request just before the deadline can still be unpublished: wait
+		// until the deadline plus metricLag, so a later run's activity query
+		// covers it before the review app is destroyed.
+		if now.Before(t.IdleDeadline(idle).Add(metricLag)) {
+			return nil
+		}
 		c.logf("%s idle since %s; destroying", t.ID, t.LastActivityAt.Format(time.RFC3339))
 		return c.destroy(ctx, pr, fmt.Sprintf("it had no requests for %s.", hours(idle)))
 	}
 
+	// A warning counts only once it is delivered: on a failed comment, the
+	// next run tries again. The error is not returned, so failing comments
+	// do not withhold the gc heartbeat.
 	switch lt.Warn {
 	case state.ReasonExpired:
-		c.comment(ctx, pr, fmt.Sprintf("Review app %s will be destroyed at %s, when it reaches its %s lifetime. Run the review app workflow with deploy after that to start a new one.",
-			t.URL, lt.Deadline.Format("15:04 UTC"), hours(state.TTL)))
+		if !c.comment(ctx, pr, fmt.Sprintf("Review app %s will be destroyed at %s, when it reaches its %s lifetime. Run the review app workflow with deploy after that to start a new one.",
+			t.URL, lt.Deadline.Format("15:04 UTC"), hours(state.TTL))) {
+			return nil
+		}
 		t.ExpiryWarnedAt = now
 	case state.ReasonIdle:
-		c.comment(ctx, pr, fmt.Sprintf("Review app %s has had no requests since %s and will be destroyed at %s. Open it to keep it running.",
-			t.URL, t.LastActivityAt.Format("15:04 UTC"), lt.Deadline.Format("15:04 UTC")))
+		if !c.comment(ctx, pr, fmt.Sprintf("Review app %s has had no requests since %s and will be destroyed at %s. Open it to keep it running.",
+			t.URL, t.LastActivityAt.Format("15:04 UTC"), lt.Deadline.Format("15:04 UTC"))) {
+			return nil
+		}
 		t.IdleWarnedAt = now
 	default:
 		return nil

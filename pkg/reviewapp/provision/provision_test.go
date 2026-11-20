@@ -556,12 +556,87 @@ func TestGCWarnsBeforeIdleAndAgainAfterNewActivity(t *testing.T) {
 	if len(h.comments.bodies) != before+2 {
 		t.Fatalf("want a second idle warning, comments = %v", h.comments.bodies[before:])
 	}
+	// At the deadline a request can still be unpublished, so the run waits;
+	// the next one destroys.
+	h.now = h.now.Add(30 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; !ok {
+		t.Fatal("pr-7 destroyed at its idle deadline, before the metric lag")
+	}
 	h.now = h.now.Add(30 * time.Minute)
 	if err := h.c.GC(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := h.store.states[7]; ok {
 		t.Fatal("idle pr-7 not destroyed")
+	}
+}
+
+func TestGCKeepsAReviewAppWhoseLastRequestIsPublishedLate(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := h.store.states[7].IdleDeadline(state.DefaultIdleTimeout)
+
+	// A request at 19:59:55 is not published yet when gc runs at 20:00.
+	h.now = deadline
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.store.states[7]; !ok {
+		t.Fatal("destroyed at the deadline")
+	}
+
+	// The next run sees it.
+	h.aws.requests = 1
+	h.now = deadline.Add(30 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := h.store.states[7]; !ok || !st.LastActivityAt.Equal(h.now) {
+		t.Fatalf("late request not counted: %+v", st)
+	}
+}
+
+func TestGCRetriesAWarningThatWasNotDelivered(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.now = h.store.states[7].IdleDeadline(state.DefaultIdleTimeout).Add(-30 * time.Minute)
+	before := len(h.comments.bodies)
+
+	h.comments.fail = true
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatalf("a failed comment fails gc: %v", err)
+	}
+	if !h.store.states[7].IdleWarnedAt.IsZero() || !slices.Equal(h.aws.metrics, []string{MetricGcSuccess}) {
+		t.Fatalf("warned_at = %s, metrics = %v", h.store.states[7].IdleWarnedAt, h.aws.metrics)
+	}
+
+	h.comments.fail = false
+	h.now = h.now.Add(10 * time.Minute)
+	if err := h.c.GC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.comments.bodies) != before+1 || !h.store.states[7].IdleWarnedAt.Equal(h.now) {
+		t.Fatalf("warning not retried: %v, warned_at = %s", h.comments.bodies[before:], h.store.states[7].IdleWarnedAt)
+	}
+}
+
+func TestDeployStartsTheIdleClockWhenReady(t *testing.T) {
+	h := newHarness()
+	started := h.now
+	h.aws.onRun = func() { h.now = h.now.Add(3 * time.Hour) } // a slow bootstrap
+
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.store.states[7]; !st.LastActivityAt.Equal(started.Add(3 * time.Hour)) {
+		t.Fatalf("idle clock started at %s, want the ready time %s", st.LastActivityAt, started.Add(3*time.Hour))
 	}
 }
 

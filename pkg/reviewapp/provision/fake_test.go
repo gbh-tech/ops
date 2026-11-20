@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -70,6 +71,7 @@ type fakeAWS struct {
 	tagged []string
 
 	requests float64
+	onRun    func() // runs inside RunTask, e.g. to move the clock
 	metrics  []string
 
 	streams map[string][]string // group -> stream names
@@ -222,6 +224,9 @@ func (f *fakeAWS) RunTask(_ context.Context, in *awsecs.RunTaskInput, _ ...func(
 		cmd = in.Overrides.ContainerOverrides[0].Command
 	}
 	f.runs = append(f.runs, cmd)
+	if f.onRun != nil {
+		f.onRun()
+	}
 	return &awsecs.RunTaskOutput{Tasks: []ecstypes.Task{{TaskArn: aws.String(arn)}}}, nil
 }
 
@@ -604,9 +609,15 @@ func (d *fakeDB) QueryString(_ context.Context, sql string, args ...any) (string
 
 func (d *fakeDB) Close(context.Context) error { d.closed++; return nil }
 
-type fakeComments struct{ bodies []string }
+type fakeComments struct {
+	bodies []string
+	fail   bool
+}
 
 func (c *fakeComments) Comment(_ context.Context, _ int, body string) error {
+	if c.fail {
+		return errors.New("github is down")
+	}
 	c.bodies = append(c.bodies, body)
 	return nil
 }
