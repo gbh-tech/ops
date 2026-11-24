@@ -246,16 +246,6 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		}
 		t.Resources.TaskDefinitions = appendUnique(t.Resources.TaskDefinitions, aws.ToString(def.Family))
 
-		if spec.RunOnly {
-			// No service: `ops reviewapp run` starts it as a one-off task.
-			c.logf("%s runs only on demand; registered %s", unit, aws.ToString(def.Family))
-			t.Config[unit] = renderedEnv(def.ContainerDefinitions[0].Environment, spec.Secrets)
-			if err := c.save(ctx, t); err != nil {
-				return err
-			}
-			continue
-		}
-
 		svc := serviceSpec{PR: pr, Unit: unit, TaskDef: defARN, Namespace: ns, Ports: spec.Ports, Desired: desired}
 		if route, public := c.Blueprint.Routes[unit]; public {
 			svc.TGARN = tgs[unit]

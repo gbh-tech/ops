@@ -144,9 +144,6 @@ type UnitSpec struct {
 	Environment map[string]string `json:"environment,omitempty"`
 	Secrets     map[string]string `json:"secrets,omitempty"`
 	HealthCheck []string          `json:"health_check,omitempty"`
-	// RunOnly is a unit whose review app section sets replicas = 0: it gets a
-	// task definition for `ops reviewapp run`, and no service.
-	RunOnly bool `json:"run_only,omitempty"`
 }
 
 // ID returns the review app id for a PR number, e.g. "pr-123".

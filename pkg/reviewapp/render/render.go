@@ -35,7 +35,6 @@ func Unit(appCfg app.AppConfig, env string, defaults pkgecs.BaseDefaults, secret
 		EntryPoint:  merged.EntryPoint,
 		Environment: merged.Environment,
 		HealthCheck: merged.ContainerHC.Command,
-		RunOnly:     runOnly(appCfg, env),
 	}
 	for _, p := range append([]int{merged.Port}, merged.Ports...) {
 		if p != 0 && !slices.Contains(spec.Ports, p) {
@@ -49,16 +48,4 @@ func Unit(appCfg app.AppConfig, env string, defaults pkgecs.BaseDefaults, secret
 		}
 	}
 	return spec, nil
-}
-
-// runOnly reports whether the unit sets replicas = 0 for env, in its env
-// section or else in [global]. The merged config cannot tell: it reads 0 when
-// no section sets replicas at all.
-func runOnly(appCfg app.AppConfig, env string) bool {
-	for _, section := range []string{env, "global"} {
-		if r := appCfg[section].Replicas; r != nil {
-			return *r == 0
-		}
-	}
-	return false
 }

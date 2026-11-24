@@ -520,38 +520,6 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func TestDeployRegistersARunOnlyUnitWithoutAService(t *testing.T) {
-	h := newHarness()
-	ref := h.manifest(7, "abc1234")
-	m := h.store.manifests[ref.VersionID]
-	spec := m.Units["cron-alerts"]
-	spec.RunOnly = true
-	m.Units["cron-alerts"] = spec
-
-	if err := h.c.Deploy(ctx, 7, ref); err != nil {
-		t.Fatal(err)
-	}
-
-	r := h.store.states[7].Resources
-	if !slices.Equal(r.Services, []string{"pr-7-shell", "pr-7-subgraph-users"}) {
-		t.Fatalf("services = %v, want no service for the run-only unit", r.Services)
-	}
-	for _, in := range h.aws.created {
-		if strings.Contains(aws.ToString(in.ServiceName), "cron-alerts") {
-			t.Fatalf("created a service for the run-only unit: %s", aws.ToString(in.ServiceName))
-		}
-	}
-	if !slices.Contains(r.TaskDefinitions, "reviewapp-pr-7-cron-alerts") {
-		t.Fatalf("task definitions = %v, want the run-only unit's", r.TaskDefinitions)
-	}
-	if _, ok := h.store.states[7].Config["cron-alerts"]; !ok {
-		t.Fatal("the run-only unit's config is not recorded")
-	}
-	if err := h.c.Run(ctx, 7, "cron-alerts", nil); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-}
-
 func TestGC(t *testing.T) {
 	h := newHarness()
 	for _, pr := range []int{1, 2, 3, 4, 5, 6} {
