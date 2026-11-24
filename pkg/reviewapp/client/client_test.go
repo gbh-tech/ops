@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -366,8 +367,10 @@ type cwEvent struct {
 
 // cwStream behaves like a CloudWatch log stream: it does not exist until
 // exists returns true, returns readable events in timestamp order, pageSize at
-// a time, and its NextForwardToken is a position in time, so an event that
-// becomes readable behind it is never returned for that token.
+// a time, and its NextForwardToken is a position in the stream: a timestamp
+// and how many events of that timestamp were returned. An event that becomes
+// readable behind it is never returned for that token, and a later event of
+// the same timestamp is.
 type cwStream struct {
 	ecs      *fakeECS
 	exists   func() bool
@@ -384,15 +387,24 @@ func (s *cwStream) GetLogEvents(_ context.Context, in *cwlogs.GetLogEventsInput,
 	if s.exists != nil && !s.exists() {
 		return nil, &cwtypes.ResourceNotFoundException{}
 	}
-	var after int64 = -1
+	// The cursor: events from ts on, past the first n of ts itself.
+	var ts int64 = -1
+	n := 0
 	if in.NextToken != nil {
-		after, _ = strconv.ParseInt(aws.ToString(in.NextToken), 10, 64)
+		parts := strings.SplitN(aws.ToString(in.NextToken), ":", 2)
+		ts, _ = strconv.ParseInt(parts[0], 10, 64)
+		n, _ = strconv.Atoi(parts[1])
 	} else if in.StartTime != nil {
-		after = aws.ToInt64(in.StartTime) - 1
+		ts = aws.ToInt64(in.StartTime)
 	}
 	var page []cwtypes.OutputLogEvent
+	skipped := 0
 	for _, e := range s.events {
-		if e.ts <= after || (e.visible != nil && !e.visible()) {
+		if e.ts < ts || (e.visible != nil && !e.visible()) {
+			continue
+		}
+		if e.ts == ts && skipped < n {
+			skipped++
 			continue
 		}
 		if len(page) == s.pageSize {
@@ -400,11 +412,17 @@ func (s *cwStream) GetLogEvents(_ context.Context, in *cwlogs.GetLogEventsInput,
 		}
 		page = append(page, cwtypes.OutputLogEvent{Timestamp: aws.Int64(e.ts), IngestionTime: aws.Int64(e.ts + 1), Message: aws.String(e.msg)})
 	}
-	if len(page) == 0 {
-		return &cwlogs.GetLogEventsOutput{NextForwardToken: aws.String(strconv.FormatInt(after, 10))}, nil
+	for _, e := range page {
+		if aws.ToInt64(e.Timestamp) != ts {
+			ts, n = aws.ToInt64(e.Timestamp), 0
+		}
+		n++
 	}
-	last := aws.ToInt64(page[len(page)-1].Timestamp)
-	return &cwlogs.GetLogEventsOutput{Events: page, NextForwardToken: aws.String(strconv.FormatInt(last, 10))}, nil
+	out := &cwlogs.GetLogEventsOutput{NextForwardToken: aws.String(fmt.Sprintf("%d:%d", ts, n))}
+	if len(page) > 0 {
+		out.Events = page
+	}
+	return out, nil
 }
 
 func assertPrintedOnce(t *testing.T, out string, lines ...string) {
@@ -513,7 +531,8 @@ func TestLogTailRereadsOnlyTheLateEventWindow(t *testing.T) {
 
 func TestLogTailPrintsARepeatedLineEachTime(t *testing.T) {
 	e := &fakeECS{}
-	l := &cwStream{ecs: e, pageSize: 10, events: []cwEvent{{ts: 1000, msg: "."}, {ts: 1000, msg: "."}}}
+	// One event per page, so the second "." comes on the next page.
+	l := &cwStream{ecs: e, pageSize: 1, events: []cwEvent{{ts: 1000, msg: "."}, {ts: 1000, msg: "."}}}
 	var out bytes.Buffer
 	tail := &logTail{client: l, out: &out}
 	for range 3 {
@@ -523,5 +542,38 @@ func TestLogTailPrintsARepeatedLineEachTime(t *testing.T) {
 	}
 	if out.String() != ".\n.\n" {
 		t.Fatalf("out = %q, want the line twice", out.String())
+	}
+}
+
+func TestDrainKeepsReadingWhileFailingReadsStillPrint(t *testing.T) {
+	// Each read prints a line, then a later page fails. That is not quiet:
+	// the stream is still growing, so drain reads until finalMaxReads.
+	reads := 0
+	read := func() (bool, int, bool) {
+		reads++
+		return true, 1, true
+	}
+	(&Client{}).drain(context.Background(), time.Nanosecond, read)
+	if reads != finalMaxReads {
+		t.Fatalf("reads = %d, want %d", reads, finalMaxReads)
+	}
+}
+
+func TestDrainStopsAfterQuietReads(t *testing.T) {
+	for name, result := range map[string]struct{ found, failed bool }{
+		"found, nothing new": {found: true},
+		"failed":             {found: true, failed: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reads := 0
+			read := func() (bool, int, bool) {
+				reads++
+				return result.found, 0, result.failed
+			}
+			(&Client{}).drain(context.Background(), time.Nanosecond, read)
+			if reads != finalQuietReads {
+				t.Fatalf("reads = %d, want %d", reads, finalQuietReads)
+			}
+		})
 	}
 }

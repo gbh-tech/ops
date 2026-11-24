@@ -276,7 +276,7 @@ const finalMaxReads = 6
 // the failure reason, so one read is not enough: it waits a poll interval
 // between reads and stops after finalQuietReads reads with nothing new. A
 // stream that does not exist yet is not quiet. A failing read is, since
-// waiting does not fix it.
+// waiting does not fix it, unless it printed lines before it failed.
 func (c *Client) drain(ctx context.Context, interval time.Duration, read func() (bool, int, bool)) {
 	quiet := 0
 	for i := 0; i < finalMaxReads && quiet < finalQuietReads; i++ {
@@ -286,7 +286,7 @@ func (c *Client) drain(ctx context.Context, interval time.Duration, read func() 
 		case <-time.After(interval):
 		}
 		found, printed, failed := read()
-		if failed || (found && printed == 0) {
+		if printed == 0 && (failed || found) {
 			quiet++
 		} else {
 			quiet = 0
