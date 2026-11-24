@@ -79,3 +79,25 @@ func TestWarningFieldsAreOmittedUntilSet(t *testing.T) {
 		t.Fatalf("zero warning times are written: %s", data)
 	}
 }
+
+func TestWasReady(t *testing.T) {
+	now := time.Date(2026, 11, 13, 15, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		state State
+		want  bool
+	}{
+		{name: "first create", state: State{Status: StatusCreating}},
+		{name: "failed create", state: State{Status: StatusFailed, History: []HistoryEntry{{Action: "create"}, {Action: "failed"}}}},
+		{name: "ready", state: State{Status: StatusReady}, want: true},
+		{name: "asleep", state: State{Status: StatusPaused}, want: true},
+		{name: "failed update", state: State{Status: StatusFailed, ReadyAt: now}, want: true},
+		// States written before ready_at existed say it in their history.
+		{name: "failed update, older state", state: State{Status: StatusFailed, History: []HistoryEntry{{Action: "create"}, {Action: "ready"}, {Action: "update"}, {Action: "failed"}}}, want: true},
+	}
+	for _, tc := range cases {
+		if got := tc.state.WasReady(); got != tc.want {
+			t.Errorf("%s: WasReady = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

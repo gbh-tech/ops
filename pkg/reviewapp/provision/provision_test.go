@@ -194,6 +194,84 @@ func TestDeployResumesAfterAFailedBootstrap(t *testing.T) {
 	if got := h.aws.runs[len(h.aws.runs)-1]; !slices.Equal(got, []string{"bootstrap"}) {
 		t.Fatalf("resume ran %v, want bootstrap", got)
 	}
+	// The review app was never ready before, so the PR hears it is ready.
+	if got := h.comments.bodies[len(h.comments.bodies)-1]; !strings.HasPrefix(got, "Review app ready: https://pr-7.reviewapps.example.com (commit abc1234). It expires") {
+		t.Fatalf("comment after the resumed create = %q", got)
+	}
+}
+
+func TestDeployAfterAFailedUpdateSaysUpdated(t *testing.T) {
+	h := newHarness()
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+		t.Fatal(err)
+	}
+	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 1 }
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "def5678")); err == nil {
+		t.Fatal("want the migrate failure")
+	}
+	if st := h.store.states[7]; st.Status != state.StatusFailed {
+		t.Fatalf("status = %s", st.Status)
+	}
+
+	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 0 }
+	if err := h.c.Deploy(ctx, 7, h.manifest(7, "def5678")); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.comments.bodies[len(h.comments.bodies)-1]; got != "Review app updated to commit def5678: https://pr-7.reviewapps.example.com" {
+		t.Fatalf("comment after the retried update = %q", got)
+	}
+	if n := strings.Count(strings.Join(h.comments.bodies, "\n"), "Review app ready:"); n != 1 {
+		t.Fatalf("ready posted %d times: %v", n, h.comments.bodies)
+	}
+}
+
+func TestDeployFailureCommentsTheStep(t *testing.T) {
+	h := newHarness()
+	h.c.RunURL = "https://github.com/acme/app/actions/runs/42"
+	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 1 }
+
+	err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234"))
+	if err == nil {
+		t.Fatal("want the bootstrap failure")
+	}
+	if len(h.comments.bodies) != 1 {
+		t.Fatalf("comments = %v, want one", h.comments.bodies)
+	}
+	got := h.comments.bodies[0]
+	for _, want := range []string{
+		"Review app deploy failed for commit abc1234 at step: run bootstrap.",
+		err.Error(),
+		"Workflow run: https://github.com/acme/app/actions/runs/42",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("comment lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestDeployFailureCommentBeforeAnythingIsCreated(t *testing.T) {
+	h := newHarness()
+	err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234", ecrHost+"/shell:pr-abc1234"))
+	if err == nil {
+		t.Fatal("want the missing image")
+	}
+	if len(h.comments.bodies) != 1 || !strings.Contains(h.comments.bodies[0], "at step: check the images.") || !strings.Contains(h.comments.bodies[0], "shell:pr-abc1234") {
+		t.Fatalf("comments = %v", h.comments.bodies)
+	}
+	if strings.Contains(h.comments.bodies[0], "Workflow run") {
+		t.Fatal("named a workflow run it does not know")
+	}
+}
+
+func TestDeployFailureKeepsTheErrorWhenTheCommentFails(t *testing.T) {
+	h := newHarness()
+	h.comments.fail = true
+	h.aws.taskExit = func(*awsecs.RunTaskInput) int32 { return 1 }
+
+	err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234"))
+	if err == nil || !strings.Contains(err.Error(), "exited with code 1") {
+		t.Fatalf("err = %v, want the bootstrap failure", err)
+	}
 }
 
 func TestDeployEleventhFails(t *testing.T) {
@@ -792,7 +870,21 @@ func TestPauseRefusesAReviewAppThatIsNotReady(t *testing.T) {
 		}
 		h.store.states[7].Status = status
 		err := h.c.Pause(ctx, 7)
-		if err == nil || !strings.Contains(err.Error(), string(status)) {
+		if err == nil || !strings.Contains(err.Error(), "pr-7 is "+string(status)+"; only a ready review app can be put to sleep") {
+			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
+		}
+	}
+}
+
+func TestWakeRefusesAReviewAppThatIsNotAsleep(t *testing.T) {
+	for _, status := range []state.Status{state.StatusCreating, state.StatusFailed, state.StatusDestroying} {
+		h := newHarness()
+		if err := h.c.Deploy(ctx, 7, h.manifest(7, "abc1234")); err != nil {
+			t.Fatal(err)
+		}
+		h.store.states[7].Status = status
+		err := h.c.Unpause(ctx, 7)
+		if err == nil || !strings.Contains(err.Error(), "pr-7 is "+string(status)+"; only an asleep review app can be woken") {
 			t.Fatalf("%s: err = %v, want a refusal naming the status", status, err)
 		}
 	}

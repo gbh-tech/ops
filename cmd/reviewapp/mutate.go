@@ -45,7 +45,7 @@ var deployCmd = &cobra.Command{
 The first run creates it: namespace, database, bootstrap (topics, migrations,
 seed), target groups, listener rules and services. Later runs find its state
 and update it: migrations and new task definitions. A failed run resumes
-where it stopped, and a paused review app is unpaused.`,
+where it stopped, and a sleeping review app wakes.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pr := prFlag(cmd)
