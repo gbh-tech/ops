@@ -47,3 +47,29 @@ func TestUnitNeedsTheSection(t *testing.T) {
 		t.Fatal("want an error for a unit without a [reviewapp] section")
 	}
 }
+
+func TestUnitRunOnly(t *testing.T) {
+	zero, one := 0, 1
+	cases := []struct {
+		name string
+		cfg  app.AppConfig
+		want bool
+	}{
+		{"replicas = 0 in the section", app.AppConfig{"global": {Name: "job"}, "reviewapp": {Replicas: &zero}}, true},
+		{"replicas = 0 in [global]", app.AppConfig{"global": {Name: "job", Replicas: &zero}, "reviewapp": {}}, true},
+		{"the section overrides [global]", app.AppConfig{"global": {Name: "job", Replicas: &zero}, "reviewapp": {Replicas: &one}}, false},
+		{"replicas = 1", app.AppConfig{"global": {Name: "web"}, "reviewapp": {Replicas: &one}}, false},
+		{"no replicas anywhere", app.AppConfig{"global": {Name: "web"}, "reviewapp": {}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec, err := Unit(tc.cfg, "reviewapp", pkgecs.BaseDefaults{CPU: 256, Memory: 512}, prefix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.RunOnly != tc.want {
+				t.Fatalf("RunOnly = %v, want %v", spec.RunOnly, tc.want)
+			}
+		})
+	}
+}
