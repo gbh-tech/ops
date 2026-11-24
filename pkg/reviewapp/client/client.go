@@ -235,11 +235,13 @@ func (c *Client) follow(ctx context.Context, taskARN string) (int, error) {
 	// The task's exit code is the result. A log read that fails (access,
 	// throttling) only costs output, so it warns once and polling goes on.
 	warned := false
-	drain := func() {
-		if err := logs.drain(ctx); err != nil && !warned {
+	read := func() (bool, int, bool) {
+		found, printed, err := logs.read(ctx)
+		if err != nil && !warned {
 			c.printf("WARNING: %v; the exit code still comes from the task\n", err)
 			warned = true
 		}
+		return found, printed, err != nil
 	}
 
 	for {
@@ -247,15 +249,9 @@ func (c *Client) follow(ctx context.Context, taskARN string) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		drain()
+		read()
 		if aws.ToString(task.LastStatus) == string(ecstypes.DesiredStatusStopped) {
-			// Events can reach CloudWatch shortly after the task stops, and the
-			// last lines usually hold the failure reason.
-			select {
-			case <-ctx.Done():
-			case <-time.After(interval):
-			}
-			drain()
+			c.drain(ctx, interval, read)
 			return exitCode(task)
 		}
 
@@ -263,6 +259,37 @@ func (c *Client) follow(ctx context.Context, taskARN string) (int, error) {
 		case <-ctx.Done():
 			return 0, fmt.Errorf("waiting for controller task %s: %w", taskARN, ctx.Err())
 		case <-time.After(interval):
+		}
+	}
+}
+
+// finalQuietReads is how many reads in a row must find the stream and no new
+// line before the client stops reading a stopped task's logs.
+const finalQuietReads = 2
+
+// finalMaxReads bounds the reads after the task stops, for a stream that
+// never appears or keeps growing.
+const finalMaxReads = 6
+
+// drain reads a stopped task's logs until they settle. Events reach
+// CloudWatch shortly after the task stops, and the last lines usually hold
+// the failure reason, so one read is not enough: it waits a poll interval
+// between reads and stops after finalQuietReads reads with nothing new. A
+// stream that does not exist yet is not quiet. A failing read is, since
+// waiting does not fix it, unless it printed lines before it failed.
+func (c *Client) drain(ctx context.Context, interval time.Duration, read func() (bool, int, bool)) {
+	quiet := 0
+	for i := 0; i < finalMaxReads && quiet < finalQuietReads; i++ {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(interval):
+		}
+		found, printed, failed := read()
+		if printed == 0 && (failed || found) {
+			quiet++
+		} else {
+			quiet = 0
 		}
 	}
 }
@@ -309,42 +336,91 @@ func stopReason(task *ecstypes.Task, ct *ecstypes.Container) string {
 	return strings.Join(reasons, "; ")
 }
 
-// logTail prints new events of one log stream on each drain.
+// lateEventWindow is how far before the newest printed event each read
+// starts. CloudWatch can make an event readable after events with later
+// timestamps, so a reader that only moves forward (a NextForwardToken kept
+// between reads) skips it. Re-reading this window and skipping what was
+// printed catches such events without reading the whole stream each time.
+const lateEventWindow = 5 * time.Minute
+
+// logTail prints the events of one log stream, each exactly once.
 type logTail struct {
 	client LogsAPI
 	group  string
 	stream string
 	out    io.Writer
-	token  *string
+
+	// newest is the timestamp (ms) of the newest event printed.
+	newest int64
+	// printed counts the events printed per key, so a line logged twice in
+	// the same millisecond is printed twice, and a re-read one never.
+	printed map[eventKey]int
 }
 
-func (t *logTail) drain(ctx context.Context) error {
+// eventKey identifies a log event: GetLogEvents returns no event id.
+type eventKey struct {
+	timestamp int64
+	ingested  int64
+	message   string
+}
+
+// read prints the events it has not printed yet. It reads from the head of
+// the stream, which only holds this task's events, until it has printed an
+// event, then from lateEventWindow before the newest one. found reports
+// whether the stream exists: it appears once the container writes its first
+// line, so a missing stream means nothing to print yet, not an error.
+func (t *logTail) read(ctx context.Context) (found bool, printed int, err error) {
+	if t.printed == nil {
+		t.printed = map[eventKey]int{}
+	}
+	in := &cwlogs.GetLogEventsInput{
+		LogGroupName:  aws.String(t.group),
+		LogStreamName: aws.String(t.stream),
+		StartFromHead: aws.Bool(true),
+	}
+	start := t.newest - lateEventWindow.Milliseconds()
+	if start > 0 {
+		in.StartTime = aws.Int64(start)
+	}
+
+	seen := map[eventKey]int{}
 	for {
-		out, err := t.client.GetLogEvents(ctx, &cwlogs.GetLogEventsInput{
-			LogGroupName:  aws.String(t.group),
-			LogStreamName: aws.String(t.stream),
-			StartFromHead: aws.Bool(true),
-			NextToken:     t.token,
-		})
+		out, err := t.client.GetLogEvents(ctx, in)
 		if err != nil {
-			// The stream appears once the container starts writing.
 			var nf *cwtypes.ResourceNotFoundException
 			if errors.As(err, &nf) {
-				return nil
+				return false, printed, nil
 			}
-			return fmt.Errorf("read controller logs: %w", err)
+			return true, printed, fmt.Errorf("read controller logs: %w", err)
 		}
 		for _, e := range out.Events {
-			_, _ = fmt.Fprintln(t.out, aws.ToString(e.Message))
+			k := eventKey{aws.ToInt64(e.Timestamp), aws.ToInt64(e.IngestionTime), aws.ToString(e.Message)}
+			seen[k]++
+			if seen[k] <= t.printed[k] {
+				continue
+			}
+			t.printed[k] = seen[k]
+			_, _ = fmt.Fprintln(t.out, k.message)
+			printed++
+			t.newest = max(t.newest, k.timestamp)
 		}
-		// GetLogEvents returns the same token when there are no more events.
+		// GetLogEvents returns the token it was given at the end of the stream.
 		next := out.NextForwardToken
-		if next == nil || aws.ToString(next) == aws.ToString(t.token) {
-			t.token = next
-			return nil
+		if next == nil || aws.ToString(next) == aws.ToString(in.NextToken) {
+			break
 		}
-		t.token = next
+		in.NextToken = next
 	}
+
+	// Events before the next read's window are never returned again.
+	if next := t.newest - lateEventWindow.Milliseconds(); next > 0 {
+		for k := range t.printed {
+			if k.timestamp < next {
+				delete(t.printed, k)
+			}
+		}
+	}
+	return true, printed, nil
 }
 
 func (c *Client) printf(format string, args ...any) {

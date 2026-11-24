@@ -1,7 +1,7 @@
 // Package provision is the in-cluster mode of ops reviewapp (RFC 0004, D11):
 // the work that runs inside the reviewapp-controller task, where RDS, MSK and
-// the private ALB targets are reachable. It creates, updates, pauses, unpauses
-// and destroys the per-PR resources on top of the shared base Terraform
+// the private ALB targets are reachable. It creates, updates, puts to sleep,
+// wakes and destroys the per-PR resources on top of the shared base Terraform
 // builds, and keeps reviewapps/pr-<n>/state.json current after every step so
 // a failed run can be resumed or destroyed.
 package provision

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -352,5 +354,226 @@ func TestExecuteReadsLogsOnceMoreAfterTheTaskStops(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ERROR: bootstrap failed") {
 		t.Fatalf("the last line was lost:\n%s", out.String())
+	}
+}
+
+// cwEvent is one event of a cwStream. It is readable once visible returns
+// true, which lets a test make an event readable after later ones.
+type cwEvent struct {
+	ts      int64
+	msg     string
+	visible func() bool
+}
+
+// cwStream behaves like a CloudWatch log stream: it does not exist until
+// exists returns true, returns readable events in timestamp order, pageSize at
+// a time, and its NextForwardToken is a position in the stream: a timestamp
+// and how many events of that timestamp were returned. An event that becomes
+// readable behind it is never returned for that token, and a later event of
+// the same timestamp is.
+type cwStream struct {
+	ecs      *fakeECS
+	exists   func() bool
+	pageSize int
+	events   []cwEvent
+	// stoppedCalls counts the reads made after the task stopped.
+	stoppedCalls int
+}
+
+func (s *cwStream) GetLogEvents(_ context.Context, in *cwlogs.GetLogEventsInput, _ ...func(*cwlogs.Options)) (*cwlogs.GetLogEventsOutput, error) {
+	if s.ecs.polls > s.ecs.runningPolls {
+		s.stoppedCalls++
+	}
+	if s.exists != nil && !s.exists() {
+		return nil, &cwtypes.ResourceNotFoundException{}
+	}
+	// The cursor: events from ts on, past the first n of ts itself.
+	var ts int64 = -1
+	n := 0
+	if in.NextToken != nil {
+		parts := strings.SplitN(aws.ToString(in.NextToken), ":", 2)
+		ts, _ = strconv.ParseInt(parts[0], 10, 64)
+		n, _ = strconv.Atoi(parts[1])
+	} else if in.StartTime != nil {
+		ts = aws.ToInt64(in.StartTime)
+	}
+	var page []cwtypes.OutputLogEvent
+	skipped := 0
+	for _, e := range s.events {
+		if e.ts < ts || (e.visible != nil && !e.visible()) {
+			continue
+		}
+		if e.ts == ts && skipped < n {
+			skipped++
+			continue
+		}
+		if len(page) == s.pageSize {
+			break
+		}
+		page = append(page, cwtypes.OutputLogEvent{Timestamp: aws.Int64(e.ts), IngestionTime: aws.Int64(e.ts + 1), Message: aws.String(e.msg)})
+	}
+	for _, e := range page {
+		if aws.ToInt64(e.Timestamp) != ts {
+			ts, n = aws.ToInt64(e.Timestamp), 0
+		}
+		n++
+	}
+	out := &cwlogs.GetLogEventsOutput{NextForwardToken: aws.String(fmt.Sprintf("%d:%d", ts, n))}
+	if len(page) > 0 {
+		out.Events = page
+	}
+	return out, nil
+}
+
+func assertPrintedOnce(t *testing.T, out string, lines ...string) {
+	t.Helper()
+	for _, line := range lines {
+		if n := strings.Count(out, line); n != 1 {
+			t.Fatalf("%q printed %d times in:\n%s", line, n, out)
+		}
+	}
+}
+
+func TestExecutePrintsTheFirstLinesOfAStreamCreatedLate(t *testing.T) {
+	e := &fakeECS{runningPolls: 4, exitCode: int32p(0)}
+	// The stream appears on the third poll with two lines readable; the
+	// first line becomes readable a poll later, behind them.
+	l := &cwStream{ecs: e, exists: func() bool { return e.polls >= 3 }, pageSize: 1, events: []cwEvent{
+		{ts: 1000, msg: "Creating pr-7", visible: func() bool { return e.polls >= 4 }},
+		{ts: 2000, msg: "creating namespace"},
+		{ts: 3000, msg: "creating database"},
+	}}
+	var out bytes.Buffer
+	c := newTestClient(e, nil, &fakeManifests{}, &out)
+	c.Logs = l
+
+	if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7}); err != nil {
+		t.Fatal(err)
+	}
+	assertPrintedOnce(t, out.String(), "Creating pr-7", "creating namespace", "creating database")
+}
+
+func TestExecutePrintsTheErrorWrittenJustBeforeTheTaskStops(t *testing.T) {
+	e := &fakeECS{runningPolls: 2, exitCode: int32p(1)}
+	// The error line becomes readable only on the third read after the task
+	// stopped: the read of the poll that saw it stop takes two calls.
+	l := &cwStream{ecs: e, pageSize: 10}
+	l.events = []cwEvent{
+		{ts: 1000, msg: "Updating pr-7 (status creating)"},
+		{ts: 2000, msg: "Error: pr-7 is creating; only a ready review app can be put to sleep", visible: func() bool { return l.stoppedCalls >= 3 }},
+	}
+	var out bytes.Buffer
+	c := newTestClient(e, nil, &fakeManifests{}, &out)
+	c.Logs = l
+
+	res, err := c.Execute(context.Background(), Run{Command: "sleep", PR: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", res.ExitCode)
+	}
+	assertPrintedOnce(t, out.String(), "Updating pr-7", "only a ready review app can be put to sleep")
+}
+
+func TestExecuteWaitsForAStreamThatAppearsAfterTheTaskStops(t *testing.T) {
+	e := &fakeECS{runningPolls: 1, exitCode: int32p(1)}
+	// The container wrote its only line as it failed; the stream exists only
+	// from the third read after the task stopped.
+	l := &cwStream{ecs: e, pageSize: 10, events: []cwEvent{{ts: 1000, msg: "Error: manifest has no images"}}}
+	l.exists = func() bool { return l.stoppedCalls >= 3 }
+	var out bytes.Buffer
+	c := newTestClient(e, nil, &fakeManifests{}, &out)
+	c.Logs = l
+
+	if _, err := c.Execute(context.Background(), Run{Command: "deploy", PR: 7}); err != nil {
+		t.Fatal(err)
+	}
+	assertPrintedOnce(t, out.String(), "manifest has no images")
+}
+
+// logsFunc adapts a function to LogsAPI.
+type logsFunc func(ctx context.Context, in *cwlogs.GetLogEventsInput) (*cwlogs.GetLogEventsOutput, error)
+
+func (f logsFunc) GetLogEvents(ctx context.Context, in *cwlogs.GetLogEventsInput, _ ...func(*cwlogs.Options)) (*cwlogs.GetLogEventsOutput, error) {
+	return f(ctx, in)
+}
+
+func TestLogTailRereadsOnlyTheLateEventWindow(t *testing.T) {
+	window := lateEventWindow.Milliseconds()
+	e := &fakeECS{}
+	l := &cwStream{ecs: e, pageSize: 10, events: []cwEvent{
+		{ts: 1000, msg: "first"},
+		{ts: 1000 + 2*window, msg: "much later"},
+	}}
+	var starts []int64
+	var out bytes.Buffer
+	tail := &logTail{client: logsFunc(func(ctx context.Context, in *cwlogs.GetLogEventsInput) (*cwlogs.GetLogEventsOutput, error) {
+		if in.NextToken == nil {
+			starts = append(starts, aws.ToInt64(in.StartTime))
+		}
+		return l.GetLogEvents(ctx, in)
+	}), out: &out}
+
+	for range 2 {
+		if _, _, err := tail.read(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(starts, []int64{0, 1000 + window}) {
+		t.Fatalf("reads started at %v", starts)
+	}
+	if len(tail.printed) != 1 {
+		t.Fatalf("keeps %d printed events, want only the one in the window", len(tail.printed))
+	}
+	assertPrintedOnce(t, out.String(), "first", "much later")
+}
+
+func TestLogTailPrintsARepeatedLineEachTime(t *testing.T) {
+	e := &fakeECS{}
+	// One event per page, so the second "." comes on the next page.
+	l := &cwStream{ecs: e, pageSize: 1, events: []cwEvent{{ts: 1000, msg: "."}, {ts: 1000, msg: "."}}}
+	var out bytes.Buffer
+	tail := &logTail{client: l, out: &out}
+	for range 3 {
+		if _, _, err := tail.read(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out.String() != ".\n.\n" {
+		t.Fatalf("out = %q, want the line twice", out.String())
+	}
+}
+
+func TestDrainKeepsReadingWhileFailingReadsStillPrint(t *testing.T) {
+	// Each read prints a line, then a later page fails. That is not quiet:
+	// the stream is still growing, so drain reads until finalMaxReads.
+	reads := 0
+	read := func() (bool, int, bool) {
+		reads++
+		return true, 1, true
+	}
+	(&Client{}).drain(context.Background(), time.Nanosecond, read)
+	if reads != finalMaxReads {
+		t.Fatalf("reads = %d, want %d", reads, finalMaxReads)
+	}
+}
+
+func TestDrainStopsAfterQuietReads(t *testing.T) {
+	for name, result := range map[string]struct{ found, failed bool }{
+		"found, nothing new": {found: true},
+		"failed":             {found: true, failed: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reads := 0
+			read := func() (bool, int, bool) {
+				reads++
+				return result.found, 0, result.failed
+			}
+			(&Client{}).drain(context.Background(), time.Nanosecond, read)
+			if reads != finalQuietReads {
+				t.Fatalf("reads = %d, want %d", reads, finalQuietReads)
+			}
+		})
 	}
 }

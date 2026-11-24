@@ -35,16 +35,17 @@ const MetricNamespace = "ReviewApps"
 // its absence catches a broken scheduler.
 const MetricGcSuccess = "ReviewAppGcSuccess"
 
-// Pause scales every service of a review app to zero. The database, rules
-// and state stay, so Unpause brings it back as it was. Pausing a paused
-// review app changes nothing and succeeds.
+// Pause (sleep) scales every service of a review app to zero. The database,
+// rules and state stay, so Unpause (wake) brings it back as it was. Putting an
+// asleep review app to sleep changes nothing and succeeds. The stored status
+// stays "paused", which earlier releases wrote.
 func (c *Controller) Pause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
 		return err
 	}
 	if st.Status == state.StatusPaused {
-		c.logf("%s is already paused", st.ID)
+		c.logf("%s is already asleep", st.ID)
 		return nil
 	}
 	return c.pauseState(ctx, &tracked{State: st, etag: etag})
@@ -52,18 +53,18 @@ func (c *Controller) Pause(ctx context.Context, pr int) error {
 
 func (c *Controller) pauseState(ctx context.Context, t *tracked) error {
 	if t.Status != state.StatusReady {
-		return fmt.Errorf("%s is %s; only a ready review app can be paused", t.ID, t.Status)
+		return fmt.Errorf("%s is %s; only a ready review app can be put to sleep", t.ID, t.Status)
 	}
 	if err := c.scale(ctx, t.Resources.Services, 0); err != nil {
 		return err
 	}
 	t.Status = state.StatusPaused
 	c.record(t, "pause")
-	c.logf("%s is paused", t.ID)
+	c.logf("%s is asleep", t.ID)
 	return c.save(ctx, t)
 }
 
-// PauseAll pauses (puts to sleep) every ready review app: the evening
+// PauseAll puts every ready review app to sleep: the evening
 // schedule. Creating, failed and destroying review apps are left alone.
 func (c *Controller) PauseAll(ctx context.Context) error {
 	states, err := c.Store.List(ctx)
@@ -83,9 +84,9 @@ func (c *Controller) PauseAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Unpause (wake) scales a paused review app back up and restarts its idle
+// Unpause (wake) scales an asleep review app back up and restarts its idle
 // clock, so time asleep never counts as idle. The TTL keeps counting while
-// it is paused (D7).
+// it sleeps (D7).
 func (c *Controller) Unpause(ctx context.Context, pr int) error {
 	st, etag, err := c.Store.Get(ctx, pr)
 	if err != nil {
@@ -93,7 +94,7 @@ func (c *Controller) Unpause(ctx context.Context, pr int) error {
 	}
 	t := &tracked{State: st, etag: etag}
 	if t.Status != state.StatusPaused && t.Status != state.StatusReady {
-		return fmt.Errorf("%s is %s; only a paused review app can be unpaused", t.ID, t.Status)
+		return fmt.Errorf("%s is %s; only an asleep review app can be woken", t.ID, t.Status)
 	}
 	if err := c.scale(ctx, t.Resources.Services, 1); err != nil {
 		return err
