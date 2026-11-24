@@ -56,6 +56,9 @@ type State struct {
 	CreatedAt      time.Time `json:"created_at"`
 	LastActivityAt time.Time `json:"last_activity_at"`
 	ExpiresAt      time.Time `json:"expires_at"`
+	// ReadyAt is when the review app first became ready. States written
+	// before it existed lack it; WasReady covers them.
+	ReadyAt time.Time `json:"ready_at,omitzero"`
 
 	// ExpiryWarnedAt is when gc warned that the TTL is near.
 	ExpiryWarnedAt time.Time `json:"expiry_warned_at,omitzero"`
@@ -171,6 +174,20 @@ func New(pr int, sha, owner, url string, now time.Time) *State {
 // Active reports whether the review app counts toward the limit.
 func (s *State) Active() bool {
 	return s.Status != StatusDestroying
+}
+
+// WasReady reports whether the review app has ever been ready: it was
+// marked ready, is ready or asleep now, or its history records it ready.
+func (s *State) WasReady() bool {
+	if !s.ReadyAt.IsZero() || s.Status == StatusReady || s.Status == StatusPaused {
+		return true
+	}
+	for _, e := range s.History {
+		if e.Action == string(StatusReady) {
+			return true
+		}
+	}
+	return false
 }
 
 // Expired reports whether the review app is past its TTL at now.

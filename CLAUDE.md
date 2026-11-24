@@ -99,7 +99,10 @@ changesets / commitlint tooling).
   into the repository.
 - `pkg/reviewapp/client` — client mode of `ops reviewapp`: uploads the
   manifest, runs the `reviewapp-controller` task with `--in-cluster`, prints
-  its logs and returns its exit code. The controller has no repository, so
+  its logs and returns its exit code. Each log read re-reads a window behind
+  the newest line and skips what it printed, because CloudWatch can expose a
+  line after later ones; after the task stops it reads until the stream is
+  quiet, since the last line usually holds the error. The controller has no repository, so
   the client passes the `reviewapps:` values as flags.
 - `pkg/reviewapp/render` — renders a unit's `deploy/config.toml` for the
   review app section into the `UnitSpec` that travels in the manifest. The
@@ -109,7 +112,9 @@ changesets / commitlint tooling).
   the helper task, on top of the ones ops sets, which it cannot replace.
 - `pkg/reviewapp/provision` — in-cluster mode: `Deploy`, `Destroy`,
   `Pause`, `Unpause`, `Run`, `GC`. `Deploy` creates the review app when it has
-  no state and updates it when it does. Every step is idempotent and saves
+  no state and updates it when it does. It comments "ready" on the PR the
+  first time the review app is ready (`State.WasReady`), "updated" after
+  that, and on failure the step that failed. Every step is idempotent and saves
   the state, so a failed deploy resumes or destroys cleanly. Destroy also
   finds resources by the `reviewapp=pr-<n>` tag. Public routes, the DB owner
   role and the Service Connect domain come from the blueprint parameter

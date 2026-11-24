@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"ops/pkg/reviewapp"
 	"ops/pkg/reviewapp/state"
@@ -20,18 +21,37 @@ import (
 // review app: checks the limit, writes the state and runs bootstrap. With
 // state it updates it: runs migrate and moves the services to the new task
 // definitions. A review app whose last run failed resumes from where it
-// stopped, and a paused one is unpaused. Every step is idempotent and the state
-// is saved after each.
+// stopped, and a sleeping one wakes. Every step is idempotent and the state
+// is saved after each. A failed deploy says on the PR which step failed.
 func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) error {
+	run := &deployRun{step: "read the manifest"}
+	err := c.deploy(ctx, pr, ref, run)
+	if err != nil {
+		c.commentDeployFailed(ctx, pr, run, err)
+	}
+	return err
+}
+
+// deployRun is what a failure comment reports: the step that was running and
+// the commit being deployed, once known.
+type deployRun struct {
+	step string
+	sha  string
+}
+
+func (c *Controller) deploy(ctx context.Context, pr int, ref state.ManifestRef, run *deployRun) error {
 	m, err := c.manifest(ctx, pr, ref)
 	if err != nil {
 		return err
 	}
+	run.sha = m.SHA
 	// Check every image before changing anything.
+	run.step = "check the images"
 	if err := c.checkImages(ctx, m); err != nil {
 		return err
 	}
 
+	run.step = "read or create the state"
 	t, created, err := c.begin(ctx, pr, m)
 	if err != nil {
 		return err
@@ -39,6 +59,9 @@ func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) 
 	if t.Status == state.StatusDestroying {
 		return fmt.Errorf("%s is being destroyed; run destroy again before deploying it", t.ID)
 	}
+	// The PR hears "ready" the first time the review app is ready, also when
+	// a create resumes after a failed run, and "updated" after that.
+	wasReady := t.WasReady()
 	// A ready review app keeps serving while it updates.
 	if t.Status != state.StatusReady {
 		t.Status = state.StatusCreating
@@ -51,6 +74,7 @@ func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) 
 		action = "create"
 	}
 	c.record(t, action)
+	run.step = "save the state"
 	if err := c.save(ctx, t); err != nil {
 		return err
 	}
@@ -60,17 +84,39 @@ func (c *Controller) Deploy(ctx context.Context, pr int, ref state.ManifestRef) 
 	if !t.Resources.Bootstrapped {
 		tools = "bootstrap"
 	}
-	if err := c.provision(ctx, t, m, tools); err != nil {
+	if err := c.provision(ctx, t, m, tools, run); err != nil {
 		return c.fail(ctx, t, err)
 	}
 
-	if created {
+	if wasReady {
+		c.comment(ctx, pr, fmt.Sprintf("Review app updated to commit %s: %s", shortSHA(m.SHA), t.URL))
+	} else {
 		c.comment(ctx, pr, fmt.Sprintf("Review app ready: %s (commit %s). It expires %s.",
 			t.URL, shortSHA(m.SHA), t.ExpiresAt.Format("Mon Jan 2 15:04 UTC")))
-	} else {
-		c.comment(ctx, pr, fmt.Sprintf("Review app updated to commit %s: %s", shortSHA(m.SHA), t.URL))
 	}
 	return nil
+}
+
+// failureCommentTimeout bounds the failure comment, which is posted with a
+// context of its own: a deploy that failed because its context ended still
+// reports it.
+const failureCommentTimeout = 30 * time.Second
+
+// commentDeployFailed posts, best effort, which step of a deploy failed, the
+// error, and the workflow run when it is known.
+func (c *Controller) commentDeployFailed(ctx context.Context, pr int, run *deployRun, err error) {
+	var b strings.Builder
+	b.WriteString("Review app deploy failed")
+	if run.sha != "" {
+		fmt.Fprintf(&b, " for commit %s", shortSHA(run.sha))
+	}
+	fmt.Fprintf(&b, " at step: %s.\n\n```\n%v\n```", run.step, err)
+	if c.RunURL != "" {
+		fmt.Fprintf(&b, "\n\nWorkflow run: %s", c.RunURL)
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failureCommentTimeout)
+	defer cancel()
+	c.comment(ctx, pr, b.String())
 }
 
 // begin returns the state to work on and whether this run created it: the
@@ -109,9 +155,10 @@ func (c *Controller) begin(ctx context.Context, pr int, m *state.Manifest) (*tra
 
 // provision brings a review app to the manifest, running the helper command
 // (bootstrap or migrate) before the services.
-func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifest, tools string) error {
+func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifest, tools string, run *deployRun) error {
 	pr := t.PR
 
+	run.step = "create the namespace"
 	ns, err := c.ensureNamespace(ctx, pr)
 	if err != nil {
 		return err
@@ -121,6 +168,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
+	run.step = "create the database"
 	db, err := c.ensureDatabase(ctx, pr)
 	if err != nil {
 		return err
@@ -130,6 +178,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
+	run.step = "register the helper task definition"
 	toolsDef, err := c.toolsTaskDefinition(ctx, pr, m.ToolsImage, m.Tools)
 	if err != nil {
 		return err
@@ -143,6 +192,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
+	run.step = "run " + tools
 	if err := c.runOneOff(ctx, oneOff{PR: pr, Unit: ToolsUnit, Family: toolsARN, Container: ToolsContainer, Command: []string{tools}}); err != nil {
 		return err
 	}
@@ -152,6 +202,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 	}
 
 	// Target groups and rules first, so services can register into them.
+	run.step = "create the target groups"
 	tgs := map[string]string{}
 	for _, unit := range sortedKeys(m.Units) {
 		route, public := c.Blueprint.Routes[unit]
@@ -168,6 +219,7 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 	if err := c.save(ctx, t); err != nil {
 		return err
 	}
+	run.step = "create the listener rules"
 	rules, err := c.ensureRules(ctx, pr, tgs)
 	t.Resources.ListenerRules = mergeRules(t.Resources.ListenerRules, rules)
 	if saveErr := c.save(ctx, t); saveErr != nil {
@@ -177,11 +229,12 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		return err
 	}
 
-	// A deploy always leaves the review app running, so a paused one restarts.
+	// A deploy always leaves the review app running, so a sleeping one wakes.
 	desired := int32(1)
 	t.Config = map[string]state.Env{}
 	var services []string
 	for _, unit := range sortedKeys(m.Units) {
+		run.step = "deploy " + unit
 		spec := m.Units[unit]
 		def, err := c.unitTaskDefinition(ctx, pr, unit, m.Images[unit], spec)
 		if err != nil {
@@ -220,11 +273,16 @@ func (c *Controller) provision(ctx context.Context, t *tracked, m *state.Manifes
 		}
 	}
 
+	run.step = "wait for the services to reach steady state"
 	c.logf("Waiting for %d services to reach steady state", len(services))
 	if err := c.waitStable(ctx, services); err != nil {
 		return err
 	}
+	run.step = "save the state"
 	t.Status = state.StatusReady
+	if t.ReadyAt.IsZero() {
+		t.ReadyAt = c.now()
+	}
 	// The idle clock counts ready time only, as wake does: provisioning
 	// (a long bootstrap or migration) is not idle time.
 	t.LastActivityAt = c.now()
