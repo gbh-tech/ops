@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.22.2
+
+### Patch Changes
+
+- ac40f66: `ops reviewapp` sets `S3_KEY_PREFIX` to `pr-<n>` instead of `pr-<n>/`. Apps join the prefix and the key with `/` themselves, and a client that checks the prefix refused the trailing slash, so units that use S3 failed to start.
+
 ## 1.22.1
 
 ### Patch Changes
