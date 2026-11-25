@@ -11,6 +11,7 @@ func TestNames(t *testing.T) {
 		Database(12):                       "reviewapp_pr_12",
 		TopicPrefix(12):                    "pr-12.",
 		DataPrefix(12):                     "pr-12/",
+		KeyPrefix(12):                      "pr-12",
 		Family(12, "shell"):                "reviewapp-pr-12-shell",
 		ToolsFamily(12):                    "reviewapp-pr-12-tools",
 	} {

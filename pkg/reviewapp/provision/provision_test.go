@@ -320,6 +320,19 @@ func TestDeployRefusesAManifestForAnotherPR(t *testing.T) {
 	}
 }
 
+func TestEnvironmentSetsTheS3KeyPrefixWithoutATrailingSlash(t *testing.T) {
+	h := newHarness()
+	env, err := h.c.environment(7, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The app's S3 client joins the prefix and the key with "/" itself and
+	// refuses a prefix that ends in one.
+	if got := env["S3_KEY_PREFIX"]; got != "pr-7" {
+		t.Fatalf("S3_KEY_PREFIX = %q, want %q", got, "pr-7")
+	}
+}
+
 func TestEnvironmentRefusesCredentials(t *testing.T) {
 	h := newHarness()
 	for name, vars := range map[string]map[string]string{

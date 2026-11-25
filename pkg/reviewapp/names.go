@@ -45,9 +45,16 @@ func TopicPrefix(pr int) string {
 	return fmt.Sprintf("pr-%d.", pr)
 }
 
-// DataPrefix returns the key prefix of a review app in the data bucket.
+// DataPrefix returns the key prefix of a review app in the data bucket, as a
+// listing prefix: it ends in "/" so pr-1 never matches pr-12.
 func DataPrefix(pr int) string {
-	return fmt.Sprintf("pr-%d/", pr)
+	return KeyPrefix(pr) + "/"
+}
+
+// KeyPrefix returns the S3_KEY_PREFIX a review app's units get: the data
+// prefix without its trailing "/", which the app's S3 client adds itself.
+func KeyPrefix(pr int) string {
+	return fmt.Sprintf("pr-%d", pr)
 }
 
 // Family returns the task definition family of a unit.

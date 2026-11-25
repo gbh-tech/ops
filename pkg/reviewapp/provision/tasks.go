@@ -46,7 +46,7 @@ func (c *Controller) environment(pr int, vars map[string]string) (map[string]str
 		"DATABASE_NAME":      reviewapp.Database(pr),
 		"KAFKA_TOPIC_PREFIX": reviewapp.TopicPrefix(pr),
 		"KAFKA_BROKERS":      c.Infra.MSK.BootstrapBrokers,
-		"S3_KEY_PREFIX":      reviewapp.DataPrefix(pr),
+		"S3_KEY_PREFIX":      reviewapp.KeyPrefix(pr),
 		"S3_BUCKET":          c.Infra.Buckets.Data,
 		"REVIEWAPP_PR":       strconv.Itoa(pr),
 		"REVIEWAPP_URL":      reviewapp.URL(pr, c.Domain),
